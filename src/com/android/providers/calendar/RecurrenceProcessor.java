@@ -20,7 +20,7 @@ package com.android.providers.calendar;
 import android.pim.DateException;
 import android.pim.EventRecurrence;
 import android.pim.RecurrenceSet;
-import android.pim.Time;
+import android.text.format.Time;
 import android.util.Log;
 
 import java.util.TreeSet;
@@ -62,7 +62,7 @@ public class RecurrenceProcessor
                     
                 if (rrule.until != null) {
                     // according to RFC 2445, until must be in UTC.
-                    mIterator.parse2445(rrule.until);
+                    mIterator.parse(rrule.until);
                     long untilTime = mIterator.toMillis(false /* use isDst */);
                     if (untilTime > lastTime) {
                         lastTime = untilTime;

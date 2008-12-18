@@ -17,8 +17,8 @@
 
 package com.android.providers.calendar;
 
-import com.google.android.gdata.client.AndroidXmlParserFactory;
 import com.google.android.gdata.client.AndroidGDataClient;
+import com.google.android.gdata.client.AndroidXmlParserFactory;
 import com.google.android.providers.AbstractGDataSyncAdapter;
 import com.google.wireless.gdata.calendar.client.CalendarClient;
 import com.google.wireless.gdata.calendar.data.EventEntry;
@@ -40,22 +40,22 @@ import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.SyncContext;
-import android.content.SyncableContentProvider;
 import android.content.SyncResult;
+import android.content.SyncableContentProvider;
 import android.database.Cursor;
 import android.database.CursorJoiner;
 import android.net.Uri;
-import android.os.SystemProperties;
 import android.os.Bundle;
+import android.os.SystemProperties;
 import android.pim.ICalendar;
 import android.pim.RecurrenceSet;
-import android.pim.Time;
 import android.provider.Calendar;
-import android.provider.Calendar.Calendars;
-import android.provider.Calendar.Events;
 import android.provider.SubscribedFeeds;
 import android.provider.SyncConstValue;
+import android.provider.Calendar.Calendars;
+import android.provider.Calendar.Events;
 import android.text.TextUtils;
+import android.text.format.Time;
 import android.util.Config;
 import android.util.Log;
 
@@ -295,14 +295,16 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         if (!c.isNull(originalStartTimeIndex)) {
             originalStartTime = c.getLong(originalStartTimeIndex);
         }
-        if ((originalStartTime != -1) &&
-                !TextUtils.isEmpty(originalId)) {
+        if ((originalStartTime != -1) && !TextUtils.isEmpty(originalId)) {
+            // We need to use the "originalAllDay" field for the original event
+            // in order to format the "originalStartTime" correctly.
+            boolean originalAllDay = c.getInt(c.getColumnIndex(Events.ORIGINAL_ALL_DAY)) != 0;
 
             Time originalTime = new Time(c.getString(c.getColumnIndex(Events.EVENT_TIMEZONE)));
             originalTime.set(originalStartTime);
 
             utc.set(originalStartTime);
-            event.setOriginalEventStartTime(utc.format3339(allDay));
+            event.setOriginalEventStartTime(utc.format3339(originalAllDay));
             event.setOriginalEventId(originalId);
         }
 
@@ -593,12 +595,12 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         String originalId = event.getOriginalEventId();
         String originalStartTime = event.getOriginalEventStartTime();
         boolean isRecurrenceException = false;
-        if (!StringUtils.isEmpty(originalId) &&
-                !StringUtils.isEmpty(originalStartTime)) {
+        if (!StringUtils.isEmpty(originalId) && !StringUtils.isEmpty(originalStartTime)) {
             isRecurrenceException = true;
             time.parse3339(originalStartTime);
             map.put(Events.ORIGINAL_EVENT, originalId);
             map.put(Events.ORIGINAL_INSTANCE_TIME, time.toMillis(false /* use isDst */));
+            map.put(Events.ORIGINAL_ALL_DAY, time.allDay ? 1 : 0);
         }
 
         // Event status

@@ -18,7 +18,7 @@
 package com.android.providers.calendar;
 
 import android.pim.DateException;
-import android.pim.DateUtils;
+import android.text.format.DateUtils;
 import android.util.Log;
 
 import java.util.ArrayList;

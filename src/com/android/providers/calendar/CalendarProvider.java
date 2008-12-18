@@ -61,7 +61,6 @@ import android.os.Debug;
 import android.os.Process;
 import android.pim.DateException;
 import android.pim.RecurrenceSet;
-import android.pim.Time;
 import android.provider.Calendar;
 import android.provider.SyncConstValue;
 import android.provider.Calendar.Attendees;
@@ -73,6 +72,7 @@ import android.provider.Calendar.ExtendedProperties;
 import android.provider.Calendar.Instances;
 import android.provider.Calendar.Reminders;
 import android.text.TextUtils;
+import android.text.format.Time;
 import android.util.Config;
 import android.util.Log;
 import android.util.TimeFormatException;
@@ -81,7 +81,6 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -101,11 +100,18 @@ public class CalendarProvider extends SyncableContentProvider {
         Events._SYNC_ID,
         Events._SYNC_VERSION,
         Events._SYNC_ACCOUNT,
-        Events.CALENDAR_ID };
+        Events.CALENDAR_ID,
+        Events.RRULE,
+        Events.RDATE,
+        Events.ORIGINAL_EVENT,
+        };
     private static final int EVENTS_SYNC_ID_INDEX = 0;
     private static final int EVENTS_SYNC_VERSION_INDEX = 1;
     private static final int EVENTS_SYNC_ACCOUNT_INDEX = 2;
     private static final int EVENTS_CALENDAR_ID_INDEX = 3;
+    private static final int EVENTS_RRULE_INDEX = 4;
+    private static final int EVENTS_RDATE_INDEX = 5;
+    private static final int EVENTS_ORIGINAL_EVENT_INDEX = 6;
 
     private DatabaseUtils.InsertHelper mCalendarsInserter;
     private DatabaseUtils.InsertHelper mEventsInserter;
@@ -200,7 +206,7 @@ public class CalendarProvider extends SyncableContentProvider {
      * might seem like overkill, but it is useful in the case where the user
      * just crossed into a new timezone and might have just missed an alarm.
      */
-    private static final long SCHEDULE_ALARM_SLACK = 2 * android.pim.DateUtils.HOUR_IN_MILLIS;
+    private static final long SCHEDULE_ALARM_SLACK = 2 * android.text.format.DateUtils.HOUR_IN_MILLIS;
 
     /**
      * Alarms older than this threshold will be deleted from the CalendarAlerts
@@ -210,7 +216,7 @@ public class CalendarProvider extends SyncableContentProvider {
      * This threshold must also be larger than SCHEDULE_ALARM_SLACK.  We add
      * the SCHEDULE_ALARM_SLACK to ensure this.
      */
-    private static final long CLEAR_OLD_ALARM_THRESHOLD = android.pim.DateUtils.DAY_IN_MILLIS
+    private static final long CLEAR_OLD_ALARM_THRESHOLD = android.text.format.DateUtils.DAY_IN_MILLIS
             + SCHEDULE_ALARM_SLACK;
 
     // A lock for synchronizing access to fields that are shared
@@ -222,7 +228,7 @@ public class CalendarProvider extends SyncableContentProvider {
     
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 50;
+    private static final int DATABASE_VERSION = 52;
 
     private static final String EXPECTED_PROJECTION = "/full";
 
@@ -271,6 +277,9 @@ public class CalendarProvider extends SyncableContentProvider {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
+            if (DEBUG_ALARMS) {
+                Log.i(TAG, "onReceive() " + action);
+            }
             if (Intent.ACTION_TIMEZONE_CHANGED.equals(action)) {
                 updateTimezoneDependentFields();
                 scheduleNextAlarm();
@@ -448,8 +457,76 @@ public class CalendarProvider extends SyncableContentProvider {
                             "DELETE FROM Events WHERE calendar_id = old._id;" +
                             "DELETE FROM DeletedEvents WHERE calendar_id = old._id;" +
                         "END");
+            db.execSQL("DROP TRIGGER IF EXISTS event_to_deleted");
             oldVersion += 1;
         }
+
+        if (oldVersion == 50) {
+            // This should have been deleted in the upgrade from version 49
+            // but we missed it.
+            db.execSQL("DROP TRIGGER IF EXISTS event_to_deleted");
+            oldVersion += 1;
+        }
+
+        if (oldVersion == 51) {
+            // We added "originalAllDay" to the Events table to keep track of
+            // the allDay status of the original recurring event for entries
+            // that are exceptions to that recurring event.  We need this so
+            // that we can format the date correctly for the "originalInstanceTime"
+            // column when we make a change to the recurrence exception and
+            // send it to the server.
+            db.execSQL("ALTER TABLE Events ADD COLUMN originalAllDay INTEGER;");
+
+            // Iterate through the Events table and for each recurrence
+            // exception, fill in the correct value for "originalAllDay",
+            // if possible.  The only times where this might not be possible
+            // are (1) the original recurring event no longer exists, or
+            // (2) the original recurring event does not yet have a _sync_id
+            // because it was created on the phone and hasn't been synced to the
+            // server yet.  In both cases the originalAllDay field will be set
+            // to null.  In the first case we don't care because the recurrence
+            // exception will not be displayed and we won't be able to make
+            // any changes to it (and even if we did, the server should ignore
+            // them, right?).  In the second case, the calendar client already
+            // disallows making changes to an instance of a recurring event
+            // until the recurring event has been synced to the server so the
+            // second case should never occur.
+            
+            // "cursor" iterates over all the recurrences exceptions.
+            Cursor cursor = db.rawQuery("SELECT _id,originalEvent FROM Events"
+                    + " WHERE originalEvent IS NOT NULL", null /* selection args */);
+            if (cursor != null) {
+                try {
+                    while (cursor.moveToNext()) {
+                        long id = cursor.getLong(0);
+                        String originalEvent = cursor.getString(1);
+                        
+                        // Find the original recurring event (if it exists)
+                        Cursor recur = db.rawQuery("SELECT allDay FROM Events"
+                                + " WHERE _sync_id=?", new String[] {originalEvent});
+                        if (recur == null) {
+                            continue;
+                        }
+
+                        try {
+                            // Fill in the "originalAllDay" field of the
+                            // recurrence exception with the "allDay" value
+                            // from the recurring event.
+                            if (recur.moveToNext()) {
+                                int allDay = recur.getInt(0);
+                                db.execSQL("UPDATE Events SET originalAllDay=" + allDay
+                                        + " WHERE _id="+id);
+                            }
+                        } finally {
+                            recur.close();
+                        }
+                    }
+                } finally {
+                    cursor.close();
+                }
+            }
+        }
+        
         return true; // this was lossless
     }
 
@@ -508,7 +585,7 @@ public class CalendarProvider extends SyncableContentProvider {
                         "_sync_local_id INTEGER," +
                         "_sync_dirty INTEGER," +
                         "_sync_mark INTEGER," + // To filter out new rows
-                        "calendar_id INTEGER," +
+                        "calendar_id INTEGER NOT NULL," +
                         "htmlUri TEXT," +
                         "title TEXT," +
                         "eventLocation TEXT," +
@@ -529,8 +606,9 @@ public class CalendarProvider extends SyncableContentProvider {
                         "rdate TEXT," +
                         "exrule TEXT," +
                         "exdate TEXT," +
-                        "originalEvent TEXT," +
+                        "originalEvent TEXT," +  // _sync_id of recurring event
                         "originalInstanceTime INTEGER," +  // millis since epoch
+                        "originalAllDay INTEGER," +
                         "lastDate INTEGER" +               // millis since epoch
                     ");");
 
@@ -1499,16 +1577,6 @@ public class CalendarProvider extends SyncableContentProvider {
                     Events.ORIGINAL_INSTANCE_TIME
                 };
 
-    private static class CanceledInstance {
-        public final long begin;
-        public final String syncId;
-
-        public CanceledInstance(long b, String id) {
-            begin = b;
-            syncId = id;
-        }
-    };
-
     /**
      * Make instances for the given range.
      */
@@ -1521,7 +1589,7 @@ public class CalendarProvider extends SyncableContentProvider {
         final SQLiteDatabase db = getDatabase();
         Cursor entries = null;
 
-        if (Config.LOGV) {
+        if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "Expanding events between " + begin + " and " + end);
         }
 
@@ -1530,12 +1598,33 @@ public class CalendarProvider extends SyncableContentProvider {
             qb.setTables("Events INNER JOIN Calendars ON (calendar_id = Calendars._id)");
             qb.setProjectionMap(sEventsProjectionMap);
 
-            qb.appendWhere("dtstart <= ");
-            qb.appendWhere(String.valueOf(end));
+            String beginString = String.valueOf(begin);
+            String endString = String.valueOf(end);
+
+            qb.appendWhere("(dtstart <= ");
+            qb.appendWhere(endString);
             qb.appendWhere(" AND ");
             qb.appendWhere("(lastDate IS NULL OR lastDate >= ");
-            qb.appendWhere(String.valueOf(begin));
+            qb.appendWhere(beginString);
+            qb.appendWhere(")) OR (");
+            // grab recurrence exceptions that fall outside our expansion window but modify
+            // recurrences that do fall within our window.  we won't insert these into the output
+            // set of instances, but instead will just add them to our cancellations list, so we
+            // can cancel the correct recurrence expansion instances.
+            qb.appendWhere("originalInstanceTime IS NOT NULL ");
+            qb.appendWhere("AND originalInstanceTime <= ");
+            qb.appendWhere(endString);
+            qb.appendWhere(" AND ");
+            // we don't have originalInstanceDuration or end time.  for now, assume the original
+            // instance lasts no longer than 1 week.
+            // TODO: compute the originalInstanceEndTime or get this from the server.
+            qb.appendWhere("originalInstanceTime >= ");
+            qb.appendWhere(String.valueOf(begin - 7*24*60*60*1000 /* 1 week */));
             qb.appendWhere(")");
+
+            if (Log.isLoggable(TAG, Log.VERBOSE)) {
+                Log.v(TAG, "Retrieving events to expand: " + qb.toString());
+            }
 
             entries = qb.query(db, EXPAND_COLUMNS, null, null, null, null, null);
 
@@ -1560,7 +1649,6 @@ public class CalendarProvider extends SyncableContentProvider {
 
             ContentValues initialValues;
             EventInstancesMap instancesMap = new EventInstancesMap();
-            ArrayList<CanceledInstance> canceled = new ArrayList<CanceledInstance>();
 
             Duration duration = new Duration();
             Time eventTime = new Time();
@@ -1601,6 +1689,7 @@ public class CalendarProvider extends SyncableContentProvider {
 
                 String syncId = entries.getString(syncIdColumn);
                 String originalEvent = entries.getString(originalEventColumn);
+                
                 long originalInstanceTimeMillis = -1;
                 if (!entries.isNull(originalInstanceTimeColumn)) {
                     originalInstanceTimeMillis= entries.getLong(originalInstanceTimeColumn);
@@ -1692,25 +1781,18 @@ public class CalendarProvider extends SyncableContentProvider {
                     }
                 } else {
                     // the event is not repeating
+                    initialValues = new ContentValues();
 
                     // if this event has an "original" field, then record
                     // that we need to cancel the original event (we can't
                     // do that here because the order of this loop isn't
                     // defined)
                     if (originalEvent != null && originalInstanceTimeMillis != -1) {
-                        canceled.add(new CanceledInstance(originalInstanceTimeMillis,
-                                     originalEvent));
+                        initialValues.put(Events.ORIGINAL_EVENT, originalEvent);
+                        initialValues.put(Events.ORIGINAL_INSTANCE_TIME,
+                                originalInstanceTimeMillis);
+                        initialValues.put(Events.STATUS, status);
                     }
-
-                    // do not create an instance in the Instances table if this
-                    // is a canceled event/exception to a recurrence.
-                    if (status == Events.STATUS_CANCELED) {
-                        continue;
-                    }
-
-                    initialValues = new ContentValues();
-                    initialValues.put(Instances.EVENT_ID, eventId);
-                    initialValues.put(Instances.BEGIN, dtstartMillis);
 
                     long dtendMillis = dtstartMillis;
                     if (durationStr == null) {
@@ -1720,6 +1802,20 @@ public class CalendarProvider extends SyncableContentProvider {
                     } else {
                         dtendMillis = duration.addTo(dtstartMillis);
                     }
+
+                    // this non-recurring event might be a recurrence exception that doesn't
+                    // actually fall within our expansion window, but instead was selected
+                    // so we can correctly cancel expanded recurrence instances below.  do not
+                    // add events to the instances map if they don't actually fall within our
+                    // expansion window.
+                    if ((dtendMillis < begin) || (dtstartMillis > end)) {
+                        continue;
+                    }
+
+                    initialValues = new ContentValues();
+                    initialValues.put(Instances.EVENT_ID, eventId);
+                    initialValues.put(Instances.BEGIN, dtstartMillis);
+
                     initialValues.put(Instances.END, dtendMillis);
 
                     if (allDay) {
@@ -1733,25 +1829,55 @@ public class CalendarProvider extends SyncableContentProvider {
                     instancesMap.add(syncId, initialValues);
                 }
             }
+            
+            // First, delete the original instances corresponding to recurrence
+            // exceptions.  We do this by iterating over the list and for each
+            // recurrence exception, we search the list for an instance with a
+            // matching "original instance time".  If we find such an instance,
+            // we remove it from the list.  If we don't find such an instance
+            // then we cancel the recurrence exception.
+            Set<String> keys = instancesMap.keySet();
+            for (String syncId : keys) {
+                InstancesList list = instancesMap.get(syncId);
+                for (ContentValues values : list) {
+                    
+                    // If this instance is not a recurrence exception, then
+                    // skip it.
+                    if (!values.containsKey(Events.ORIGINAL_EVENT)) {
+                        continue;
+                    }
+                    
+                    String originalEvent = values.getAsString(Events.ORIGINAL_EVENT);
+                    long originalTime = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
+                    int status = values.getAsInteger(Events.STATUS);
+                    InstancesList originalList = instancesMap.get(originalEvent);
+                    if (originalList == null) {
+                        // The original recurrence does not exist so cancel
+                        // this recurrence exception.
+                        values.put(Events.STATUS, Events.STATUS_CANCELED);
+                        continue;
+                    }
 
-            // remove the ones that should be canceled
-
-            int numCanceled = canceled.size();
-            for (int i=0; i<numCanceled; i++) {
-                CanceledInstance cancellation = canceled.get(i);
-                if (TextUtils.isEmpty(cancellation.syncId)) {
-                    // should this ever happen?
-                    continue;
-                }
-                InstancesList instancesList = instancesMap.get(cancellation.syncId);
-                if (instancesList == null) {
-                    continue;
-                }
-                int numInstances = instancesList.size();
-                for (int j=numInstances-1; j>=0; j--) {
-                    ContentValues m = instancesList.get(j);
-                    if (m.get(Instances.BEGIN).equals(cancellation.begin)) {
-                        instancesList.remove(j);
+                    // Search the original event for a matching original
+                    // instance time.  If there is a matching one, then remove
+                    // the original one.  We do this both for exceptions that
+                    // change the original instance as well as for exceptions
+                    // that delete the original instance.
+                    boolean found = false;
+                    for (int num = originalList.size() - 1; num >= 0; num--) {
+                        ContentValues originalValues = originalList.get(num);
+                        long beginTime = originalValues.getAsLong(Instances.BEGIN);
+                        if (beginTime == originalTime) {
+                            // We found the original instance, so remove it.
+                            found = true;
+                            originalList.remove(num);
+                        }
+                    }
+                        
+                    // If we didn't find a matching instance time then cancel
+                    // this recurrence exception.
+                    if (!found) {
+                        values.put(Events.STATUS, Events.STATUS_CANCELED);
                     }
                 }
             }
@@ -1762,10 +1888,28 @@ public class CalendarProvider extends SyncableContentProvider {
             // while the calendar app is trying to query the db (expanding instances)), we will
             // not be "polite" and yield the lock until we're done.  This will favor local query
             // operations over sync/write operations.
-            Collection<InstancesList> lists = instancesMap.values();
-            for (InstancesList list : lists) {
-                for (ContentValues m : list) {
-                    mInstancesInserter.replace(m);
+            for (String syncId : keys) {
+                InstancesList list = instancesMap.get(syncId);
+                for (ContentValues values : list) {
+                    
+                    // If this instance is a recurrence exception that wasn't
+                    // canceled, then create a new instance.
+                    if (values.containsKey(Events.ORIGINAL_EVENT)) {
+                        int status = values.getAsInteger(Events.STATUS);
+                        
+                        // If this recurrence exception is marked as "canceled"
+                        // then do not add this recurrence exception.
+                        if (status == Events.STATUS_CANCELED) {
+                            continue;
+                        }
+                        
+                        // Remove these fields before inserting a new instance
+                        values.remove(Events.ORIGINAL_EVENT);
+                        values.remove(Events.ORIGINAL_INSTANCE_TIME);
+                        values.remove(Events.STATUS);
+                    }
+                    
+                    mInstancesInserter.replace(values);
                     if (false) {
                         // yield the lock if anyone else is trying to
                         // perform a db operation here.
@@ -2285,6 +2429,9 @@ public class CalendarProvider extends SyncableContentProvider {
 
                 if (!isTemporary()) {
                     // Schedule another event alarm, if necessary
+                    if (DEBUG_ALARMS) {
+                        Log.i(TAG, "insertInternal() changing reminder");
+                    }
                     scheduleNextAlarm();
                 }
                 return Uri.parse("content://calendars/reminders/" + rowID);
@@ -2596,13 +2743,20 @@ public class CalendarProvider extends SyncableContentProvider {
         rawValues.put("event_id", eventId);
 
         String timezone = values.getAsString(Events.EVENT_TIMEZONE);
+        
+        boolean allDay = false;
+        Integer allDayInteger = values.getAsInteger(Events.ALL_DAY);
+        if (allDayInteger != null) {
+            allDay = allDayInteger != 0;
+        }
 
-        if (TextUtils.isEmpty(timezone)) {
+        if (allDay || TextUtils.isEmpty(timezone)) {
             // floating timezone
             timezone = Time.TIMEZONE_UTC;
         }
 
         Time time = new Time(timezone);
+        time.allDay = allDay;
         Long dtstartMillis = values.getAsLong(Events.DTSTART);
         if (dtstartMillis != null) {
             time.set(dtstartMillis);
@@ -2617,12 +2771,20 @@ public class CalendarProvider extends SyncableContentProvider {
 
         Long originalInstanceMillis = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
         if (originalInstanceMillis != null) {
+            // This is a recurrence exception so we need to get the all-day
+            // status of the original recurring event in order to format the
+            // date correctly.
+            allDayInteger = values.getAsInteger(Events.ORIGINAL_ALL_DAY);
+            if (allDayInteger != null) {
+                time.allDay = allDayInteger != 0;
+            }
             time.set(originalInstanceMillis);
             rawValues.put("originalInstanceTime2445", time.format2445());
         }
 
         Long lastDateMillis = values.getAsLong(Events.LAST_DATE);
         if (lastDateMillis != null) {
+            time.allDay = allDay;
             time.set(lastDateMillis);
             rawValues.put("lastDate2445", time.format2445());
         }
@@ -2654,16 +2816,35 @@ public class CalendarProvider extends SyncableContentProvider {
                     try {
                         if (cursor.moveToNext()) {
                             String syncId = cursor.getString(EVENTS_SYNC_ID_INDEX);
-                            String syncVersion = cursor.getString(EVENTS_SYNC_VERSION_INDEX);
-                            String syncAccount = cursor.getString(EVENTS_SYNC_ACCOUNT_INDEX);
-                            Long calId = cursor.getLong(EVENTS_CALENDAR_ID_INDEX);
+                            if (!TextUtils.isEmpty(syncId)) {
+                                String syncVersion = cursor.getString(EVENTS_SYNC_VERSION_INDEX);
+                                String syncAccount = cursor.getString(EVENTS_SYNC_ACCOUNT_INDEX);
+                                Long calId = cursor.getLong(EVENTS_CALENDAR_ID_INDEX);
+
+                                ContentValues values = new ContentValues();
+                                values.put(Events._SYNC_ID, syncId);
+                                values.put(Events._SYNC_VERSION, syncVersion);
+                                values.put(Events._SYNC_ACCOUNT, syncAccount);
+                                values.put(Events.CALENDAR_ID, calId);
+                                mDeletedEventsInserter.insert(values);
+
+                                // TODO: we may also want to delete exception
+                                // events for this event (in case this was a
+                                // recurring event).  We can do that with the
+                                // following code:
+                                // db.delete("Events", "originalEvent=?", new String[] {syncId});
+                            }
                             
-                            ContentValues values = new ContentValues();
-                            values.put(Events._SYNC_ID, syncId);
-                            values.put(Events._SYNC_VERSION, syncVersion);
-                            values.put(Events._SYNC_ACCOUNT, syncAccount);
-                            values.put(Events.CALENDAR_ID, calId);
-                            mDeletedEventsInserter.insert(values);
+                            // If this was a recurring event or a recurrence
+                            // exception, then force a recalculation of the
+                            // instances.
+                            String rrule = cursor.getString(EVENTS_RRULE_INDEX);
+                            String rdate = cursor.getString(EVENTS_RDATE_INDEX);
+                            String origEvent = cursor.getString(EVENTS_ORIGINAL_EVENT_INDEX);
+                            if (!TextUtils.isEmpty(rrule) || !TextUtils.isEmpty(rdate)
+                                    || !TextUtils.isEmpty(origEvent)) {
+                                mMetaData.clearInstanceRange();
+                            }
                         }
                     } finally {
                         cursor.close();
@@ -2834,6 +3015,9 @@ public class CalendarProvider extends SyncableContentProvider {
                         if (values.containsKey(Events.DTSTART)) {
                             // The start time of the event changed, so run the
                             // event alarm scheduler.
+                            if (DEBUG_ALARMS) {
+                                Log.i(TAG, "updateInternal() changing event");
+                            }
                             scheduleNextAlarm();
                         }
                     }
@@ -2860,6 +3044,9 @@ public class CalendarProvider extends SyncableContentProvider {
                 if (!isTemporary()) {
                     // Reschedule the event alarms because the
                     // "minutes" field may have changed.
+                    if (DEBUG_ALARMS) {
+                        Log.i(TAG, "updateInternal() changing reminder");
+                    }
                     scheduleNextAlarm();
                 }
                 return result;
@@ -2978,6 +3165,9 @@ public class CalendarProvider extends SyncableContentProvider {
     @Override
     public void onSyncStop(SyncContext context, boolean success) {
         super.onSyncStop(context, success);
+        if (DEBUG_ALARMS) {
+            Log.i(TAG, "onSyncStop() success: " + success);
+        }
         scheduleNextAlarm();
     }
 
@@ -3048,8 +3238,12 @@ public class CalendarProvider extends SyncableContentProvider {
     private void runScheduleNextAlarm() {
         // Do not schedule any events while syncing or if this is a temporary
         // database.
-        if (isTemporary())
+        if (isTemporary()) {
+            if (DEBUG_ALARMS) {
+                Log.i(TAG, "runScheduleNextAlarm cancelled because database is temporary");
+            }
             return;
+        }
 
         final SQLiteDatabase db = mOpenHelper.getWritableDatabase();
         db.beginTransaction();
@@ -3146,7 +3340,6 @@ public class CalendarProvider extends SyncableContentProvider {
                 time.set(nextAlarmTime);
                 String alarmTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
                 Log.i(TAG, "nextAlarmTime: " + alarmTimeStr
-                        + " query: " + query
                         + " cursor results: " + cursor.getCount());
             }
 
@@ -3185,7 +3378,7 @@ public class CalendarProvider extends SyncableContentProvider {
 
                 if (alarmTime < nextAlarmTime) {
                     nextAlarmTime = alarmTime;
-                } else if (alarmTime > nextAlarmTime + android.pim.DateUtils.MINUTE_IN_MILLIS) {
+                } else if (alarmTime > nextAlarmTime + android.text.format.DateUtils.MINUTE_IN_MILLIS) {
                     // This event alarm (and all later ones) will be scheduled
                     // later.
                     break;
@@ -3194,6 +3387,11 @@ public class CalendarProvider extends SyncableContentProvider {
                 // Avoid an SQLiteContraintException by checking if this alarm
                 // already exists in the table.
                 if (CalendarAlerts.alarmExists(cr, eventId, startTime, alarmTime)) {
+                    if (DEBUG_ALARMS) {
+                        int titleIndex = cursor.getColumnIndex(Events.TITLE);
+                        String title = cursor.getString(titleIndex);
+                        Log.i(TAG, "  alarm exists for id: " + eventId + " " + title);
+                    }
                     continue;
                 }
 
@@ -3246,9 +3444,9 @@ public class CalendarProvider extends SyncableContentProvider {
         // event is inserted before the next alarm check, then this method
         // will be run again when the new event is inserted.
         if (nextAlarmTime != Long.MAX_VALUE) {
-            scheduleNextAlarmCheck(nextAlarmTime + android.pim.DateUtils.MINUTE_IN_MILLIS);
+            scheduleNextAlarmCheck(nextAlarmTime + android.text.format.DateUtils.MINUTE_IN_MILLIS);
         } else {
-            scheduleNextAlarmCheck(currentMillis + android.pim.DateUtils.DAY_IN_MILLIS);
+            scheduleNextAlarmCheck(currentMillis + android.text.format.DateUtils.DAY_IN_MILLIS);
         }
     }
 
@@ -3465,6 +3663,19 @@ public class CalendarProvider extends SyncableContentProvider {
             int idIndex = localCursor.getColumnIndexOrThrow(Events._ID);
             long localId = localCursor.getLong(idIndex);
             deleteBusyBitsLocked(localId);
+            
+            // If this was a recurring event or a recurrence exception, then
+            // force a recalculation of the instances.
+            int index = localCursor.getColumnIndexOrThrow(Events.RRULE);
+            String rrule = localCursor.getString(index);
+            index = localCursor.getColumnIndexOrThrow(Events.RDATE);
+            String rdate = localCursor.getString(index);
+            index = localCursor.getColumnIndexOrThrow(Events.ORIGINAL_EVENT);
+            String origEvent = localCursor.getString(index);
+            if (!TextUtils.isEmpty(rrule) || !TextUtils.isEmpty(rdate)
+                    || !TextUtils.isEmpty(origEvent)) {
+                mMetaData.clearInstanceRange();
+            }
             super.deleteRow(localCursor);
         }
 
@@ -3497,6 +3708,8 @@ public class CalendarProvider extends SyncableContentProvider {
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events.RRULE, values);
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events.ORIGINAL_EVENT, values);
             DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.ORIGINAL_INSTANCE_TIME,
+                    values);
+            DatabaseUtils.cursorStringToContentValues(diffsCursor, Events.ORIGINAL_ALL_DAY,
                     values);
             DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.LAST_DATE, values);
             DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.CALENDAR_ID, values);
@@ -3571,6 +3784,7 @@ public class CalendarProvider extends SyncableContentProvider {
         sEventsProjectionMap.put(Events.EXDATE, "exdate");
         sEventsProjectionMap.put(Events.ORIGINAL_EVENT, "originalEvent");
         sEventsProjectionMap.put(Events.ORIGINAL_INSTANCE_TIME, "originalInstanceTime");
+        sEventsProjectionMap.put(Events.ORIGINAL_ALL_DAY, "originalAllDay");
         sEventsProjectionMap.put(Events.LAST_DATE, "lastDate");
         sEventsProjectionMap.put(Events.CALENDAR_ID, "calendar_id");
         // Calendar columns

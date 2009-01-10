@@ -1279,8 +1279,8 @@ public class CalendarProvider extends SyncableContentProvider {
         case CalendarEntry.ACCESS_FREEBUSY:
             accesslevel = Calendars.FREEBUSY_ACCESS;
             break;
-        case CalendarEntry.ACCESS_CONTRIBUTOR:
-            accesslevel = Calendars.CONTRIBUTOR_ACCESS;
+        case CalendarEntry.ACCESS_EDITOR:
+            accesslevel = Calendars.EDITOR_ACCESS;
             break;
         case CalendarEntry.ACCESS_OWNER:
             accesslevel = Calendars.OWNER_ACCESS;
@@ -3659,6 +3659,11 @@ public class CalendarProvider extends SyncableContentProvider {
         }
 
         @Override
+        protected String[] getDeleteRowProjection() {
+            return new String[]{Events._ID, Events.RRULE, Events.RDATE, Events.ORIGINAL_EVENT};
+        }
+
+        @Override
         public void deleteRow(Cursor localCursor) {
             int idIndex = localCursor.getColumnIndexOrThrow(Events._ID);
             long localId = localCursor.getLong(idIndex);
@@ -3666,6 +3671,12 @@ public class CalendarProvider extends SyncableContentProvider {
             
             // If this was a recurring event or a recurrence exception, then
             // force a recalculation of the instances.
+            // We can get a tombstoned recurrence exception
+            // that doesn't have a rrule, rdate, or originalEvent, and the
+            // check below wouldn't catch that.  However, in practice we also
+            // get a different event with a rrule in that case, so the
+            // instances get cleared by that rule.
+            // This should be re-evaluated when calendar supports gd:deleted.
             int index = localCursor.getColumnIndexOrThrow(Events.RRULE);
             String rrule = localCursor.getString(index);
             index = localCursor.getColumnIndexOrThrow(Events.RDATE);

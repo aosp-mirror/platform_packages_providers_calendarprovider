@@ -527,13 +527,15 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         super.onSyncStarting(context, account, forced, result);
     }
 
-    private void deletedEntryToContentValues(EventEntry event, ContentValues values) {
+    private void deletedEntryToContentValues(Long syncLocalId, EventEntry event,
+            ContentValues values) {
         // see #deletedCursorToEntry.  this deletion cannot be an exception to a recurrence (e.g.,
         // deleting an instance of a repeating event) -- new recurrence exceptions would be
         // insertions.
         values.clear();
 
         // Base sync info
+        values.put(Events._SYNC_LOCAL_ID, syncLocalId);
         values.put(Events._SYNC_ID, event.getId());
         values.put(Events._SYNC_VERSION, event.getEditUri());
     }
@@ -544,7 +546,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
      *
      * @return ENTRY_OK, ENTRY_DELETED, or ENTRY_INVALID
      */
-    private int entryToContentValues(EventEntry event, long syncLocalId,
+    private int entryToContentValues(EventEntry event, Long syncLocalId,
             ContentValues map, Object info) {
         SyncInfo syncInfo = (SyncInfo) info;
 
@@ -779,9 +781,8 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         return ENTRY_OK;
     }
 
-    @Override
     public void updateProvider(Feed feed,
-            long syncLocalId, boolean forceDelete, Entry entry,
+            Long syncLocalId, Entry entry,
             ContentProvider provider, Object info) throws ParseException {
         SyncInfo syncInfo = (SyncInfo) info;
         EventEntry event = (EventEntry) entry;
@@ -795,8 +796,8 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             syncInfo.calendarTimezone = eventsFeed.getTimezone();
         }
 
-        if (forceDelete) {
-            deletedEntryToContentValues(event, map);
+        if (entry.isDeleted()) {
+            deletedEntryToContentValues(syncLocalId, event, map);
             if (Config.LOGV) {
                 Log.v(TAG, "Deleting entry: " + map);
             }

@@ -28,14 +28,14 @@ import com.google.wireless.gdata.calendar.client.CalendarClient;
 import com.google.wireless.gdata.calendar.data.CalendarEntry;
 import com.google.wireless.gdata.calendar.data.CalendarsFeed;
 import com.google.wireless.gdata.calendar.parser.xml.XmlCalendarGDataParserFactory;
-import com.google.wireless.gdata.client.AllDeletedUnavailableException;
-import com.google.wireless.gdata.client.AuthenticationException;
+import com.google.wireless.gdata.client.HttpException;
 import com.google.wireless.gdata.data.Entry;
 import com.google.wireless.gdata.parser.GDataParser;
 import com.google.wireless.gdata.parser.ParseException;
 
 import android.app.AlarmManager;
 import android.app.PendingIntent;
+import android.content.AbstractSyncableContentProvider;
 import android.content.AbstractTableMerger;
 import android.content.BroadcastReceiver;
 import android.content.ContentProvider;
@@ -47,7 +47,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SyncAdapter;
 import android.content.SyncContext;
-import android.content.SyncableContentProvider;
 import android.content.UriMatcher;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
@@ -62,7 +61,6 @@ import android.os.Process;
 import android.pim.DateException;
 import android.pim.RecurrenceSet;
 import android.provider.Calendar;
-import android.provider.SyncConstValue;
 import android.provider.Calendar.Attendees;
 import android.provider.Calendar.BusyBits;
 import android.provider.Calendar.CalendarAlerts;
@@ -71,6 +69,7 @@ import android.provider.Calendar.Events;
 import android.provider.Calendar.ExtendedProperties;
 import android.provider.Calendar.Instances;
 import android.provider.Calendar.Reminders;
+import android.provider.SyncConstValue;
 import android.text.TextUtils;
 import android.text.format.Time;
 import android.util.Config;
@@ -89,7 +88,7 @@ import java.util.Set;
 import java.util.TimeZone;
 import java.util.TreeSet;
 
-public class CalendarProvider extends SyncableContentProvider {
+public class CalendarProvider extends AbstractSyncableContentProvider {
 
     private static final boolean PROFILE = false;
     private static final boolean DEBUG_ALARMS = false;
@@ -210,14 +209,17 @@ public class CalendarProvider extends SyncableContentProvider {
 
     /**
      * Alarms older than this threshold will be deleted from the CalendarAlerts
-     * table.  This should be about a day because if the timezone is
+     * table.  This should be at least a day because if the timezone is
      * wrong and the user corrects it we might delete good alarms that
      * appear to be old because the device time was incorrectly in the future.
      * This threshold must also be larger than SCHEDULE_ALARM_SLACK.  We add
      * the SCHEDULE_ALARM_SLACK to ensure this.
+     *
+     * To make it easier to find and debug problems with missed reminders,
+     * set this to something greater than a day.
      */
-    private static final long CLEAR_OLD_ALARM_THRESHOLD = android.text.format.DateUtils.DAY_IN_MILLIS
-            + SCHEDULE_ALARM_SLACK;
+    private static final long CLEAR_OLD_ALARM_THRESHOLD =
+        7 * android.text.format.DateUtils.DAY_IN_MILLIS + SCHEDULE_ALARM_SLACK;
 
     // A lock for synchronizing access to fields that are shared
     // with the AlarmScheduler thread.
@@ -225,10 +227,10 @@ public class CalendarProvider extends SyncableContentProvider {
 
     private static final String TAG = "CalendarProvider";
     private static final String DATABASE_NAME = "calendar.db";
-    
+
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 52;
+    private static final int DATABASE_VERSION = 53;
 
     private static final String EXPECTED_PROJECTION = "/full";
 
@@ -243,7 +245,7 @@ public class CalendarProvider extends SyncableContentProvider {
 
     private static final String[] sCalendarsIdProjection = new String[] { Calendars._ID };
     private static final int CALENDARS_INDEX_ID = 0;
-    
+
     // Allocate the string constant once here instead of on the heap
     private static final String CALENDAR_ID_SELECTION = "calendar_id=?";
 
@@ -424,14 +426,14 @@ public class CalendarProvider extends SyncableContentProvider {
             db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN minutes INTEGER DEFAULT 0;");
             oldVersion += 1;
         }
-        
+
         if (oldVersion == 47) {
             // Changing to version 48 was intended to force a data wipe
             dropTables(db);
             bootstrapDatabase(db);
             return false; // this was lossy
         }
-        
+
         if (oldVersion == 48) {
             // Changing to version 49 was intended to force a data wipe
             dropTables(db);
@@ -491,7 +493,7 @@ public class CalendarProvider extends SyncableContentProvider {
             // disallows making changes to an instance of a recurring event
             // until the recurring event has been synced to the server so the
             // second case should never occur.
-            
+
             // "cursor" iterates over all the recurrences exceptions.
             Cursor cursor = db.rawQuery("SELECT _id,originalEvent FROM Events"
                     + " WHERE originalEvent IS NOT NULL", null /* selection args */);
@@ -500,7 +502,7 @@ public class CalendarProvider extends SyncableContentProvider {
                     while (cursor.moveToNext()) {
                         long id = cursor.getLong(0);
                         String originalEvent = cursor.getString(1);
-                        
+
                         // Find the original recurring event (if it exists)
                         Cursor recur = db.rawQuery("SELECT allDay FROM Events"
                                 + " WHERE _sync_id=?", new String[] {originalEvent});
@@ -525,8 +527,17 @@ public class CalendarProvider extends SyncableContentProvider {
                     cursor.close();
                 }
             }
+            oldVersion += 1;
         }
-        
+
+        if (oldVersion == 52) {
+            Log.w(TAG, "Upgrading CalendarAlerts table");
+            db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN creationTime INTEGER DEFAULT 0;");
+            db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN receivedTime INTEGER DEFAULT 0;");
+            db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN notifyTime INTEGER DEFAULT 0;");
+            oldVersion += 1;
+        }
+
         return true; // this was lossless
     }
 
@@ -633,6 +644,7 @@ public class CalendarProvider extends SyncableContentProvider {
                         "_sync_id TEXT," +
                         "_sync_version TEXT," +
                         "_sync_account TEXT," +
+                        (isTemporary() ? "_sync_local_id INTEGER," : "") + // Used while syncing,
                         "_sync_mark INTEGER," + // To filter out new rows
                         "calendar_id INTEGER" +
                     ");");
@@ -698,9 +710,12 @@ public class CalendarProvider extends SyncableContentProvider {
         db.execSQL("CREATE TABLE CalendarAlerts (" +
                         "_id INTEGER PRIMARY KEY," +
                         "event_id INTEGER," +
-                        "begin INTEGER NOT NULL," +        // UTC millis
-                        "end INTEGER NOT NULL," +          // UTC millis
-                        "alarmTime INTEGER NOT NULL," +    // UTC millis
+                        "begin INTEGER NOT NULL," +         // UTC millis
+                        "end INTEGER NOT NULL," +           // UTC millis
+                        "alarmTime INTEGER NOT NULL," +     // UTC millis
+                        "creationTime INTEGER NOT NULL," +  // UTC millis
+                        "receivedTime INTEGER NOT NULL," +  // UTC millis
+                        "notifyTime INTEGER NOT NULL," +    // UTC millis
                         "state INTEGER NOT NULL," +
                         "minutes INTEGER," +
                         "UNIQUE (alarmTime, begin, event_id)" +
@@ -1085,10 +1100,6 @@ public class CalendarProvider extends SyncableContentProvider {
                 parser = mCalendarClient.getParserForUserCalendars(feedUrl, authToken);
                 // process the calendars
                 processCalendars(username, parser, existingCalendarIds);
-            } catch (AuthenticationException ae) {
-                Log.w(TAG, "Unable to process calendars from server -- could not "
-                        + "authenticate user.", ae);
-                return;
             } catch (ParseException pe) {
                 Log.w(TAG, "Unable to process calendars from server -- could not "
                         + "parse calendar feed.", pe);
@@ -1097,10 +1108,20 @@ public class CalendarProvider extends SyncableContentProvider {
                 Log.w(TAG, "Unable to process calendars from server -- encountered "
                         + "i/o error", ioe);
                 return;
-            } catch (AllDeletedUnavailableException e) {
-                Log.w(TAG, "Unable to process calendars from server -- encountered "
-                        + "an AllDeletedUnavailableException, this should never happen", e);
-                return;
+            } catch (HttpException e) {
+                switch (e.getStatusCode()) {
+                    case HttpException.SC_UNAUTHORIZED:
+                        Log.w(TAG, "Unable to process calendars from server -- could not "
+                                + "authenticate user.", e);
+                        return;
+                    case HttpException.SC_GONE:
+                        Log.w(TAG, "Unable to process calendars from server -- encountered "
+                                + "an AllDeletedUnavailableException, this should never happen", e);
+                        return;
+                    default:
+                        Log.w(TAG, "Unable to process calendars from server -- error", e);
+                        return;
+                }
             } finally {
                 if (parser != null) {
                     parser.close();
@@ -1689,7 +1710,7 @@ public class CalendarProvider extends SyncableContentProvider {
 
                 String syncId = entries.getString(syncIdColumn);
                 String originalEvent = entries.getString(originalEventColumn);
-                
+
                 long originalInstanceTimeMillis = -1;
                 if (!entries.isNull(originalInstanceTimeColumn)) {
                     originalInstanceTimeMillis= entries.getLong(originalInstanceTimeColumn);
@@ -1829,7 +1850,7 @@ public class CalendarProvider extends SyncableContentProvider {
                     instancesMap.add(syncId, initialValues);
                 }
             }
-            
+
             // First, delete the original instances corresponding to recurrence
             // exceptions.  We do this by iterating over the list and for each
             // recurrence exception, we search the list for an instance with a
@@ -1840,13 +1861,13 @@ public class CalendarProvider extends SyncableContentProvider {
             for (String syncId : keys) {
                 InstancesList list = instancesMap.get(syncId);
                 for (ContentValues values : list) {
-                    
+
                     // If this instance is not a recurrence exception, then
                     // skip it.
                     if (!values.containsKey(Events.ORIGINAL_EVENT)) {
                         continue;
                     }
-                    
+
                     String originalEvent = values.getAsString(Events.ORIGINAL_EVENT);
                     long originalTime = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
                     int status = values.getAsInteger(Events.STATUS);
@@ -1873,7 +1894,7 @@ public class CalendarProvider extends SyncableContentProvider {
                             originalList.remove(num);
                         }
                     }
-                        
+
                     // If we didn't find a matching instance time then cancel
                     // this recurrence exception.
                     if (!found) {
@@ -1891,24 +1912,24 @@ public class CalendarProvider extends SyncableContentProvider {
             for (String syncId : keys) {
                 InstancesList list = instancesMap.get(syncId);
                 for (ContentValues values : list) {
-                    
+
                     // If this instance is a recurrence exception that wasn't
                     // canceled, then create a new instance.
                     if (values.containsKey(Events.ORIGINAL_EVENT)) {
                         int status = values.getAsInteger(Events.STATUS);
-                        
+
                         // If this recurrence exception is marked as "canceled"
                         // then do not add this recurrence exception.
                         if (status == Events.STATUS_CANCELED) {
                             continue;
                         }
-                        
+
                         // Remove these fields before inserting a new instance
                         values.remove(Events.ORIGINAL_EVENT);
                         values.remove(Events.ORIGINAL_INSTANCE_TIME);
                         values.remove(Events.STATUS);
                     }
-                    
+
                     mInstancesInserter.replace(values);
                     if (false) {
                         // yield the lock if anyone else is trying to
@@ -2743,7 +2764,7 @@ public class CalendarProvider extends SyncableContentProvider {
         rawValues.put("event_id", eventId);
 
         String timezone = values.getAsString(Events.EVENT_TIMEZONE);
-        
+
         boolean allDay = false;
         Integer allDayInteger = values.getAsInteger(Events.ALL_DAY);
         if (allDayInteger != null) {
@@ -2834,7 +2855,7 @@ public class CalendarProvider extends SyncableContentProvider {
                                 // following code:
                                 // db.delete("Events", "originalEvent=?", new String[] {syncId});
                             }
-                            
+
                             // If this was a recurring event or a recurrence
                             // exception, then force a recalculation of the
                             // instances.
@@ -3060,7 +3081,7 @@ public class CalendarProvider extends SyncableContentProvider {
                 throw new IllegalArgumentException("Unknown URL " + url);
         }
     }
-    
+
     /**
      * Schedule a calendar sync for the account.
      * @param account the account for which to schedule a sync
@@ -3140,7 +3161,7 @@ public class CalendarProvider extends SyncableContentProvider {
             // Note that we do not delete the matching entries
             // in the DeletedEvents table.  We will let those
             // deleted events propagate to the server.
-            
+
             // TODO: there is a corner case to deal with here: namely, if
             // we edit or delete an event on the phone and then remove
             // (that is, stop syncing) a calendar, and if we also make a
@@ -3258,7 +3279,7 @@ public class CalendarProvider extends SyncableContentProvider {
     /**
      * This method looks at the 24-hour window from now for any events that it
      * needs to schedule.  This method runs within a database transaction.
-     * 
+     *
      * @param db the database
      */
     private void scheduleNextAlarmLocked(SQLiteDatabase db) {
@@ -3383,7 +3404,7 @@ public class CalendarProvider extends SyncableContentProvider {
                     // later.
                     break;
                 }
-                
+
                 // Avoid an SQLiteContraintException by checking if this alarm
                 // already exists in the table.
                 if (CalendarAlerts.alarmExists(cr, eventId, startTime, alarmTime)) {
@@ -3659,33 +3680,34 @@ public class CalendarProvider extends SyncableContentProvider {
         }
 
         @Override
-        protected String[] getDeleteRowProjection() {
-            return new String[]{Events._ID, Events.RRULE, Events.RDATE, Events.ORIGINAL_EVENT};
-        }
-
-        @Override
         public void deleteRow(Cursor localCursor) {
-            int idIndex = localCursor.getColumnIndexOrThrow(Events._ID);
-            long localId = localCursor.getLong(idIndex);
+            long localId = localCursor.getLong(localCursor.getColumnIndexOrThrow(Events._ID));
             deleteBusyBitsLocked(localId);
-            
-            // If this was a recurring event or a recurrence exception, then
-            // force a recalculation of the instances.
-            // We can get a tombstoned recurrence exception
-            // that doesn't have a rrule, rdate, or originalEvent, and the
-            // check below wouldn't catch that.  However, in practice we also
-            // get a different event with a rrule in that case, so the
-            // instances get cleared by that rule.
-            // This should be re-evaluated when calendar supports gd:deleted.
-            int index = localCursor.getColumnIndexOrThrow(Events.RRULE);
-            String rrule = localCursor.getString(index);
-            index = localCursor.getColumnIndexOrThrow(Events.RDATE);
-            String rdate = localCursor.getString(index);
-            index = localCursor.getColumnIndexOrThrow(Events.ORIGINAL_EVENT);
-            String origEvent = localCursor.getString(index);
-            if (!TextUtils.isEmpty(rrule) || !TextUtils.isEmpty(rdate)
-                    || !TextUtils.isEmpty(origEvent)) {
-                mMetaData.clearInstanceRange();
+
+            // we have to read this row from the DB since the projection that is used
+            // by cursor doesn't necessarily contain the columns we need
+            Cursor c = getDatabase().query(sEventsTable,
+                    new String[]{Events.RRULE, Events.RDATE, Events.ORIGINAL_EVENT},
+                    "_id=" + localId, null, null, null, null);
+            try {
+                c.moveToNext();
+                // If this was a recurring event or a recurrence exception, then
+                // force a recalculation of the instances.
+                // We can get a tombstoned recurrence exception
+                // that doesn't have a rrule, rdate, or originalEvent, and the
+                // check below wouldn't catch that.  However, in practice we also
+                // get a different event with a rrule in that case, so the
+                // instances get cleared by that rule.
+                // This should be re-evaluated when calendar supports gd:deleted.
+                String rrule = c.getString(c.getColumnIndexOrThrow(Events.RRULE));
+                String rdate = c.getString(c.getColumnIndexOrThrow(Events.RDATE));
+                String origEvent = c.getString(c.getColumnIndexOrThrow(Events.ORIGINAL_EVENT));
+                if (!TextUtils.isEmpty(rrule) || !TextUtils.isEmpty(rdate)
+                        || !TextUtils.isEmpty(origEvent)) {
+                    mMetaData.clearInstanceRange();
+                }
+            } finally {
+                c.close();
             }
             super.deleteRow(localCursor);
         }

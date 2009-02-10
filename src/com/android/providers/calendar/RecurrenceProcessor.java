@@ -754,6 +754,11 @@ byday:
                                         generated.set(second, minute, hour, day, month, iteratorYear);
 
                                         long genMillis = generated.normalize(true /* ignore DST */);
+                                        if (genMillis < 0) {
+                                          // Currently can't support dates past 2038
+                                          Log.w(TAG, "Bad date: " + generated);
+                                          break events;
+                                        }
                                         // sometimes events get generated (BYDAY, BYHOUR, etc.) that
                                         // are before dtstart.  Filter these.  I believe this is correct,
                                         // but Google Calendar doesn't seem to always do this.
@@ -887,4 +892,3 @@ byday:
         }
     }
 }
-

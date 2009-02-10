@@ -230,7 +230,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 53;
+    private static final int DATABASE_VERSION = 54;
 
     private static final String EXPECTED_PROJECTION = "/full";
 
@@ -538,6 +538,13 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             oldVersion += 1;
         }
 
+        if (oldVersion == 53) {
+            Log.w(TAG, "adding eventSyncAccountAndIdIndex");
+            db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
+                    + Events._SYNC_ACCOUNT + ", " + Events._SYNC_ID + ");");
+            oldVersion += 1;
+        }
+
         return true; // this was lossless
     }
 
@@ -622,6 +629,9 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         "originalAllDay INTEGER," +
                         "lastDate INTEGER" +               // millis since epoch
                     ");");
+
+        db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
+                + Events._SYNC_ACCOUNT + ", " + Events._SYNC_ID + ");");
 
         db.execSQL("CREATE INDEX eventsCalendarIdIndex ON Events (" +
                    Events.CALENDAR_ID +
@@ -1833,7 +1843,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         continue;
                     }
 
-                    initialValues = new ContentValues();
                     initialValues.put(Instances.EVENT_ID, eventId);
                     initialValues.put(Instances.BEGIN, dtstartMillis);
 
@@ -2373,20 +2382,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             case EVENTS:
                 if (!isTemporary()) {
                     initialValues.put(Events._SYNC_DIRTY, 1);
-
-                    // Disallow inserting the attendee status in the Events
-                    // table because that makes it harder to keep the value
-                    // consistent with the corresponding entry in the
-                    // Attendees table.  Note that it's okay (and expected)
-                    // for the temporary table to contain the attendee status
-                    // because that comes from the server sync and the Events
-                    // table is already consistent with the Attendees table.
-                    if (initialValues.containsKey(Events.SELF_ATTENDEE_STATUS)) {
-                        throw new IllegalArgumentException("Inserting "
-                                + Events.SELF_ATTENDEE_STATUS
-                                + " in Events table is not allowed");
-                    }
-
                     if (!initialValues.containsKey(Events.DTSTART)) {
                         throw new RuntimeException("DTSTART field missing from event");
                     }
@@ -2406,6 +2401,13 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     updateEventRawTimesLocked(rowId, updatedValues);
                     updateInstancesLocked(updatedValues, rowId, true /* new event */, db);
                     insertBusyBitsLocked(rowId, updatedValues);
+                    
+                    // If we inserted a new event that specified the self-attendee
+                    // status, then we need to add an entry to the attendees table.
+                    if (initialValues.containsKey(Events.SELF_ATTENDEE_STATUS)) {
+                        int status = initialValues.getAsInteger(Events.SELF_ATTENDEE_STATUS);
+                        createAttendeeEntry(rowId, status);
+                    }
                 }
 
                 return uri;
@@ -2511,7 +2513,68 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         Log.e(TAG, "unable to find the email address in calendar " + feed);
         return null;
     }
+    
+    /**
+     * Creates an entry in the Attendees table that refers to the given event
+     * and that has the given response status.
+     * 
+     * @param eventId the event id that the new entry in the Attendees table
+     * should refer to
+     * @param status the response status
+     */
+    private void createAttendeeEntry(long eventId, int status) {
+        ContentValues values = new ContentValues();
+        values.put(Attendees.EVENT_ID, eventId);
+        values.put(Attendees.ATTENDEE_STATUS, status);
+        values.put(Attendees.ATTENDEE_TYPE, Attendees.TYPE_NONE);
+        values.put(Attendees.ATTENDEE_RELATIONSHIP,
+                Attendees.RELATIONSHIP_ATTENDEE);
 
+        // Get the calendar id for this event
+        Cursor cursor = null;
+        long calId;
+        try {
+            cursor = query(ContentUris.withAppendedId(Events.CONTENT_URI, eventId),
+                    new String[] { Events.CALENDAR_ID },
+                    null /* selection */,
+                    null /* selectionArgs */,
+                    null /* sort */);
+            if (cursor == null) {
+                return;
+            }
+            cursor.moveToFirst();
+            calId = cursor.getLong(0);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+
+        // Get the email address of this user from this Calendar
+        String emailAddress = null;
+        cursor = null;
+        try {
+            cursor = query(ContentUris.withAppendedId(Calendars.CONTENT_URI, calId),
+                    new String[] { "_sync_account" },
+                    null /* selection */,
+                    null /* selectionArgs */,
+                    null /* sort */);
+            if (cursor == null) {
+                return;
+            }
+            cursor.moveToFirst();
+            emailAddress = cursor.getString(0);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+        values.put(Attendees.ATTENDEE_EMAIL, emailAddress);
+        
+        // We don't know the ATTENDEE_NAME but that will be filled in by the
+        // server and sent back to us.
+        mAttendeesInserter.insert(values);
+    }
 
     /**
      * Updates the attendee status in the Events table to be consistent with

@@ -1661,8 +1661,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
             RecurrenceProcessor rp = new RecurrenceProcessor();
 
-            TreeSet<Long> dates = new TreeSet<Long>();
-
             int statusColumn = entries.getColumnIndex(Events.STATUS);
             int dtstartColumn = entries.getColumnIndex(Events.DTSTART);
             int dtendColumn = entries.getColumnIndex(Events.DTEND);
@@ -1781,9 +1779,9 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         }
                     }
 
+                    long[] dates;
                     try {
-                        rp.expand(eventTime, recur,
-                                  begin /* range start */, end /* range end */, dates);
+                        dates = rp.expand(eventTime, recur, begin, end);
                     }
                     catch (DateException e) {
                         Log.w(TAG, "RecurrenceProcessor.expand skipping",e);
@@ -1798,12 +1796,13 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         eventTime.timezone = localTimezone;
                     }
 
+                    long durationMillis = duration.getMillis();
                     for (long date : dates) {
                         initialValues = new ContentValues();
                         initialValues.put(Instances.EVENT_ID, eventId);
 
                         initialValues.put(Instances.BEGIN, date);
-                        long dtendMillis = duration.addTo(date);
+                        long dtendMillis = date + durationMillis;
                         initialValues.put(Instances.END, dtendMillis);
 
                         computeTimezoneDependentFields(date, dtendMillis,
@@ -1840,7 +1839,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     // add events to the instances map if they don't actually fall within our
                     // expansion window.
                     if ((dtendMillis < begin) || (dtstartMillis > end)) {
-                        continue;
+                        initialValues.put(Events.STATUS, Events.STATUS_CANCELED);
                     }
 
                     initialValues.put(Instances.EVENT_ID, eventId);

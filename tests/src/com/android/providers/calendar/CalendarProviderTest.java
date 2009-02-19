@@ -290,10 +290,11 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
                 if (!found) {
                     int titleColumn = cursor.getColumnIndex(Events.TITLE);
                     int allDayColumn = cursor.getColumnIndex(Events.ALL_DAY);
-                    
+
                     String title = cursor.getString(titleColumn);
                     boolean allDay = cursor.getInt(allDayColumn) != 0;
-                    int flags = DateUtils.FORMAT_SHOW_DATE | DateUtils.FORMAT_NUMERIC_DATE;
+                    int flags = DateUtils.FORMAT_SHOW_DATE | DateUtils.FORMAT_NUMERIC_DATE |
+                            DateUtils.FORMAT_24HOUR;
                     if (allDay) {
                         flags |= DateUtils.FORMAT_UTC;
                     } else {
@@ -573,11 +574,14 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
             new EventInfo("daily0", "2008-05-03T00:00:00",
                     "except1", "daily0 exception for 5/3/2008 12am, change to 5/3/2008 2am to 3am",
                     "2008-05-03T02:00:00", "2008-05-03T01:03:00", false),
+            new EventInfo("daily0", "2008-05-02T00:00:00",
+                    "except2", "daily0 exception for 5/2/2008 12am, change to 1/2/2008",
+                    "2008-01-02T00:00:00", "2008-01-02T01:00:00", false),
             new EventInfo("yearly0", "yearly on 5/1/2008 from 1pm to 2pm",
                     "2008-05-01T13:00:00", "2008-05-01T14:00:00",
                     "FREQ=YEARLY;WKST=SU", false),
     };
-    
+
     /**
      * This table is used to create repeating events and then check that the
      * number of instances within a given range matches the expected number
@@ -820,7 +824,22 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
             new Delete("daily0", 1),
             new VerifyAllInstances("2008-05-01T00:00:00", "2008-05-03T00:01:00", null),
     };
-    
+
+    /**
+     * This sequence of commands creates a recurring event with a recurrence
+     * exception that moves an event outside the expansion window.  It checks that the
+     * recurrence exception does not occur in the Instances database table.
+     * Bug 1642665
+     */
+    private Command[] mExceptionWithMovedRecurrence = {
+            new Insert("daily0"),
+            new VerifyAllInstances("2008-05-01T00:00:00", "2008-05-03T00:01:00",
+                    new String[] {"2008-05-01T00:00:00", "2008-05-02T00:00:00",
+                            "2008-05-03T00:00:00", }),
+            new Insert("except2"),
+            new VerifyAllInstances("2008-05-01T00:00:00", "2008-05-03T00:01:00",
+                    new String[] {"2008-05-01T00:00:00", "2008-05-03T00:00:00"}),
+    };
     /**
      * This sequence of commands creates a recurring event with a recurrence
      * exception and then changes the end time of the recurring event.  It then
@@ -1321,6 +1340,14 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
 
         Log.i(TAG, "Exception with truncated recurrence");
         commands = mExceptionWithTruncatedRecurrence;
+        for (Command command : commands) {
+            command.execute();
+        }
+
+        deleteAllEvents();
+
+        Log.i(TAG, "Exception with moved recurrence");
+        commands = mExceptionWithMovedRecurrence;
         for (Command command : commands) {
             command.execute();
         }

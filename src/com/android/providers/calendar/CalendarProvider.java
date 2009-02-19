@@ -86,7 +86,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
-import java.util.TreeSet;
 
 public class CalendarProvider extends AbstractSyncableContentProvider {
 
@@ -1782,9 +1781,11 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     long[] dates;
                     try {
                         dates = rp.expand(eventTime, recur, begin, end);
-                    }
-                    catch (DateException e) {
-                        Log.w(TAG, "RecurrenceProcessor.expand skipping",e);
+                    } catch (DateException e) {
+                        Log.w(TAG, "RecurrenceProcessor.expand skipping " + recur, e);
+                        continue;
+                    } catch (TimeFormatException e) {
+                        Log.w(TAG, "RecurrenceProcessor.expand skipping " + recur, e);
                         continue;
                     }
 

@@ -26,6 +26,7 @@ import android.test.suitebuilder.annotation.SmallTest;
 import android.text.format.DateUtils;
 import android.text.format.Time;
 import android.util.Log;
+import android.util.TimeFormatException;
 
 import java.util.Calendar;
 import java.util.TreeSet;
@@ -527,6 +528,20 @@ public class RecurrenceProcessorTest extends TestCase {
                 }, "20060311T020001");
     }
 
+    // until without "Z"
+    @SmallTest
+    public void testWeekly4a() throws Exception {
+        verifyRecurrence("20060215T100000", "FREQ=WEEKLY;UNTIL=20060311T100001;BYDAY=TU",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "20060101T000000", "20080101T000000",
+                new String[]{
+                        "20060215T100000",
+                        "20060221T100000",
+                        "20060228T100000",
+                        "20060307T100000"
+                }, "20060311T100001");
+    }
+
     @SmallTest
     public void testWeekly5() throws Exception {
         verifyRecurrence("20060215T100000", "FREQ=WEEKLY;UNTIL=20060311T100001Z;BYDAY=TH",
@@ -615,6 +630,34 @@ public class RecurrenceProcessorTest extends TestCase {
                         "19970819T100000",
                         "19970831T100000",
                 });
+    }
+
+    // BUG 1658567: UNTIL=date
+    @SmallTest
+    public void testWeekly11() throws Exception {
+        verifyRecurrence("20060215T100000", "FREQ=WEEKLY;UNTIL=20060220;BYDAY=SU",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "20060101T000000", "20080101T000000",
+                new String[]{
+                        "20060215T100000",
+                        "20060219T100000"
+                }, "20060220T000000");
+    }
+
+    @SmallTest
+    public void testWeekly12() throws Exception {
+        try {
+            verifyRecurrence("20060215T100000", "FREQ=WEEKLY;UNTIL=junk;BYDAY=SU",
+                    null /* rdate */, null /* exrule */, null /* exdate */,
+                    "20060101T000000", "20080101T000000",
+                    new String[]{
+                            "20060215T100000",
+                            "20060219T100000"
+                    }, "20060220T020001");
+            fail("Bad UNTIL string failed to throw exception");
+        } catch (TimeFormatException e) {
+            // expected
+        }
     }
 
     @SmallTest

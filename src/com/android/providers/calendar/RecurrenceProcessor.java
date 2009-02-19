@@ -501,7 +501,7 @@ byday:
      * Expands the recurrence within the given range using the given dtstart
      * value. Returns an array of longs where each element is a date in UTC
      * milliseconds. The return value is never null.  If there are no dates
-     * then an array of length zero is returned.
+     * then an array of length zero is returned.Da
      *  
      * @param dtstart a Time object representing the first occurrence
      * @param recur the recurrence rules, including RRULE, RDATES, EXRULE, and
@@ -512,6 +512,7 @@ byday:
      * UTC milliseconds
      * @return an array of dates, each date is in UTC milliseconds
      * @throws DateException
+     * @throws android.util.TimeFormatException if recur cannot be parsed
      */
     public long[] expand(Time dtstart,
             RecurrenceSet recur,
@@ -607,6 +608,8 @@ byday:
      *                  Dec 22 1995, set last to Dec 23, 1995 00:00:00
      * @param add Whether or not we should add to out, or remove from out.
      * @param out the TreeSet you'd like to fill with the events
+     * @throws DateException
+     * @throws android.util.TimeFormatException if r cannot be parsed.
      */
     public void expand(Time dtstart,
             EventRecurrence r,
@@ -705,7 +708,10 @@ byday:
             if (r.until != null) {
                 // Ensure that the "until" date string is specified in UTC.
                 String untilStr = r.until;
-                if (untilStr.charAt(untilStr.length() - 1) != 'Z') {
+                // 15 is length of date-time without trailing Z e.g. "20090204T075959"
+                // A string such as 20090204 is a valid UNTIL (see RFC 2445) and the
+                // Z should not be added.
+                if (untilStr.length() == 15) {
                     untilStr = untilStr + 'Z';
                 }
                 // The parse() method will set the timezone to UTC

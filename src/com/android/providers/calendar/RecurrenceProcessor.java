@@ -33,6 +33,8 @@ public class RecurrenceProcessor
     private StringBuilder mStringBuilder = new StringBuilder();
     private Time mGenerated = new Time(Time.TIMEZONE_UTC);
     private DaySet mDays = new DaySet(false);
+    // Give up after this many loops.  This is roughly 1 second of expansion.
+    private static final int MAX_ALLOWED_ITERATIONS = 2000;
 
     public RecurrenceProcessor()
     {
@@ -739,9 +741,13 @@ byday:
             boolean eventEnded = false;
             int N, i, v;
             int a[];
+            int failsafe = 0; // Avoid infinite loops
             events: {
                 while (true) {
                     int monthIndex = 0;
+                    if (failsafe++ > MAX_ALLOWED_ITERATIONS) { // Give up after about 1 second of processing
+                        throw new DateException("Recurrence processing stuck: " + r.toString());
+                    }
 
                     unsafeNormalize(iterator);
 

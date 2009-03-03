@@ -224,4 +224,49 @@ public class ICalendarTest extends TestCase {
         ICalendar.Component component = ICalendar.parseComponent(text);
         assertNotNull(component);
     }
+
+    @SmallTest
+    public void testNormalize() throws Exception {
+        String text = "BEGIN:VEVENT\n" +
+                "RRULE:FREQ=SECONDLY;BYSECOND=0,1,2,\r\n 3,4,5\r\n ,6,7,8\r\n" +
+                "END:VEVENT\n";
+
+        ICalendar.Component event = ICalendar.parseEvent(text);
+
+        assertEquals("VEVENT", event.getName());
+        assertNull(event.getComponents());
+        assertEquals(1, event.getPropertyNames().size());
+        assertEquals(1, event.getProperties("RRULE").size());
+        assertEquals("FREQ=SECONDLY;BYSECOND=0,1,2,3,4,5,6,7,8", event.getFirstProperty("RRULE").getValue());
+
+    }
+
+    @SmallTest
+    public void testNormalizeBadSep() throws Exception {
+        String text = "BEGIN:VEVENT\n" +
+                "RRULE:FREQ=SECONDLY;BYSECOND=0,1,2,\n 3,4,5\n ,6,7,8\n" +
+                "END:VEVENT\n";
+
+        ICalendar.Component event = ICalendar.parseEvent(text);
+
+        assertEquals("VEVENT", event.getName());
+        assertNull(event.getComponents());
+        assertEquals(1, event.getPropertyNames().size());
+        assertEquals(1, event.getProperties("RRULE").size());
+        assertEquals("FREQ=SECONDLY;BYSECOND=0,1,2,3,4,5,6,7,8", event.getFirstProperty("RRULE").getValue());
+    }
+
+
+    @SmallTest
+    public void testBad() throws Exception {
+        String text = "BEGIN:VEVENT\n" +
+                "RRULE=foo\n" +
+                "END:VEVENT\n";
+
+        ICalendar.Component event = ICalendar.parseEvent(text);
+
+        // Note that parseEvent doesn't throw the FormatException you might expect because
+        // ICalendar.parseComponentImpl catches the exception due to misformatted GData.
+        // TODO: update this test after cleaning up the ICalendar behavior
+    }
 }

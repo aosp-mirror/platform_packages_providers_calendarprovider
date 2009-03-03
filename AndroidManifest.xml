@@ -50,5 +50,19 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+        <receiver android:name=".CalendarGadgetProvider" android:label="@string/gadget_title">
+            <intent-filter>
+                <action android:name="android.gadget.action.GADGET_UPDATE" />
+                <action android:name="com.android.calendar.GADGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.gadget.provider" android:resource="@xml/gadget_info" />
+        </receiver>
+        <receiver android:name=".TimeChangeReceiver" android:enabled="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

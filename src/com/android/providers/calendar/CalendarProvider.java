@@ -180,15 +180,17 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     // A thread that runs in the background and schedules the next
     // calendar event alarm.
-    private class AlarmScheduler implements Runnable {
-
-        public AlarmScheduler() {
+    private class AlarmScheduler extends Thread {
+        boolean mRemoveAlarms;
+        
+        public AlarmScheduler(boolean removeAlarms) {
+            mRemoveAlarms = removeAlarms;
         }
 
         public void run() {
             try {
                 Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
-                runScheduleNextAlarm();
+                runScheduleNextAlarm(mRemoveAlarms);
             } catch (SQLException e) {
                 Log.e(TAG, "runScheduleNextAlarm() failed", e);
             }
@@ -270,6 +272,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     private AlarmManager mAlarmManager;
 
     private CalendarSyncAdapter mSyncAdapter;
+    private CalendarGadgetProvider mGadgetProvider = CalendarGadgetProvider.getInstance();
 
     /**
      * Listens for timezone changes and disk-no-longer-full events
@@ -283,13 +286,13 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             }
             if (Intent.ACTION_TIMEZONE_CHANGED.equals(action)) {
                 updateTimezoneDependentFields();
-                scheduleNextAlarm();
+                scheduleNextAlarm(false /* do not remove alarms */);
             } else if (Intent.ACTION_DEVICE_STORAGE_OK.equals(action)) {
                 // Try to clean up if things were screwy due to a full disk
                 updateTimezoneDependentFields();
-                scheduleNextAlarm();
+                scheduleNextAlarm(false /* do not remove alarms */);
             } else if (Intent.ACTION_TIME_CHANGED.equals(action)) {
-                scheduleNextAlarm();
+                scheduleNextAlarm(false /* do not remove alarms */);
             }
         }
     };
@@ -2408,6 +2411,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         int status = initialValues.getAsInteger(Events.SELF_ATTENDEE_STATUS);
                         createAttendeeEntry(rowId, status);
                     }
+                    triggerGadgetUpdate(rowId);
                 }
 
                 return uri;
@@ -2455,7 +2459,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     if (DEBUG_ALARMS) {
                         Log.i(TAG, "insertInternal() changing reminder");
                     }
-                    scheduleNextAlarm();
+                    scheduleNextAlarm(false /* do not remove alarms */);
                 }
                 return Uri.parse("content://calendars/reminders/" + rowID);
             case CALENDAR_ALERTS:
@@ -2934,6 +2938,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         cursor.close();
                         cursor = null;
                     }
+                    triggerGadgetUpdate(-1);
                 }
 
                 // There is a delete trigger that will cause all instances
@@ -3102,7 +3107,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                             if (DEBUG_ALARMS) {
                                 Log.i(TAG, "updateInternal() changing event");
                             }
-                            scheduleNextAlarm();
+                            scheduleNextAlarm(false /* do not remove alarms */);
+                            triggerGadgetUpdate(id);
                         }
                     }
                 }
@@ -3131,7 +3137,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     if (DEBUG_ALARMS) {
                         Log.i(TAG, "updateInternal() changing reminder");
                     }
-                    scheduleNextAlarm();
+                    scheduleNextAlarm(false /* do not remove alarms */);
                 }
                 return result;
             }
@@ -3252,12 +3258,36 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         if (DEBUG_ALARMS) {
             Log.i(TAG, "onSyncStop() success: " + success);
         }
-        scheduleNextAlarm();
+        scheduleNextAlarm(false /* do not remove alarms */);
+        triggerGadgetUpdate(-1);
     }
 
     @Override
     protected Iterable<EventMerger> getMergers() {
         return Collections.singletonList(new EventMerger());
+    }
+    
+    /**
+     * Update any existing gadgets with the changed events.
+     * 
+     * @param changedEventId Specific event known to be changed, otherwise -1.
+     *            If present, we use it to decide if an update is necessary.
+     */
+    private synchronized void triggerGadgetUpdate(long changedEventId) {
+        Context context = getContext();
+        if (context != null) {
+            mGadgetProvider.providerUpdated(context, changedEventId);
+        }
+    }
+    
+    void bootCompleted() {
+        // Remove alarms from the CalendarAlerts table that have been marked
+        // as "scheduled" but not fired yet.  We do this because the
+        // AlarmManagerService loses all information about alarms when the
+        // power turns off but we store the information in a database table
+        // that persists across reboots. See the documentation for
+        // scheduleNextAlarmLocked() for more information.
+        scheduleNextAlarm(true /* remove alarms */);
     }
 
     /* Retrieve and cache the alarm manager */
@@ -3310,8 +3340,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     /*
      * This method runs the alarm scheduler in a background thread.
      */
-    void scheduleNextAlarm() {
-        Thread thread = new Thread(new AlarmScheduler());
+    void scheduleNextAlarm(boolean removeAlarms) {
+        Thread thread = new AlarmScheduler(removeAlarms);
         thread.start();
     }
 
@@ -3319,9 +3349,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
      * This method runs in a background thread and schedules an alarm for
      * the next calendar event, if necessary.
      */
-    private void runScheduleNextAlarm() {
-        // Do not schedule any events while syncing or if this is a temporary
-        // database.
+    private void runScheduleNextAlarm(boolean removeAlarms) {
+        // Do not schedule any alarms if this is a temporary database.
         if (isTemporary()) {
             if (DEBUG_ALARMS) {
                 Log.i(TAG, "runScheduleNextAlarm cancelled because database is temporary");
@@ -3332,6 +3361,9 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         final SQLiteDatabase db = mOpenHelper.getWritableDatabase();
         db.beginTransaction();
         try {
+            if (removeAlarms) {
+                removeScheduledAlarmsLocked(db);
+            }
             scheduleNextAlarmLocked(db);
             db.setTransactionSuccessful();
         } finally {
@@ -3341,7 +3373,27 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     /**
      * This method looks at the 24-hour window from now for any events that it
-     * needs to schedule.  This method runs within a database transaction.
+     * needs to schedule.  This method runs within a database transaction. It
+     * also runs in a background thread.
+     * 
+     * The CalendarProvider keeps track of which alarms it has already scheduled
+     * to avoid scheduling them more than once and for debugging problems with
+     * alarms.  It stores this knowledge in a database table called CalendarAlerts
+     * which persists across reboots.  But the actual alarm list is in memory
+     * and disappears if the phone loses power.  To avoid missing an alarm, we
+     * clear the entries in the CalendarAlerts table when we start up the
+     * CalendarProvider.
+     * 
+     * Scheduling an alarm multiple times is not tragic -- we filter out the
+     * extra ones when we receive them. But we still need to keep track of the
+     * scheduled alarms. The main reason is that we need to prevent multiple
+     * notifications for the same alarm (on the receive side) in case we
+     * accidentally schedule the same alarm multiple times.  We don't have
+     * visibility into the system's alarm list so we can never know for sure if
+     * we have already scheduled an alarm and it's better to err on scheduling
+     * an alarm twice rather than missing an alarm.  Another reason we keep
+     * track of scheduled alarms in a database table is that it makes it easy to
+     * run an SQL query to find the next reminder that we haven't scheduled.
      *
      * @param db the database
      */
@@ -3408,7 +3460,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             + " AND CA.alarmTime=myAlarmTime)"
             + " ORDER BY myAlarmTime,begin,title";
 
-        acquireInstanceRange(start, end, false /* don't use minimum expansion windows */);
+        acquireInstanceRangeLocked(start, end, false /* don't use minimum expansion windows */);
         Cursor cursor = null;
         try {
             cursor = db.rawQuery(query, null);
@@ -3424,7 +3476,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 time.set(nextAlarmTime);
                 String alarmTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
                 Log.i(TAG, "nextAlarmTime: " + alarmTimeStr
-                        + " cursor results: " + cursor.getCount());
+                        + " cursor results: " + cursor.getCount()
+                        + " query: " + query);
             }
 
             while (cursor.moveToNext()) {
@@ -3532,6 +3585,30 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         } else {
             scheduleNextAlarmCheck(currentMillis + android.text.format.DateUtils.DAY_IN_MILLIS);
         }
+    }
+    
+    /**
+     * Removes the entries in the CalendarAlerts table for alarms that we have
+     * scheduled but that have not fired yet. We do this to ensure that we
+     * don't miss an alarm.  The CalendarAlerts table keeps track of the
+     * alarms that we have scheduled but the actual alarm list is in memory
+     * and will be cleared if the phone reboots.
+     * 
+     * We don't need to remove entries that have already fired, and in fact
+     * we should not remove them because we need to display the notifications
+     * until the user dismisses them.
+     * 
+     * We could remove entries that have fired and been dismissed, but we leave
+     * them around for a while because it makes it easier to debug problems.
+     * Entries that are old enough will be cleaned up later when we schedule
+     * new alarms.
+     */
+    private void removeScheduledAlarmsLocked(SQLiteDatabase db) {
+        if (DEBUG_ALARMS) {
+            Log.i(TAG, "removing scheduled alarms");
+        }
+        db.delete(CalendarAlerts.TABLE_NAME,
+                CalendarAlerts.STATE + "=" + CalendarAlerts.SCHEDULED, null /* whereArgs */);
     }
 
     private static String sEventsTable = "Events";

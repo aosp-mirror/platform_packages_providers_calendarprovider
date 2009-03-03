@@ -116,7 +116,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
     protected CalendarSyncAdapter(Context context, SyncableContentProvider provider) {
         super(context, provider);
         mCalendarClient = new CalendarClient(
-                new AndroidGDataClient(context),
+                new AndroidGDataClient(context.getContentResolver()),
                 new XmlCalendarGDataParserFactory(new AndroidXmlParserFactory()));
     }
 

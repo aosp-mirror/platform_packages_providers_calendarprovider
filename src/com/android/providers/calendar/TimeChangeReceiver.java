@@ -31,6 +31,9 @@ public class TimeChangeReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         // Pass time-changed notification through to any gadgets
         if (LOGD) Log.d(TAG, "Received time changed action=" + intent.getAction());
-        mCalendarProvider.timeUpdated(context);
+        
+        // Consider ignoring this update request if only TIME_CHANGED
+        boolean considerIgnore = (Intent.ACTION_TIME_CHANGED.equals(intent.getAction()));
+        mCalendarProvider.timeUpdated(context, considerIgnore);
     }
 }

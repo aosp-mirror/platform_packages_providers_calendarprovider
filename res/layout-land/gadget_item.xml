@@ -94,7 +94,7 @@
 
     </FrameLayout>
 
-    <RelativeLayout
+    <LinearLayout
         android:id="@+id/primary_card"
         android:layout_width="fill_parent"
         android:layout_height="wrap_content"
@@ -112,7 +112,7 @@
             android:id="@+id/when"
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
-            android:paddingRight="8dip"
+            android:paddingRight="48dip"
             android:paddingLeft="8dip"
             android:paddingTop="1dip"
             android:paddingBottom="1dip"
@@ -125,36 +125,10 @@
             />
 
         <TextView
-            android:id="@+id/icon"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/when"
-            android:layout_alignParentRight="true"
-            android:background="@drawable/gadget_date_bg"
-            android:textStyle="bold"
-            android:textSize="18sp"
-            android:gravity="center"
-            android:paddingLeft="8dip"
-            android:paddingRight="7dip"
-            android:paddingTop="3dip"
-            android:paddingBottom="3dip"
-            android:layout_marginRight="5dip"
-            android:layout_marginTop="4dip"
-            android:layout_marginBottom="4dip"
-            android:textColor="#59b4f4"
-            android:shadowColor="#ffff"
-            android:shadowRadius="2.75"
-            android:minWidth="32dip"
-            />
-
-        <TextView
             android:id="@+id/title"
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
-            android:layout_alignParentLeft="true"
-            android:layout_below="@id/when"
-            android:layout_toLeftOf="@id/icon"
-            android:paddingRight="8dip"
+            android:paddingRight="48dip"
             android:paddingLeft="8dip"
             android:textStyle="bold"
             android:textSize="16sp"
@@ -166,17 +140,27 @@
             android:id="@+id/where"
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
-            android:layout_below="@id/title"
-            android:layout_toLeftOf="@id/icon"
-            android:layout_alignParentLeft="true"
-            android:paddingRight="8dip"
+            android:paddingRight="48dip"
             android:paddingLeft="8dip"
             android:textSize="11sp"
             android:textColor="@color/gadget_where"
             android:singleLine="true"
             />
 
-    </RelativeLayout>
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/icon"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentRight="true"
+        android:background="@drawable/gadget_date_bg"
+        android:layout_marginRight="6dip"
+        android:layout_marginTop="6dip"
+        android:minWidth="32dip"
+        android:visibility="gone"
+        />
 
 </RelativeLayout>
 

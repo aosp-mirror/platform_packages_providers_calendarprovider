@@ -20,7 +20,6 @@ import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.ContentResolver;
-import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -29,10 +28,11 @@ import android.database.Cursor;
 import android.gadget.GadgetManager;
 import android.gadget.GadgetProvider;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.PorterDuff;
+import android.graphics.Typeface;
+import android.graphics.Paint.FontMetrics;
 import android.net.Uri;
 import android.provider.Calendar.Attendees;
 import android.provider.Calendar.Calendars;
@@ -91,6 +91,17 @@ public class CalendarGadgetProvider extends GadgetProvider {
     static final ComponentName THIS_GADGET =
         new ComponentName("com.android.providers.calendar",
                 "com.android.providers.calendar.CalendarGadgetProvider");
+
+    /**
+     * Threshold to check against when building gadget updates. If system clock
+     * has changed less than this amount, we consider ignoring the request.
+     */
+    static final long UPDATE_THRESHOLD = DateUtils.MINUTE_IN_MILLIS;
+
+    /**
+     * Last gadget update, as provided by {@link System#currentTimeMillis()}
+     */
+    private static long sLastUpdate = -1;
     
     private static CalendarGadgetProvider sInstance;
     
@@ -110,7 +121,8 @@ public class CalendarGadgetProvider extends GadgetProvider {
         // coming in without extras, which GadgetProvider then blocks.
         final String action = intent.getAction();
         if (ACTION_CALENDAR_GADGET_UPDATE.equals(action)) {
-            performUpdate(context, null, -1);
+            performUpdate(context, null /* all gadgets */,
+                    -1 /* no eventId */, false /* don't ignore */);
         } else {
             super.onReceive(context, intent);
         }
@@ -152,7 +164,7 @@ public class CalendarGadgetProvider extends GadgetProvider {
      */
     @Override
     public void onUpdate(Context context, GadgetManager gadgetManager, int[] gadgetIds) {
-        performUpdate(context, gadgetIds, -1);
+        performUpdate(context, gadgetIds, -1 /* no eventId */, false /* don't ignore */);
     }
     
     /**
@@ -168,21 +180,29 @@ public class CalendarGadgetProvider extends GadgetProvider {
      * The {@link CalendarProvider} has been updated, which means we should push
      * updates to any gadgets, if they exist.
      * 
+     * @param context Context to use when creating gadget.
      * @param changedEventId Specific event known to be changed, otherwise -1.
      *            If present, we use it to decide if an update is necessary.
      */
     void providerUpdated(Context context, long changedEventId) {
         if (hasInstances(context)) {
-            performUpdate(context, null, changedEventId);
+            performUpdate(context, null /* all gadgets */,
+                    changedEventId, false /* don't ignore */);
         }
     }
-    
+
     /**
      * {@link TimeChangeReceiver} has triggered that the time changed.
+     * 
+     * @param context Context to use when creating gadget.
+     * @param considerIgnore If true, compare {@link #sLastUpdate} against
+     *            {@link #UPDATE_THRESHOLD} to consider ignoring this update
+     *            request.
      */
-    void timeUpdated(Context context) {
+    void timeUpdated(Context context, boolean considerIgnore) {
         if (hasInstances(context)) {
-            performUpdate(context, null, -1);
+            performUpdate(context, null /* all gadgets */,
+                    -1 /* no eventId */, considerIgnore);
         }
     }
 
@@ -193,18 +213,34 @@ public class CalendarGadgetProvider extends GadgetProvider {
      * @param gadgetIds List of specific gadgetIds to update, or null for all.
      * @param changedEventId Specific event known to be changed, otherwise -1.
      *            If present, we use it to decide if an update is necessary.
+     * @param considerIgnore If true, compare {@link #sLastUpdate} against
+     *            {@link #UPDATE_THRESHOLD} to consider ignoring this update
+     *            request.
      */
-    private void performUpdate(Context context, int[] gadgetIds, long changedEventId) {
+    private void performUpdate(Context context, int[] gadgetIds,
+            long changedEventId, boolean considerIgnore) {
         ContentResolver resolver = context.getContentResolver();
+        
+        long now = System.currentTimeMillis();
+        
+        // Check against delta if we have a last-updated value
+        if (considerIgnore && sLastUpdate != -1) {
+            long delta = Math.abs(now - sLastUpdate);
+            if (delta < UPDATE_THRESHOLD) {
+                if (LOGD) Log.d(TAG, "Ignoring update request because delta=" + delta);
+                return;
+            }
+        }
+        sLastUpdate = now;
         
         Cursor cursor = null;
         RemoteViews views = null;
         long triggerTime = -1;
 
         try {
-            cursor = getUpcomingInstancesCursor(resolver, SEARCH_DURATION);
+            cursor = getUpcomingInstancesCursor(resolver, SEARCH_DURATION, now);
             if (cursor != null) {
-                MarkedEvents events = buildMarkedEvents(cursor, changedEventId);
+                MarkedEvents events = buildMarkedEvents(cursor, changedEventId, now);
                 
                 boolean shouldUpdate = true;
                 if (changedEventId != -1) {
@@ -215,7 +251,7 @@ public class CalendarGadgetProvider extends GadgetProvider {
                     views = getGadgetNoEvents(context);
                 } else if (shouldUpdate) {
                     views = getGadgetUpdate(context, cursor, events);
-                    triggerTime = calculateUpdateTime(context, cursor, events);
+                    triggerTime = calculateUpdateTime(cursor, events);
                 }
             } else {
                 views = getGadgetNoEvents(context);
@@ -245,9 +281,8 @@ public class CalendarGadgetProvider extends GadgetProvider {
         
         // If no next-update calculated, or bad trigger time in past, schedule
         // update about six hours from now.
-        long now = System.currentTimeMillis();
         if (triggerTime == -1 || triggerTime < now) {
-            if (LOGD) Log.w(TAG, "Encountered bad trigger time " + formatDebugTime(triggerTime));
+            if (LOGD) Log.w(TAG, "Encountered bad trigger time " + formatDebugTime(triggerTime, now));
             triggerTime = now + UPDATE_NO_EVENTS;
         }
         
@@ -257,13 +292,15 @@ public class CalendarGadgetProvider extends GadgetProvider {
         am.cancel(pendingUpdate);
         am.set(AlarmManager.RTC, triggerTime, pendingUpdate);
 
-        if (LOGD) Log.d(TAG, "Scheduled next update at " + formatDebugTime(triggerTime));
+        if (LOGD) Log.d(TAG, "Scheduled next update at " + formatDebugTime(triggerTime, now));
     }
     
     /**
      * Build the {@link PendingIntent} used to trigger an update of all calendar
      * gadgets. Uses {@link ACTION_CALENDAR_GADGET_UPDATE} to directly target
      * all gadgets instead of using {@link GadgetManager#EXTRA_GADGET_IDS}.
+     * 
+     * @param context Context to use when building broadcast.
      */
     private PendingIntent getUpdateIntent(Context context) {
         Intent updateIntent = new Intent(ACTION_CALENDAR_GADGET_UPDATE);
@@ -271,15 +308,19 @@ public class CalendarGadgetProvider extends GadgetProvider {
         return PendingIntent.getBroadcast(context, 0 /* no requestCode */,
                 updateIntent, 0 /* no flags */);
     }
-    
+
     /**
      * Format given time for debugging output.
+     * 
+     * @param unixTime Target time to report.
+     * @param now Current system time from {@link System#currentTimeMillis()}
+     *            for calculating time difference.
      */
-    private String formatDebugTime(long unixTime) {
+    private String formatDebugTime(long unixTime, long now) {
         Time time = new Time();
         time.set(unixTime);
         
-        long delta = unixTime - System.currentTimeMillis();
+        long delta = unixTime - now;
         if (delta > DateUtils.MINUTE_IN_MILLIS) {
             delta /= DateUtils.MINUTE_IN_MILLIS;
             return String.format("[%d] %s (%+d mins)", unixTime, time.format("%H:%M:%S"), delta);
@@ -308,8 +349,11 @@ public class CalendarGadgetProvider extends GadgetProvider {
     /**
      * Figure out the next time we should push gadget updates. This is based on
      * the time calculated by {@link #getEventFlip(Cursor, int)}.
+     * 
+     * @param cursor Valid cursor on {@link Instances#CONTENT_URI}
+     * @param events {@link MarkedEvents} parsed from the cursor
      */
-    private long calculateUpdateTime(Context context, Cursor cursor, MarkedEvents events) {
+    private long calculateUpdateTime(Cursor cursor, MarkedEvents events) {
         long result = -1;
         if (events.primaryRow != -1) {
             cursor.moveToPosition(events.primaryRow);
@@ -371,7 +415,7 @@ public class CalendarGadgetProvider extends GadgetProvider {
         int dateNumber = time.monthDay;
 
         // Set calendar icon with actual date
-        views.setTextViewText(R.id.icon, Integer.toString(dateNumber));
+        views.setImageViewBitmap(R.id.icon, getDateOverlay(res, dateNumber));
         views.setViewVisibility(R.id.icon, View.VISIBLE);
         views.setViewVisibility(R.id.no_events, View.GONE);
 
@@ -518,6 +562,43 @@ public class CalendarGadgetProvider extends GadgetProvider {
         
         return views;
     }
+
+    /**
+     * Build date overlay bitmap for positioning on gadget. This is the textual
+     * number that has been corrected for font leading issues.
+     * 
+     * @param res {@link Resources} to use for paint color.
+     * @param dateNumber Numerical date to display.
+     */
+    public Bitmap getDateOverlay(Resources res, int dateNumber) {
+        String dateString = Integer.toString(dateNumber);
+        
+        Paint paint = new Paint();
+        paint.setTypeface(Typeface.DEFAULT_BOLD);
+        paint.setTextSize(18);
+        paint.setAntiAlias(true);
+        paint.setSubpixelText(true);
+        paint.setColor(res.getColor(R.color.gadget_date));
+        
+        // Calculate exact size of text
+        FontMetrics metrics = paint.getFontMetrics();
+        int width = (int) Math.ceil(paint.measureText(dateString));
+        int height = (int) Math.ceil(-metrics.top + metrics.descent);
+        
+        // Add padding to left edge based on various obscure rules
+        // to make font center correctly
+        char firstChar = dateString.charAt(0);
+        char lastChar = dateString.charAt(dateString.length() - 1);
+        int leftPadding = (dateString.length() == 1 || firstChar == '2' ||
+                lastChar == '1' || lastChar == '0') ? 1 : 0;
+        
+        Bitmap overlay = Bitmap.createBitmap(width + leftPadding,
+                height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(overlay);
+        canvas.drawText(dateString, leftPadding, -metrics.top, paint);
+        
+        return overlay;
+    }
     
     /**
      * Build a set of {@link RemoteViews} that describes an error state.
@@ -527,6 +608,7 @@ public class CalendarGadgetProvider extends GadgetProvider {
 
         views.setViewVisibility(R.id.no_events, View.VISIBLE);
         
+        views.setViewVisibility(R.id.icon, View.GONE);
         views.setViewVisibility(R.id.primary_card, View.GONE);
         views.setViewVisibility(R.id.secondary_card, View.GONE);
         
@@ -560,10 +642,11 @@ public class CalendarGadgetProvider extends GadgetProvider {
      * @param cursor Valid cursor across {@link Instances#CONTENT_URI}.
      * @param watchEventId Specific event to watch for, setting
      *            {@link MarkedEvents#watchFound} if found during marking.
+     * @param now Current system time to use for this update, possibly from
+     *            {@link System#currentTimeMillis()}
      */
-    private MarkedEvents buildMarkedEvents(Cursor cursor, long watchEventId) {
+    private MarkedEvents buildMarkedEvents(Cursor cursor, long watchEventId, long now) {
         MarkedEvents events = new MarkedEvents();
-        long now = System.currentTimeMillis();
         final Time recycle = new Time();
         
         cursor.moveToPosition(-1);
@@ -582,7 +665,7 @@ public class CalendarGadgetProvider extends GadgetProvider {
             
             // Skip events that have already passed their flip times
             long eventFlip = getEventFlip(cursor, start, end, allDay);
-            if (LOGD) Log.d(TAG, "Calculated flip time " + formatDebugTime(eventFlip));
+            if (LOGD) Log.d(TAG, "Calculated flip time " + formatDebugTime(eventFlip, now));
             if (eventFlip < now) {
                 continue;
             }
@@ -618,21 +701,25 @@ public class CalendarGadgetProvider extends GadgetProvider {
         }
         return events;
     }
-    
+
     /**
      * Query across all calendars for upcoming event instances from now until
      * some time in the future.
      * 
+     * @param resolver {@link ContentResolver} to use when querying
+     *            {@link Instances#CONTENT_URI}.
      * @param searchDuration Distance into the future to look for event
      *            instances, in milliseconds.
+     * @param now Current system time to use for this update, possibly from
+     *            {@link System#currentTimeMillis()}.
      */
-    private Cursor getUpcomingInstancesCursor(ContentResolver resolver, long searchDuration) {
+    private Cursor getUpcomingInstancesCursor(ContentResolver resolver,
+            long searchDuration, long now) {
         // Search for events from now until some time in the future
-        long start = System.currentTimeMillis();
-        long end = start + searchDuration;
+        long end = now + searchDuration;
         
         Uri uri = Uri.withAppendedPath(Instances.CONTENT_URI,
-                String.format("%d/%d", start, end));
+                String.format("%d/%d", now, end));
 
         String selection = String.format("%s=1 AND %s!=%d",
                 Calendars.SELECTED, Instances.SELF_ATTENDEE_STATUS,

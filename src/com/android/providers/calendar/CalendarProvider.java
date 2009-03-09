@@ -1882,12 +1882,9 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
                     String originalEvent = values.getAsString(Events.ORIGINAL_EVENT);
                     long originalTime = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
-                    int status = values.getAsInteger(Events.STATUS);
-                    InstancesList originalList = instancesMap.get(originalEvent);
+                     InstancesList originalList = instancesMap.get(originalEvent);
                     if (originalList == null) {
-                        // The original recurrence does not exist so cancel
-                        // this recurrence exception.
-                        values.put(Events.STATUS, Events.STATUS_CANCELED);
+                        // The original recurrence is not present, so don't try canceling it.
                         continue;
                     }
 

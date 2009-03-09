@@ -805,25 +805,6 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
             new Delete("daily0", 1),
             new QueryNumEvents(0),
     };
-    
-    /**
-     * This sequence of commands creates a recurring event with a recurrence
-     * exception and then deletes the recurring event.  It checks that the
-     * recurrence exception does not occur in the Instances database table.
-     */
-    private Command[] mExceptionWithDeletedRecurrence = {
-            new Insert("daily0"),
-            new VerifyAllInstances("2008-05-01T00:00:00", "2008-05-03T00:01:00",
-                    new String[] {"2008-05-01T00:00:00", "2008-05-02T00:00:00",
-                    "2008-05-03T00:00:00", }),
-            new Insert("except0"),
-            new QueryNumEvents(2),
-            new VerifyAllInstances("2008-05-01T00:00:00", "2008-05-03T00:01:00",
-                    new String[] {"2008-05-01T02:00:00", "2008-05-02T00:00:00",
-                    "2008-05-03T00:00:00"}),
-            new Delete("daily0", 1),
-            new VerifyAllInstances("2008-05-01T00:00:00", "2008-05-03T00:01:00", null),
-    };
 
     /**
      * This sequence of commands creates a recurring event with a recurrence
@@ -879,6 +860,17 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
             // Verify that the recurrence exception does not appear.
             new VerifyAllInstances("2008-05-01T00:00:00", "2008-05-04T00:01:00",
                     new String[] {"2008-05-01T00:00:00", "2008-05-02T00:00:00"}),
+    };
+
+    /**
+     * Bug 135848.  Ensure that a recurrence exception is displayed even if the recurrence
+     * is not present.
+     */
+    private Command[] mExceptionWithNoRecurrence = {
+                new Insert("except0"),
+            new QueryNumEvents(1),
+            new VerifyAllInstances("2008-05-01T00:00:00", "2008-05-03T00:01:00",
+                    new String[] {"2008-05-01T02:00:00"}),
     };
     
     private EventInfo findEvent(String name) {
@@ -1330,14 +1322,6 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
         
         deleteAllEvents();
 
-        Log.i(TAG, "Exception with deleted recurrence");
-        commands = mExceptionWithDeletedRecurrence;
-        for (Command command : commands) {
-            command.execute();
-        }
-        
-        deleteAllEvents();
-
         Log.i(TAG, "Exception with truncated recurrence");
         commands = mExceptionWithTruncatedRecurrence;
         for (Command command : commands) {
@@ -1348,6 +1332,14 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
 
         Log.i(TAG, "Exception with moved recurrence");
         commands = mExceptionWithMovedRecurrence;
+        for (Command command : commands) {
+            command.execute();
+        }
+
+        deleteAllEvents();
+
+        Log.i(TAG, "Exception with no recurrence");
+        commands = mExceptionWithNoRecurrence;
         for (Command command : commands) {
             command.execute();
         }

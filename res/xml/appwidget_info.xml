@@ -14,10 +14,10 @@
      limitations under the License.
 -->
 
-<gadget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:minWidth="294dip"
     android:minHeight="72dip"
     android:updatePeriodMillis="0"
-    android:initialLayout="@layout/gadget_item"
+    android:initialLayout="@layout/agenda_appwidget"
     >
-</gadget-provider>
+</appwidget-provider>

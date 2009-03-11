@@ -16,7 +16,7 @@
 
 
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/gadget"
+    android:id="@+id/agenda_appwidget"
     android:layout_width="fill_parent"
     android:layout_height="wrap_content"
     android:paddingBottom="6dip"
@@ -32,74 +32,67 @@
         android:textStyle="bold"
         android:textSize="16sp"
         android:text="@string/gadget_no_events"
-        android:textColor="@color/gadget_no_events"
+        android:textColor="@color/appwidget_no_events"
         />
 
-    <LinearLayout
-        android:id="@+id/secondary_card"
-        android:layout_width="fill_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginLeft="3dip"
-        android:layout_marginRight="3dip"
-        android:orientation="vertical"
+    <FrameLayout
+        android:id="@+id/landscape_hidden"
+        android:layout_width="0dip"
+        android:layout_height="0dip"
         android:visibility="gone"
         >
 
         <TextView
+            android:id="@+id/secondary_card"
+            android:layout_width="0dip"
+            android:layout_height="0dip"
+            />
+
+        <TextView
             android:id="@+id/stub_when"
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:textStyle="bold"
-            android:textSize="11sp"
-            android:paddingTop="8dip"
-            android:visibility="invisible"
+            android:layout_width="0dip"
+            android:layout_height="0dip"
             />
 
         <TextView
             android:id="@+id/stub_title"
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:textStyle="bold"
-            android:textSize="16sp"
-            android:visibility="invisible"
+            android:layout_width="0dip"
+            android:layout_height="0dip"
             />
 
         <TextView
             android:id="@+id/stub_where"
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:textSize="11sp"
-            android:visibility="invisible"
+            android:layout_width="0dip"
+            android:layout_height="0dip"
             />
 
         <TextView
             android:id="@+id/secondary_when"
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:paddingLeft="8dip"
-            android:paddingRight="8dip"
-            android:paddingTop="1dip"
-            android:paddingBottom="1dip"
-            android:gravity="center_vertical"
+            android:layout_width="0dip"
+            android:layout_height="0dip"
             android:background="@drawable/strip_cal_secondary"
-            android:textStyle="bold"
-            android:textSize="11sp"
-            android:textColor="@color/gadget_when"
-            android:singleLine="true"
             />
 
         <TextView
             android:id="@+id/secondary_title"
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:paddingLeft="8dip"
-            android:paddingRight="8dip"
-            android:textSize="11sp"
-            android:textColor="@color/gadget_title"
-            android:singleLine="true"
+            android:layout_width="0dip"
+            android:layout_height="0dip"
             />
 
-    </LinearLayout>
+        <ImageView
+            android:id="@+id/divider"
+            android:layout_width="0dip"
+            android:layout_height="0dip"
+            android:background="@drawable/white_list_rule_cal"
+            />
+
+        <TextView
+            android:id="@+id/title2"
+            android:layout_width="0dip"
+            android:layout_height="0dip"
+            />
+
+    </FrameLayout>
 
     <LinearLayout
         android:id="@+id/primary_card"
@@ -127,7 +120,7 @@
             android:background="@drawable/strip_cal"
             android:textStyle="bold"
             android:textSize="11sp"
-            android:textColor="@color/gadget_when"
+            android:textColor="@color/appwidget_when"
             android:singleLine="true"
             />
 
@@ -139,7 +132,7 @@
             android:paddingLeft="8dip"
             android:textStyle="bold"
             android:textSize="16sp"
-            android:textColor="@color/gadget_title"
+            android:textColor="@color/appwidget_title"
             android:singleLine="true"
             />
 
@@ -150,30 +143,7 @@
             android:paddingRight="48dip"
             android:paddingLeft="8dip"
             android:textSize="11sp"
-            android:textColor="@color/gadget_where"
-            android:singleLine="true"
-            />
-
-        <ImageView
-            android:id="@+id/divider"
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dip"
-            android:layout_marginBottom="2dip"
-            android:layout_marginLeft="16dip"
-            android:layout_marginRight="16dip"
-            android:background="@drawable/white_list_rule_cal"
-            />
-
-        <TextView
-            android:id="@+id/title2"
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:paddingRight="8dip"
-            android:paddingLeft="8dip"
-            android:textStyle="bold"
-            android:textSize="11sp"
-            android:textColor="@color/gadget_title"
+            android:textColor="@color/appwidget_where"
             android:singleLine="true"
             />
 
@@ -185,7 +155,7 @@
         android:layout_height="wrap_content"
         android:layout_alignParentTop="true"
         android:layout_alignParentRight="true"
-        android:background="@drawable/gadget_date_bg"
+        android:background="@drawable/appwidget_date_bg"
         android:layout_marginRight="6dip"
         android:layout_marginTop="6dip"
         android:minWidth="32dip"

@@ -18,6 +18,8 @@ package com.android.providers.calendar;
 
 import android.app.AlarmManager;
 import android.app.PendingIntent;
+import android.appwidget.AppWidgetManager;
+import android.appwidget.AppWidgetProvider;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -25,8 +27,6 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.database.Cursor;
-import android.gadget.GadgetManager;
-import android.gadget.GadgetProvider;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -47,10 +47,10 @@ import android.widget.RemoteViews;
 import java.util.TimeZone;
 
 /**
- * Simple gadget to show next upcoming calendar event.
+ * Simple widget to show next upcoming calendar event.
  */
-public class CalendarGadgetProvider extends GadgetProvider {
-    static final String TAG = "CalendarGadgetProvider";
+public class CalendarAppWidgetProvider extends AppWidgetProvider {
+    static final String TAG = "CalendarAppWidgetProvider";
     static final boolean LOGD = true;
     
     static final String EVENT_SORT_ORDER = "startDay ASC, allDay DESC, begin ASC";
@@ -83,31 +83,31 @@ public class CalendarGadgetProvider extends GadgetProvider {
     
     static final long UPDATE_NO_EVENTS = DateUtils.HOUR_IN_MILLIS * 6;
 
-    static final String ACTION_CALENDAR_GADGET_UPDATE = "com.android.calendar.GADGET_UPDATE";
+    static final String ACTION_CALENDAR_APPWIDGET_UPDATE = "com.android.calendar.APPWIDGET_UPDATE";
     
     static final String PACKAGE_DETAIL = "com.android.calendar";
     static final String CLASS_DETAIL = "com.android.calendar.AgendaActivity";
     
-    static final ComponentName THIS_GADGET =
+    static final ComponentName THIS_APPWIDGET =
         new ComponentName("com.android.providers.calendar",
-                "com.android.providers.calendar.CalendarGadgetProvider");
+                "com.android.providers.calendar.CalendarAppWidgetProvider");
 
     /**
-     * Threshold to check against when building gadget updates. If system clock
+     * Threshold to check against when building widget updates. If system clock
      * has changed less than this amount, we consider ignoring the request.
      */
     static final long UPDATE_THRESHOLD = DateUtils.MINUTE_IN_MILLIS;
 
     /**
-     * Last gadget update, as provided by {@link System#currentTimeMillis()}
+     * Last widget update, as provided by {@link System#currentTimeMillis()}
      */
     private static long sLastUpdate = -1;
     
-    private static CalendarGadgetProvider sInstance;
+    private static CalendarAppWidgetProvider sInstance;
     
-    static synchronized CalendarGadgetProvider getInstance() {
+    static synchronized CalendarAppWidgetProvider getInstance() {
         if (sInstance == null) {
-            sInstance = new CalendarGadgetProvider();
+            sInstance = new CalendarAppWidgetProvider();
         }
         return sInstance;
     }
@@ -118,10 +118,10 @@ public class CalendarGadgetProvider extends GadgetProvider {
     @Override
     public void onReceive(Context context, Intent intent) {
         // Handle calendar-specific updates ourselves because they might be
-        // coming in without extras, which GadgetProvider then blocks.
+        // coming in without extras, which AppWidgetProvider then blocks.
         final String action = intent.getAction();
-        if (ACTION_CALENDAR_GADGET_UPDATE.equals(action)) {
-            performUpdate(context, null /* all gadgets */,
+        if (ACTION_CALENDAR_APPWIDGET_UPDATE.equals(action)) {
+            performUpdate(context, null /* all widgets */,
                     -1 /* no eventId */, false /* don't ignore */);
         } else {
             super.onReceive(context, intent);
@@ -163,30 +163,30 @@ public class CalendarGadgetProvider extends GadgetProvider {
      * {@inheritDoc}
      */
     @Override
-    public void onUpdate(Context context, GadgetManager gadgetManager, int[] gadgetIds) {
-        performUpdate(context, gadgetIds, -1 /* no eventId */, false /* don't ignore */);
+    public void onUpdate(Context context, AppWidgetManager appWidgetManager, int[] appWidgetIds) {
+        performUpdate(context, appWidgetIds, -1 /* no eventId */, false /* don't ignore */);
     }
     
     /**
-     * Check against {@link GadgetManager} if there are any instances of this gadget.
+     * Check against {@link AppWidgetManager} if there are any instances of this widget.
      */
     private boolean hasInstances(Context context) {
-        GadgetManager gadgetManager = GadgetManager.getInstance(context);
-        int[] gadgetIds = gadgetManager.getGadgetIds(THIS_GADGET);
-        return (gadgetIds.length > 0);
+        AppWidgetManager appWidgetManager = AppWidgetManager.getInstance(context);
+        int[] appWidgetIds = appWidgetManager.getAppWidgetIds(THIS_APPWIDGET);
+        return (appWidgetIds.length > 0);
     }
 
     /**
      * The {@link CalendarProvider} has been updated, which means we should push
-     * updates to any gadgets, if they exist.
+     * updates to any widgets, if they exist.
      * 
-     * @param context Context to use when creating gadget.
+     * @param context Context to use when creating widget.
      * @param changedEventId Specific event known to be changed, otherwise -1.
      *            If present, we use it to decide if an update is necessary.
      */
     void providerUpdated(Context context, long changedEventId) {
         if (hasInstances(context)) {
-            performUpdate(context, null /* all gadgets */,
+            performUpdate(context, null /* all widgets */,
                     changedEventId, false /* don't ignore */);
         }
     }
@@ -194,30 +194,30 @@ public class CalendarGadgetProvider extends GadgetProvider {
     /**
      * {@link TimeChangeReceiver} has triggered that the time changed.
      * 
-     * @param context Context to use when creating gadget.
+     * @param context Context to use when creating widget.
      * @param considerIgnore If true, compare {@link #sLastUpdate} against
      *            {@link #UPDATE_THRESHOLD} to consider ignoring this update
      *            request.
      */
     void timeUpdated(Context context, boolean considerIgnore) {
         if (hasInstances(context)) {
-            performUpdate(context, null /* all gadgets */,
+            performUpdate(context, null /* all widgets */,
                     -1 /* no eventId */, considerIgnore);
         }
     }
 
     /**
-     * Process and push out an update for the given gadgetIds.
+     * Process and push out an update for the given appWidgetIds.
      * 
-     * @param context Context to use when creating gadget.
-     * @param gadgetIds List of specific gadgetIds to update, or null for all.
+     * @param context Context to use when creating widget.
+     * @param appWidgetIds List of specific appWidgetIds to update, or null for all.
      * @param changedEventId Specific event known to be changed, otherwise -1.
      *            If present, we use it to decide if an update is necessary.
      * @param considerIgnore If true, compare {@link #sLastUpdate} against
      *            {@link #UPDATE_THRESHOLD} to consider ignoring this update
      *            request.
      */
-    private void performUpdate(Context context, int[] gadgetIds,
+    private void performUpdate(Context context, int[] appWidgetIds,
             long changedEventId, boolean considerIgnore) {
         ContentResolver resolver = context.getContentResolver();
         
@@ -248,13 +248,13 @@ public class CalendarGadgetProvider extends GadgetProvider {
                 }
                 
                 if (events.primaryCount == 0) {
-                    views = getGadgetNoEvents(context);
+                    views = getAppWidgetNoEvents(context);
                 } else if (shouldUpdate) {
-                    views = getGadgetUpdate(context, cursor, events);
+                    views = getAppWidgetUpdate(context, cursor, events);
                     triggerTime = calculateUpdateTime(cursor, events);
                 }
             } else {
-                views = getGadgetNoEvents(context);
+                views = getAppWidgetNoEvents(context);
             }
         } finally {
             if (cursor != null) {
@@ -268,12 +268,11 @@ public class CalendarGadgetProvider extends GadgetProvider {
             return;
         }
         
-        GadgetManager gm = GadgetManager.getInstance(context);
-        if (gadgetIds != null) {
-            gm.updateGadget(gadgetIds, views);
+        AppWidgetManager gm = AppWidgetManager.getInstance(context);
+        if (appWidgetIds != null) {
+            gm.updateAppWidget(appWidgetIds, views);
         } else {
-            ComponentName thisGadget = new ComponentName(context, CalendarGadgetProvider.class);
-            gm.updateGadget(thisGadget, views);
+            gm.updateAppWidget(THIS_APPWIDGET, views);
         }
 
         // Schedule an alarm to wake ourselves up for the next update.  We also cancel
@@ -297,14 +296,14 @@ public class CalendarGadgetProvider extends GadgetProvider {
     
     /**
      * Build the {@link PendingIntent} used to trigger an update of all calendar
-     * gadgets. Uses {@link ACTION_CALENDAR_GADGET_UPDATE} to directly target
-     * all gadgets instead of using {@link GadgetManager#EXTRA_GADGET_IDS}.
+     * widgets. Uses {@link ACTION_CALENDAR_APPWIDGET_UPDATE} to directly target
+     * all widgets instead of using {@link AppWidgetManager#EXTRA_APPWIDGET_IDS}.
      * 
      * @param context Context to use when building broadcast.
      */
     private PendingIntent getUpdateIntent(Context context) {
-        Intent updateIntent = new Intent(ACTION_CALENDAR_GADGET_UPDATE);
-        updateIntent.setComponent(new ComponentName(context, CalendarGadgetProvider.class));
+        Intent updateIntent = new Intent(ACTION_CALENDAR_APPWIDGET_UPDATE);
+        updateIntent.setComponent(new ComponentName(context, CalendarAppWidgetProvider.class));
         return PendingIntent.getBroadcast(context, 0 /* no requestCode */,
                 updateIntent, 0 /* no flags */);
     }
@@ -347,7 +346,7 @@ public class CalendarGadgetProvider extends GadgetProvider {
     }
     
     /**
-     * Figure out the next time we should push gadget updates. This is based on
+     * Figure out the next time we should push widget updates. This is based on
      * the time calculated by {@link #getEventFlip(Cursor, int)}.
      * 
      * @param cursor Valid cursor on {@link Instances#CONTENT_URI}
@@ -390,24 +389,24 @@ public class CalendarGadgetProvider extends GadgetProvider {
     
     /**
      * Build a set of {@link RemoteViews} that describes how to update any
-     * gadget for a specific event instance.
+     * widget for a specific event instance.
      * 
      * @param cursor Valid cursor on {@link Instances#CONTENT_URI}
      * @param events {@link MarkedEvents} parsed from the cursor
      */
-    private RemoteViews getGadgetUpdate(Context context, Cursor cursor, MarkedEvents events) {
+    private RemoteViews getAppWidgetUpdate(Context context, Cursor cursor, MarkedEvents events) {
         Resources res = context.getResources();
         ContentResolver resolver = context.getContentResolver();
         
-        RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.gadget_item);
+        RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.agenda_appwidget);
         
-        // Clicking on gadget launches the agenda view in Calendar
+        // Clicking on widget launches the agenda view in Calendar
         Intent agendaIntent = new Intent();
         agendaIntent.setComponent(new ComponentName(PACKAGE_DETAIL, CLASS_DETAIL));
         PendingIntent pendingIntent = PendingIntent.getActivity(context, 0 /* no requestCode */,
                 agendaIntent, 0 /* no flags */);
         
-        views.setOnClickPendingIntent(R.id.gadget, pendingIntent);
+        views.setOnClickPendingIntent(R.id.agenda_appwidget, pendingIntent);
         
         Time time = new Time();
         time.setToNow();
@@ -564,7 +563,7 @@ public class CalendarGadgetProvider extends GadgetProvider {
     }
 
     /**
-     * Build date overlay bitmap for positioning on gadget. This is the textual
+     * Build date overlay bitmap for positioning on widget. This is the textual
      * number that has been corrected for font leading issues.
      * 
      * @param res {@link Resources} to use for paint color.
@@ -578,7 +577,7 @@ public class CalendarGadgetProvider extends GadgetProvider {
         paint.setTextSize(18);
         paint.setAntiAlias(true);
         paint.setSubpixelText(true);
-        paint.setColor(res.getColor(R.color.gadget_date));
+        paint.setColor(res.getColor(R.color.appwidget_date));
         
         // Calculate exact size of text
         FontMetrics metrics = paint.getFontMetrics();
@@ -603,8 +602,8 @@ public class CalendarGadgetProvider extends GadgetProvider {
     /**
      * Build a set of {@link RemoteViews} that describes an error state.
      */
-    private RemoteViews getGadgetNoEvents(Context context) {
-        RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.gadget_item);
+    private RemoteViews getAppWidgetNoEvents(Context context) {
+        RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.agenda_appwidget);
 
         views.setViewVisibility(R.id.no_events, View.VISIBLE);
         
@@ -612,13 +611,13 @@ public class CalendarGadgetProvider extends GadgetProvider {
         views.setViewVisibility(R.id.primary_card, View.GONE);
         views.setViewVisibility(R.id.secondary_card, View.GONE);
         
-        // Clicking on gadget launches the agenda view in Calendar
+        // Clicking on widget launches the agenda view in Calendar
         Intent agendaIntent = new Intent();
         agendaIntent.setComponent(new ComponentName(PACKAGE_DETAIL, CLASS_DETAIL));
         PendingIntent pendingIntent = PendingIntent.getActivity(context, 0 /* no requestCode */,
                 agendaIntent, 0 /* no flags */);
         
-        views.setOnClickPendingIntent(R.id.gadget, pendingIntent);
+        views.setOnClickPendingIntent(R.id.agenda_appwidget, pendingIntent);
 
         return views;
     }
@@ -636,7 +635,7 @@ public class CalendarGadgetProvider extends GadgetProvider {
 
     /**
      * Walk the given instances cursor and build a list of marked events to be
-     * used when updating the gadget. This structure is also used to check if
+     * used when updating the widget. This structure is also used to check if
      * updates are needed.
      * 
      * @param cursor Valid cursor across {@link Instances#CONTENT_URI}.

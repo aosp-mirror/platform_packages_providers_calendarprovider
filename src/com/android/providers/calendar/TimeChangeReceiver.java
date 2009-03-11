@@ -25,15 +25,15 @@ public class TimeChangeReceiver extends BroadcastReceiver {
     static final String TAG = "TimeChangeReceiver";
     static final boolean LOGD = false;
     
-    CalendarGadgetProvider mCalendarProvider = CalendarGadgetProvider.getInstance();
+    CalendarAppWidgetProvider mAppWidgetProvider = CalendarAppWidgetProvider.getInstance();
     
     @Override
     public void onReceive(Context context, Intent intent) {
-        // Pass time-changed notification through to any gadgets
+        // Pass time-changed notification through to any widgets
         if (LOGD) Log.d(TAG, "Received time changed action=" + intent.getAction());
         
         // Consider ignoring this update request if only TIME_CHANGED
         boolean considerIgnore = (Intent.ACTION_TIME_CHANGED.equals(intent.getAction()));
-        mCalendarProvider.timeUpdated(context, considerIgnore);
+        mAppWidgetProvider.timeUpdated(context, considerIgnore);
     }
 }

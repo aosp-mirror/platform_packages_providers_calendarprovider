@@ -15,13 +15,13 @@
 -->
 
 <resources>
-    <color name="gadget_when">#ffffffff</color>
-    <color name="gadget_reminder">#ffffffff</color>
-    <color name="gadget_title">#ff000000</color>
-    <color name="gadget_where">#ff000000</color>
-    <color name="gadget_calendar">#ff000000</color>
-    <color name="gadget_date">#ff59b4f4</color>
+    <color name="appwidget_when">#ffffffff</color>
+    <color name="appwidget_reminder">#ffffffff</color>
+    <color name="appwidget_title">#ff000000</color>
+    <color name="appwidget_where">#ff000000</color>
+    <color name="appwidget_calendar">#ff000000</color>
+    <color name="appwidget_date">#ff59b4f4</color>
 
-    <color name="gadget_no_events">#bb000000</color>
+    <color name="appwidget_no_events">#bb000000</color>
 </resources>
 

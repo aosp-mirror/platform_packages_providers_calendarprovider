@@ -272,7 +272,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     private AlarmManager mAlarmManager;
 
     private CalendarSyncAdapter mSyncAdapter;
-    private CalendarGadgetProvider mGadgetProvider = CalendarGadgetProvider.getInstance();
+    private CalendarAppWidgetProvider mAppWidgetProvider = CalendarAppWidgetProvider.getInstance();
 
     /**
      * Listens for timezone changes and disk-no-longer-full events
@@ -2408,7 +2408,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         int status = initialValues.getAsInteger(Events.SELF_ATTENDEE_STATUS);
                         createAttendeeEntry(rowId, status);
                     }
-                    triggerGadgetUpdate(rowId);
+                    triggerAppWidgetUpdate(rowId);
                 }
 
                 return uri;
@@ -2935,7 +2935,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         cursor.close();
                         cursor = null;
                     }
-                    triggerGadgetUpdate(-1);
+                    triggerAppWidgetUpdate(-1);
                 }
 
                 // There is a delete trigger that will cause all instances
@@ -3105,7 +3105,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                                 Log.i(TAG, "updateInternal() changing event");
                             }
                             scheduleNextAlarm(false /* do not remove alarms */);
-                            triggerGadgetUpdate(id);
+                            triggerAppWidgetUpdate(id);
                         }
                     }
                 }
@@ -3256,7 +3256,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             Log.i(TAG, "onSyncStop() success: " + success);
         }
         scheduleNextAlarm(false /* do not remove alarms */);
-        triggerGadgetUpdate(-1);
+        triggerAppWidgetUpdate(-1);
     }
 
     @Override
@@ -3265,15 +3265,15 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     }
     
     /**
-     * Update any existing gadgets with the changed events.
+     * Update any existing widgets with the changed events.
      * 
      * @param changedEventId Specific event known to be changed, otherwise -1.
      *            If present, we use it to decide if an update is necessary.
      */
-    private synchronized void triggerGadgetUpdate(long changedEventId) {
+    private synchronized void triggerAppWidgetUpdate(long changedEventId) {
         Context context = getContext();
         if (context != null) {
-            mGadgetProvider.providerUpdated(context, changedEventId);
+            mAppWidgetProvider.providerUpdated(context, changedEventId);
         }
     }
     

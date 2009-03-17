@@ -135,11 +135,15 @@ public class Duration
     }
 
     public long addTo(long dt) {
-        long factor = 1000*sign;
-        return dt + (7*24*60*60*factor*weeks)
-                  + (24*60*60*factor*days)
-                  + (60*60*factor*hours)
-                  + (60*factor*minutes)
-                  + (factor*seconds);
+        return dt + getMillis();
+    }
+    
+    public long getMillis() {
+        long factor = 1000 * sign;
+        return factor * ((7*24*60*60*weeks)
+                + (24*60*60*days)
+                + (60*60*hours)
+                + (60*minutes)
+                + seconds);
     }
 }

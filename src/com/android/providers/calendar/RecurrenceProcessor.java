@@ -33,6 +33,8 @@ public class RecurrenceProcessor
     private StringBuilder mStringBuilder = new StringBuilder();
     private Time mGenerated = new Time(Time.TIMEZONE_UTC);
     private DaySet mDays = new DaySet(false);
+    // Give up after this many loops.  This is roughly 1 second of expansion.
+    private static final int MAX_ALLOWED_ITERATIONS = 2000;
 
     public RecurrenceProcessor()
     {
@@ -43,8 +45,20 @@ public class RecurrenceProcessor
     private static final boolean SPEW = false;
 
     /**
-     * Returns the time (millis since epoch) of the last occurrence, -1 if the event repeats
-     * forever.
+     * Returns the time (millis since epoch) of the last occurrence,
+     * or -1 if the event repeats forever.  If there are no occurrences
+     * (because the exrule or exdates cancel all the occurrences) and the
+     * event does not repeat forever, then 0 is returned.
+     * 
+     * This computes a conservative estimate of the last occurrence. That is,
+     * the time of the actual last occurrence might be earlier than the time
+     * returned by this method.
+     * 
+     * @param dtstart the time of the first occurrence
+     * @param recur the recurrence
+     * @return an estimate of the time (in UTC milliseconds) of the last
+     * occurrence, which may be greater than the actual last occurrence
+     * @throws DateException
      */
     public long getLastOccurence(Time dtstart,
                                  RecurrenceSet recur) throws DateException {
@@ -58,29 +72,34 @@ public class RecurrenceProcessor
             for (EventRecurrence rrule : recur.rrules) {
                 if (rrule.count != 0) {
                     hasCount = true;
-                }
-                    
-                if (rrule.until != null) {
+                } else if (rrule.until != null) {
                     // according to RFC 2445, until must be in UTC.
                     mIterator.parse(rrule.until);
                     long untilTime = mIterator.toMillis(false /* use isDst */);
                     if (untilTime > lastTime) {
                         lastTime = untilTime;
                     }
+                } else {
+                    // This rrule has no "count" or "until" so it repeats
+                    // forever.
+                    return -1;
                 }
             }
-            if ((lastTime != -1) && recur.rdates != null) {
+            if (lastTime != -1 && recur.rdates != null) {
                 for (long dt : recur.rdates) {
                     if (dt > lastTime) {
                         lastTime = dt;
                     }
                 }
             }
-            if (lastTime != -1) {
+            
+            // If there were only "until"s and no "count"s, then return the
+            // last "until" date or "rdate".
+            if (lastTime != -1 && !hasCount) {
                 return lastTime;
             }
-        } else if ((recur.rdates != null) &&
-                   ((recur.exrules == null) && (recur.exdates == null))) {
+        } else if (recur.rdates != null &&
+                   recur.exrules == null && recur.exdates == null) {
             // if there are only rdates, we can just pick the last one.
             for (long dt : recur.rdates) {
                 if (dt > lastTime) {
@@ -90,15 +109,21 @@ public class RecurrenceProcessor
             return lastTime;
         }
 
-        // expand the complete recurrence if there were any counts specified,
+        // Expand the complete recurrence if there were any counts specified,
         // or if there were rdates specified.
-        if ((recur.rrules != null && hasCount) || (recur.rdates != null)) {
-            // could return 0 if the recurrence only occurs before dtstart?
-            // i don't think we would have been called in that case.
-            // TODO: check this!
-            return expand(dtstart, recur,
+        if (hasCount || recur.rdates != null) {
+            // The expansion might not contain any dates if the exrule or
+            // exdates cancel all the generated dates.
+            long[] dates = expand(dtstart, recur,
                     dtstart.toMillis(false /* use isDst */) /* range start */,
-                    -1 /* range end */, null /* output */);
+                    -1 /* range end */);
+
+            // The expansion might not contain any dates if exrule or exdates
+            // cancel all the generated dates.
+            if (dates.length == 0) {
+                return 0;
+            }
+            return dates[dates.length - 1];
         }
         return -1;
     }
@@ -302,7 +327,7 @@ byday:
                 // if might be past the end of the month, we need to normalize it
                 t = mTime;
                 t.set(day, realMonth, realYear);
-                t.normalize(true /* ignore isDst */);
+                unsafeNormalize(t);
                 realYear = t.year;
                 realMonth = t.month;
                 day = t.monthDay;
@@ -322,7 +347,7 @@ byday:
                 if (t == null) {
                     t = mTime;
                     t.set(day, realMonth, realYear);
-                    t.normalize(true /* ignore isDst */);
+                    unsafeNormalize(t);
                     if (SPEW) {
                         Log.i(TAG, "set t=" + t + " " + t.month
                                 + "/" + t.monthDay
@@ -474,50 +499,96 @@ byday:
         private int mMonth;
     }
 
+    /**
+     * Expands the recurrence within the given range using the given dtstart
+     * value. Returns an array of longs where each element is a date in UTC
+     * milliseconds. The return value is never null.  If there are no dates
+     * then an array of length zero is returned.Da
+     *  
+     * @param dtstart a Time object representing the first occurrence
+     * @param recur the recurrence rules, including RRULE, RDATES, EXRULE, and
+     * EXDATES
+     * @param rangeStartMillis the beginning of the range to expand, in UTC
+     * milliseconds
+     * @param rangeEndMillis the non-inclusive end of the range to expand, in
+     * UTC milliseconds
+     * @return an array of dates, each date is in UTC milliseconds
+     * @throws DateException
+     * @throws android.util.TimeFormatException if recur cannot be parsed
+     */
+    public long[] expand(Time dtstart,
+            RecurrenceSet recur,
+            long rangeStartMillis,
+            long rangeEndMillis) throws DateException {
+        String timezone = dtstart.timezone;
+        mIterator.clear(timezone);
+        mGenerated.clear(timezone);
+        
+        // We don't need to clear the mUntil (and it wouldn't do any good to
+        // do so) because the "until" date string is specified in UTC and that
+        // sets the timezone in the mUntil Time object.
 
-    // TODO: document, clean up these return codes.  currently, the return value
-    // is the last occurrence of the recurrence within the expansion window.
-    // 0 is returned if there are no instances within the expansion window.
-    public long expand(Time dtstart,
-                       RecurrenceSet recur,
-                       long rangeStartMillis,
-                       long rangeEndMillis,
-                       TreeSet<Long> dtSet) throws DateException {
-        if (dtSet != null) {
-            dtSet.clear();
+        mIterator.set(rangeStartMillis);
+        long rangeStartDateValue = normDateTimeComparisonValue(mIterator);
+        
+        long rangeEndDateValue;
+        if (rangeEndMillis != -1) {
+            mIterator.set(rangeEndMillis);
+            rangeEndDateValue = normDateTimeComparisonValue(mIterator);
         } else {
-            // create the set locally, for book-keeping.
-            dtSet = new TreeSet<Long>();
+            rangeEndDateValue = Long.MAX_VALUE;
         }
+
+        TreeSet<Long> dtSet = new TreeSet<Long>();
 
         if (recur.rrules != null) {
             for (EventRecurrence rrule : recur.rrules) {
-                expand(dtstart, rrule, rangeStartMillis,
-                       rangeEndMillis, true /* add */, dtSet);
+                expand(dtstart, rrule, rangeStartDateValue,
+                        rangeEndDateValue, true /* add */, dtSet);
             }
         }
         if (recur.rdates != null) {
             for (long dt : recur.rdates) {
-                dtSet.add(dt);
+                // The dates are stored as milliseconds. We need to convert
+                // them to year/month/day values in the local timezone.
+                mIterator.set(dt);
+                long dtvalue = normDateTimeComparisonValue(mIterator);
+                dtSet.add(dtvalue);
             }
         }
         if (recur.exrules != null) {
             for (EventRecurrence exrule : recur.exrules) {
-                expand(dtstart, exrule, rangeStartMillis,
-                       rangeEndMillis, false /* remove */, dtSet);
+                expand(dtstart, exrule, rangeStartDateValue,
+                        rangeEndDateValue, false /* remove */, dtSet);
             }
         }
         if (recur.exdates != null) {
             for (long dt : recur.exdates) {
-                dtSet.remove(dt);
+                // The dates are stored as milliseconds. We need to convert
+                // them to year/month/day values in the local timezone.
+                mIterator.set(dt);
+                long dtvalue = normDateTimeComparisonValue(mIterator);
+                dtSet.remove(dtvalue);
             }
         }
         if (dtSet.isEmpty()) {
             // this can happen if the recurrence does not occur within the
             // expansion window.
-            return 0;
+            return new long[0];
         }
-        return dtSet.last();
+        
+        // The values in dtSet are represented in a special form that is useful
+        // for fast comparisons and that is easy to generate from year/month/day
+        // values. We need to convert these to UTC milliseconds and also to
+        // ensure that the dates are valid.
+        int len = dtSet.size();
+        long[] dates = new long[len];
+        int i = 0;
+        for (Long val: dtSet) {
+            setTimeFromLongValue(mIterator, val);
+            dates[i++] = mIterator.toMillis(true /* ignore isDst */);
+        }
+        return dates;
     }
 
     /**
@@ -533,39 +604,31 @@ byday:
      * @param dtstart the dtstart date as defined in RFC2445.  This
      * {@link Time} should be in the timezone of the event.
      * @param r the parsed recurrence, as defiend in RFC2445
-     * @param rangeStartMillis the first date-time you care about, inclusive
-     * @param rangeEndMillis the last date-time you care about, not inclusive (so
+     * @param rangeStartDateValue the first date-time you care about, inclusive
+     * @param rangeEndDateValue the last date-time you care about, not inclusive (so
      *                  if you care about everything up through and including
      *                  Dec 22 1995, set last to Dec 23, 1995 00:00:00
      * @param add Whether or not we should add to out, or remove from out.
-     * @param out the ArrayList you'd like to fill with the events
+     * @param out the TreeSet you'd like to fill with the events
+     * @throws DateException
+     * @throws android.util.TimeFormatException if r cannot be parsed.
      */
     public void expand(Time dtstart,
-                       EventRecurrence r,
-                       long rangeStartMillis,
-                       long rangeEndMillis,
-                       boolean add,
-                       TreeSet<Long> out) throws DateException {
-        String timezone = dtstart.timezone;
-        long dtstartMillis = dtstart.toMillis(false /* use isDst */);
+            EventRecurrence r,
+            long rangeStartDateValue,
+            long rangeEndDateValue,
+            boolean add,
+            TreeSet<Long> out) throws DateException {
+        unsafeNormalize(dtstart);
+        long dtstartDateValue = normDateTimeComparisonValue(dtstart);
         int count = 0;
 
         // add the dtstart instance to the recurrence, if within range.
-        if (add) {
-            if (dtstartMillis >= rangeStartMillis) {
-                if ((rangeEndMillis != -1 && (dtstartMillis <= rangeEndMillis))
-                    || r.count > 0) {
-                        out.add(dtstartMillis);
-                        ++count;
-                }
-            }
+        if (add && dtstartDateValue >= rangeStartDateValue
+                && dtstartDateValue < rangeEndDateValue) {
+            out.add(dtstartDateValue);
+            ++count;
         }
-
-        // reset the Time objects to the new timezone.
-        // (we want to avoid creating new objects here)
-        // we do NOT clear the until -- untils *must* be specified in UTC.
-        mIterator.clear(timezone);
-        mGenerated.clear(timezone);
         
         Time iterator = mIterator;
         Time until = mUntil;
@@ -576,12 +639,11 @@ byday:
         try {
 
             days.setRecurrence(r);
-
-            if (rangeEndMillis == -1 && r.until == null && r.count == 0) {
+            if (rangeEndDateValue == Long.MAX_VALUE && r.until == null && r.count == 0) {
                 throw new DateException(
                         "No range end provided for a recurrence that has no UNTIL or COUNT.");
             }
-
+            
             // the top-level frequency
             int freqField;
             int freqAmount = r.interval;
@@ -644,29 +706,50 @@ byday:
                 }
             }
 
+            long untilDateValue;
             if (r.until != null) {
-                until.parse(r.until);
+                // Ensure that the "until" date string is specified in UTC.
+                String untilStr = r.until;
+                // 15 is length of date-time without trailing Z e.g. "20090204T075959"
+                // A string such as 20090204 is a valid UNTIL (see RFC 2445) and the
+                // Z should not be added.
+                if (untilStr.length() == 15) {
+                    untilStr = untilStr + 'Z';
+                }
+                // The parse() method will set the timezone to UTC
+                until.parse(untilStr);
+
+                // We need the "until" year/month/day values to be in the same
+                // timezone as all the generated dates so that we can compare them
+                // using the values returned by normDateTimeComparisonValue().
+                until.switchTimezone(dtstart.timezone);
+                untilDateValue = normDateTimeComparisonValue(until);
+            } else {
+                untilDateValue = Long.MAX_VALUE;
             }
-            long untilMillis = until.toMillis(false /* use isDst */);
 
             sb.ensureCapacity(15);
             sb.setLength(15); // TODO: pay attention to whether or not the event
             // is an all-day one.
 
             if (SPEW) {
-                Log.i(TAG, "expand called w/ rangeStart=" + rangeStartMillis
-                        + " rangeEnd=" + rangeEndMillis);
+                Log.i(TAG, "expand called w/ rangeStart=" + rangeStartDateValue
+                        + " rangeEnd=" + rangeEndDateValue);
             }
 
             // go until the end of the range or we're done with this event
             boolean eventEnded = false;
             int N, i, v;
             int a[];
+            int failsafe = 0; // Avoid infinite loops
             events: {
                 while (true) {
                     int monthIndex = 0;
+                    if (failsafe++ > MAX_ALLOWED_ITERATIONS) { // Give up after about 1 second of processing
+                        throw new DateException("Recurrence processing stuck: " + r.toString());
+                    }
 
-                    iterator.normalize(true /* ignore isDst */);
+                    unsafeNormalize(iterator);
 
                     int iteratorYear = iterator.year;
                     int iteratorMonth = iterator.month + 1;
@@ -752,12 +835,13 @@ byday:
                                         // month advancing extra times, as we set the month to the 32nd, 33rd, etc.
                                         // days.
                                         generated.set(second, minute, hour, day, month, iteratorYear);
+                                        unsafeNormalize(generated);
 
-                                        long genMillis = generated.normalize(true /* ignore DST */);
+                                        long genDateValue = normDateTimeComparisonValue(generated);
                                         // sometimes events get generated (BYDAY, BYHOUR, etc.) that
                                         // are before dtstart.  Filter these.  I believe this is correct,
                                         // but Google Calendar doesn't seem to always do this.
-                                        if (genMillis >= dtstartMillis) {
+                                        if (genDateValue >= dtstartDateValue) {
                                             // filter and then add
                                             int filtered = filter(r, generated);
                                             if (0 == filtered) {
@@ -769,41 +853,38 @@ byday:
                                                 // (for RRULEs -- additive).
                                                 if (!add) {
                                                     ++count;
-                                                } else if (dtstartMillis !=
-                                                               genMillis) {
+                                                } else if (dtstartDateValue != genDateValue) {
                                                     ++count;
                                                 }
-                                                // one reason we can stop is that we're past the until date
-                                                if (r.until != null &&
-                                                    genMillis > untilMillis) {
+                                                // one reason we can stop is that
+                                                // we're past the until date
+                                                if (genDateValue > untilDateValue) {
                                                     if (SPEW) {
                                                         Log.i(TAG, "stopping b/c until="
-                                                            + untilMillis
+                                                            + untilDateValue
                                                             + " generated="
-                                                            + genMillis);
+                                                            + genDateValue);
                                                     }
                                                     break events;
                                                 }
                                                 // or we're past rangeEnd
-                                                if (rangeEndMillis != -1 &&
-                                                    genMillis >= rangeEndMillis) {
+                                                if (genDateValue >= rangeEndDateValue) {
                                                     if (SPEW) {
                                                         Log.i(TAG, "stopping b/c rangeEnd="
-                                                                + rangeEndMillis
+                                                                + rangeEndDateValue
                                                                 + " generated=" + generated);
                                                     }
                                                     break events;
                                                 }
 
-                                                if (out != null &&
-                                                    genMillis >= rangeStartMillis) {
+                                                if (genDateValue >= rangeStartDateValue) {
                                                     if (SPEW) {
                                                         Log.i(TAG, "adding date=" + generated + " filtered=" + filtered);
                                                     }
                                                     if (add) {
-                                                        out.add(genMillis);
+                                                        out.add(genDateValue);
                                                     } else {
-                                                        out.remove(genMillis);
+                                                        out.remove(genDateValue);
                                                     }
                                                 }
                                                 // another is that count is high enough
@@ -862,7 +943,7 @@ byday:
                                 throw new RuntimeException("bad field=" + freqField);
                         }
 
-                        iterator.normalize(true /* ignore isDst */);
+                        unsafeNormalize(iterator);
                         if (freqField != Time.YEAR && freqField != Time.MONTH) {
                             break;
                         }
@@ -876,15 +957,204 @@ byday:
             }
         }
         catch (DateException e) {
-            Log.w(TAG, "DateException with r=" + r + " rangeStart=" + rangeStartMillis
-                    + " rangeEnd=" + rangeEndMillis);
+            Log.w(TAG, "DateException with r=" + r + " rangeStart=" + rangeStartDateValue
+                    + " rangeEnd=" + rangeEndDateValue);
             throw e;
         }
         catch (RuntimeException t) {
-            Log.w(TAG, "RuntimeException with r=" + r + " rangeStart=" + rangeStartMillis
-                    + " rangeEnd=" + rangeEndMillis);
+            Log.w(TAG, "RuntimeException with r=" + r + " rangeStart=" + rangeStartDateValue
+                    + " rangeEnd=" + rangeEndDateValue);
             throw t;
         }
     }
-}
+    
+    /**
+     * Normalizes the date fields to give a valid date, but if the time falls
+     * in the invalid window during a transition out of Daylight Saving Time
+     * when time jumps forward an hour, then the "normalized" value will be
+     * invalid.
+     * <p>
+     * This method also computes the weekDay and yearDay fields.
+     * 
+     * <p>
+     * This method does not modify the fields isDst, or gmtOff.
+     */
+    static void unsafeNormalize(Time date) {
+        int second = date.second;
+        int minute = date.minute;
+        int hour = date.hour;
+        int monthDay = date.monthDay;
+        int month = date.month;
+        int year = date.year;
+        
+        int addMinutes = ((second < 0) ? (second - 59) : second) / 60;
+        second -= addMinutes * 60;
+        minute += addMinutes;
+        int addHours = ((minute < 0) ? (minute - 59) : minute) / 60;
+        minute -= addHours * 60;
+        hour += addHours;
+        int addDays = ((hour < 0) ? (hour - 23) : hour) / 24;
+        hour -= addDays * 24;
+        monthDay += addDays;
+        
+        // We want to make "monthDay" positive. We do this by subtracting one
+        // from the year and adding a year's worth of days to "monthDay" in
+        // the following loop while "monthDay" <= 0.
+        while (monthDay <= 0) {
+            // If month is after Feb, then add this year's length so that we
+            // include this year's leap day, if any.
+            // Otherwise (the month is Feb or earlier), add last year's length.
+            // Subtract one from the year in either case. This gives the same
+            // effective date but makes monthDay (the day of the month) much
+            // larger. Eventually (usually in one iteration) monthDay will
+            // be positive.
+            int days = month > 1 ? yearLength(year) : yearLength(year - 1);
+            monthDay += days;
+            year -= 1;
+        }
+        // At this point, monthDay >= 1. Normalize the month to the range [0,11].
+        if (month < 0) {
+            int years = (month + 1) / 12 - 1;
+            year += years;
+            month -= 12 * years;
+        } else if (month >= 12) {
+            int years = month / 12;
+            year += years;
+            month -= 12 * years;
+        }
+        // At this point, month is in the range [0,11] and monthDay >= 1.
+        // Now loop until the monthDay is in the correct range for the month.
+        while (true) {
+            // On January, check if we can jump forward a whole year.
+            if (month == 0) {
+                int yearLength = yearLength(year);
+                if (monthDay > yearLength) {
+                    year++;
+                    monthDay -= yearLength;
+                }
+            }
+            int monthLength = monthLength(year, month);
+            if (monthDay > monthLength) {
+                monthDay -= monthLength;
+                month++;
+                if (month >= 12) {
+                    month -= 12;
+                    year++;
+                }
+            } else break;
+        }
+        // At this point, monthDay <= the length of the current month and is
+        // in the range [1,31].
+        
+        date.second = second;
+        date.minute = minute;
+        date.hour = hour;
+        date.monthDay = monthDay;
+        date.month = month;
+        date.year = year;
+        date.weekDay = weekDay(year, month, monthDay);
+        date.yearDay = yearDay(year, month, monthDay);
+    }
+    
+    /**
+     * Returns true if the given year is a leap year.
+     * 
+     * @param year the given year to test
+     * @return true if the given year is a leap year.
+     */
+    static boolean isLeapYear(int year) {
+        return (year % 4 == 0) && ((year % 100 != 0) || (year % 400 == 0));
+    }
+    
+    /**
+     * Returns the number of days in the given year.
+     * 
+     * @param year the given year
+     * @return the number of days in the given year.
+     */
+    static int yearLength(int year) {
+        return isLeapYear(year) ? 366 : 365;
+    }
 
+    private static final int[] DAYS_PER_MONTH = { 31, 28, 31, 30, 31, 30, 31,
+            31, 30, 31, 30, 31 };
+    private static final int[] DAYS_IN_YEAR_PRECEDING_MONTH = { 0, 31, 59, 90,
+        120, 151, 180, 212, 243, 273, 304, 334 };
+    
+    /**
+     * Returns the number of days in the given month of the given year.
+     * 
+     * @param year the given year.
+     * @param month the given month in the range [0,11]
+     * @return the number of days in the given month of the given year.
+     */
+    static int monthLength(int year, int month) {
+        int n = DAYS_PER_MONTH[month];
+        if (n != 28) {
+            return n;
+        }
+        return isLeapYear(year) ? 29 : 28;
+    }
+    
+    /**
+     * Computes the weekday, a number in the range [0,6] where Sunday=0, from
+     * the given year, month, and day.
+     * 
+     * @param year the year
+     * @param month the 0-based month in the range [0,11] 
+     * @param day the 1-based day of the month in the range [1,31]
+     * @return the weekday, a number in the range [0,6] where Sunday=0
+     */
+    static int weekDay(int year, int month, int day) {
+        if (month <= 1) {
+            month += 12;
+            year -= 1;
+        }
+        return (day + (13 * month - 14) / 5 + year + year/4 - year/100 + year/400) % 7;
+    }
+    
+    /**
+     * Computes the 0-based "year day", given the year, month, and day.
+     * 
+     * @param year the year
+     * @param month the 0-based month in the range [0,11]
+     * @param day the 1-based day in the range [1,31]
+     * @return the 0-based "year day", the number of days into the year
+     */
+    static int yearDay(int year, int month, int day) {
+        int yearDay = DAYS_IN_YEAR_PRECEDING_MONTH[month] + day - 1;
+        if (month >= 2 && isLeapYear(year)) {
+            yearDay += 1;
+        }
+        return yearDay;
+    }
+    
+    /**
+     * Converts a normalized Time value to a 64-bit long. The mapping of Time
+     * values to longs provides a total ordering on the Time values so that
+     * two Time values can be compared efficiently by comparing their 64-bit
+     * long values.  This is faster than converting the Time values to UTC
+     * millliseconds.
+     * 
+     * @param normalized a Time object whose date and time fields have been
+     * normalized
+     * @return a 64-bit long value that can be used for comparing and ordering
+     * dates and times represented by Time objects
+     */
+    private static final long normDateTimeComparisonValue(Time normalized) {
+        // 37 bits for the year, 4 bits for the month, 5 bits for the monthDay,
+        // 5 bits for the hour, 6 bits for the minute, 6 bits for the second.
+        return ((long)normalized.year << 26) + (normalized.month << 22)
+                + (normalized.monthDay << 17) + (normalized.hour << 12)
+                + (normalized.minute << 6) + normalized.second;
+    }
+    
+    private static final void setTimeFromLongValue(Time date, long val) {
+        date.year = (int) (val >> 26);
+        date.month = (int) (val >> 22) & 0xf;
+        date.monthDay = (int) (val >> 17) & 0x1f;
+        date.hour = (int) (val >> 12) & 0x1f;
+        date.minute = (int) (val >> 6) & 0x3f;
+        date.second = (int) (val & 0x3f);
+    }
+}

@@ -20,25 +20,28 @@ package com.android.providers.calendar;
 import android.os.Debug;
 import android.pim.DateException;
 import android.pim.RecurrenceSet;
-import android.text.format.DateUtils;
-import android.text.format.Time;
+import android.test.suitebuilder.annotation.LargeTest;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
+import android.text.format.DateUtils;
+import android.text.format.Time;
 import android.util.Log;
-import junit.framework.TestCase;
+import android.util.TimeFormatException;
 
 import java.util.Calendar;
 import java.util.TreeSet;
+
+import junit.framework.TestCase;
 
 public class RecurrenceProcessorTest extends TestCase {
     private static final String TAG = "RecurrenceProcessorTest";
     private static final boolean SPEW = true;
     private static final boolean METHOD_TRACE = false;
 
-    private static String[] set2Array(TreeSet<Long> set, Time time) {
-        String[] out = new String[set.size()];
+    private static String[] getFormattedDates(long[] dates, Time time) {
+        String[] out = new String[dates.length];
         int i = 0;
-        for (long date : set) {
+        for (long date : dates) {
             time.set(date);
             out[i] = time.format2445();
             ++i;
@@ -126,7 +129,7 @@ public class RecurrenceProcessorTest extends TestCase {
     }
 
     private static void printLists(String[] expected, String[] out) {
-        System.out.println("        expected        out");
+        Log.i(TAG, "        expected        out");
         int i;
         for (i = 0; i < expected.length && i < out.length; i++) {
             Log.i(TAG, "  [" + i + "] " + expected[i]
@@ -170,7 +173,6 @@ public class RecurrenceProcessorTest extends TestCase {
         Time rangeStart = new Time(tz);
         Time rangeEnd = new Time(tz);
         Time outCal = new Time(tz);
-        TreeSet<Long> out = new TreeSet<Long>();
 
         dtstart.parse(dtstartStr);
 
@@ -187,37 +189,19 @@ public class RecurrenceProcessorTest extends TestCase {
         RecurrenceProcessor rp = new RecurrenceProcessor();
         RecurrenceSet recur = new RecurrenceSet(rrule, rdate, exrule, exdate);
 
-        long lastOccur = rp.getLastOccurence(dtstart, recur);
-        String lastStr = "";
-        if (lastOccur != -1) {
-            outCal.set(lastOccur);
-            lastStr = outCal.format2445();
-        }
-        if (!last.equals(lastStr)) {
-            if (SPEW) {
-                System.out.println("DTSTART:" + dtstartStr + " RRULE:" + rrule);
-                System.out.println("Expected: " + last + "; Actual: " + lastStr);
-            }
-
-            throw new RuntimeException("expected last occurrence date does not match."
-                    + " expected=" + last
-                    + " actual=" + lastStr);
-        }
-
-        rp.expand(dtstart, recur, rangeStart.toMillis(false /* use isDst */),
-                rangeEnd.toMillis(false /* use isDst */), out);
+        long[] out = rp.expand(dtstart, recur, rangeStart.toMillis(false /* use isDst */),
+                rangeEnd.toMillis(false /* use isDst */));
 
         if (METHOD_TRACE) {
             Debug.stopMethodTracing();
         }
 
-        int count = out.size();
-        String[] actual = set2Array(out, outCal);
-
+        int count = out.length;
+        String[] actual = getFormattedDates(out, outCal);
 
         if (count != expected.length) {
             if (SPEW) {
-                System.out.println("DTSTART:" + dtstartStr + " RRULE:" + rrule);
+                Log.i(TAG, "DTSTART:" + dtstartStr + " RRULE:" + rrule);
                 printLists(expected, actual);
             }
             throw new RuntimeException("result lengths don't match.  "
@@ -229,14 +213,39 @@ public class RecurrenceProcessorTest extends TestCase {
             String s = actual[i];
             if (!s.equals(expected[i])) {
                 if (SPEW) {
-                    System.out.println("DTSTART:" + dtstartStr + " RRULE:" + rrule);
+                    Log.i(TAG, "DTSTART:" + dtstartStr + " RRULE:" + rrule);
                     printLists(expected, actual);
-                    System.out.println("i=" + i);
+                    Log.i(TAG, "i=" + i);
                 }
                 throw new RuntimeException("expected[" + i + "]="
                         + expected[i] + " actual=" + actual[i]);
             }
-            ++i;
+        }
+
+        long lastOccur = rp.getLastOccurence(dtstart, recur);
+        long lastMillis = -1;
+        long expectedMillis = -1;
+        String lastStr = "";
+        if (lastOccur != -1) {
+            outCal.set(lastOccur);
+            lastStr = outCal.format2445();
+            lastMillis = outCal.toMillis(true /* ignore isDst */);
+        }
+        if (last != null && last.length() > 0) {
+            Time expectedLast = new Time(tz);
+            expectedLast.parse(last);
+            expectedMillis = expectedLast.toMillis(true /* ignore isDst */);
+        }
+        if (lastMillis != expectedMillis) {
+            if (SPEW) {
+                Log.i(TAG, "DTSTART:" + dtstartStr + " RRULE:" + rrule);
+                Log.i(TAG, "Expected: " + last + "; Actual: " + lastStr);
+                printLists(expected, actual);
+            }
+
+            throw new RuntimeException("expected last occurrence date does not match."
+                    + " expected=" + last
+                    + " actual=" + lastStr);
         }
     }
 
@@ -443,6 +452,25 @@ public class RecurrenceProcessorTest extends TestCase {
     }
 
     @SmallTest
+    public void testMonthly13() throws Exception {
+        verifyRecurrence("20060101T100000", "FREQ=MONTHLY;BYDAY=FR;BYMONTHDAY=13;COUNT=10",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "20060101T000000", "20101231T000000",
+                new String[]{
+                        "20060101T100000",
+                        "20060113T100000",
+                        "20061013T100000",
+                        "20070413T100000",
+                        "20070713T100000",
+                        "20080613T100000",
+                        "20090213T100000",
+                        "20090313T100000",
+                        "20091113T100000",
+                        "20100813T100000",
+                });
+    }
+
+    @SmallTest
     public void testWeekly0() throws Exception {
         verifyRecurrence("20060215T100000", "FREQ=WEEKLY;COUNT=3",
                 null /* rdate */, null /* exrule */, null /* exdate */,
@@ -500,6 +528,20 @@ public class RecurrenceProcessorTest extends TestCase {
                 }, "20060311T020001");
     }
 
+    // until without "Z"
+    @SmallTest
+    public void testWeekly4a() throws Exception {
+        verifyRecurrence("20060215T100000", "FREQ=WEEKLY;UNTIL=20060311T100001;BYDAY=TU",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "20060101T000000", "20080101T000000",
+                new String[]{
+                        "20060215T100000",
+                        "20060221T100000",
+                        "20060228T100000",
+                        "20060307T100000"
+                }, "20060311T100001");
+    }
+
     @SmallTest
     public void testWeekly5() throws Exception {
         verifyRecurrence("20060215T100000", "FREQ=WEEKLY;UNTIL=20060311T100001Z;BYDAY=TH",
@@ -554,6 +596,70 @@ public class RecurrenceProcessorTest extends TestCase {
                 });
     }
 
+    /**
+     * This test fails because of a bug in RecurrenceProcessor.expand(). We
+     * don't have time to fix the bug yet but we don't want to lose track of
+     * this test either. The "failing" prefix on the method name prevents this
+     * test from being run. Remove the "failing" prefix when the bug is fixed.
+     * 
+     * @throws Exception
+     */
+    @SmallTest
+    public void failingTestWeekly9() throws Exception {
+        verifyRecurrence("19970805T100000",
+                "FREQ=WEEKLY;INTERVAL=2;COUNT=4;BYDAY=TU,SU;WKST=MO",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "19970101T000000", "19980101T000000",
+                new String[]{
+                        "19970805T100000",
+                        "19970810T100000",
+                        "19970819T100000",
+                        "19970824T100000",
+                });
+    }
+
+    @SmallTest
+    public void testWeekly10() throws Exception {
+        verifyRecurrence("19970805T100000",
+                "FREQ=WEEKLY;INTERVAL=2;COUNT=4;BYDAY=TU,SU;WKST=SU",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "19970101T000000", "19980101T000000",
+                new String[]{
+                        "19970805T100000",
+                        "19970817T100000",
+                        "19970819T100000",
+                        "19970831T100000",
+                });
+    }
+
+    // BUG 1658567: UNTIL=date
+    @SmallTest
+    public void testWeekly11() throws Exception {
+        verifyRecurrence("20060215T100000", "FREQ=WEEKLY;UNTIL=20060220;BYDAY=SU",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "20060101T000000", "20080101T000000",
+                new String[]{
+                        "20060215T100000",
+                        "20060219T100000"
+                }, "20060220T000000");
+    }
+
+    @SmallTest
+    public void testWeekly12() throws Exception {
+        try {
+            verifyRecurrence("20060215T100000", "FREQ=WEEKLY;UNTIL=junk;BYDAY=SU",
+                    null /* rdate */, null /* exrule */, null /* exdate */,
+                    "20060101T000000", "20080101T000000",
+                    new String[]{
+                            "20060215T100000",
+                            "20060219T100000"
+                    }, "20060220T020001");
+            fail("Bad UNTIL string failed to throw exception");
+        } catch (TimeFormatException e) {
+            // expected
+        }
+    }
+
     @SmallTest
     public void testDaily0() throws Exception {
         verifyRecurrence("20060215T100000", "FREQ=DAILY;COUNT=3",
@@ -568,7 +674,7 @@ public class RecurrenceProcessorTest extends TestCase {
 
     @SmallTest
     public void testDaily1() throws Exception {
-        verifyRecurrence("20060215T100000", "FREQ=DAILY;UNTIL=20060302T100001",
+        verifyRecurrence("20060215T100000", "FREQ=DAILY;UNTIL=20060302T100001Z",
                 null /* rdate */, null /* exrule */, null /* exdate */,
                 "20060101T000000", "20080101T000000",
                 new String[]{
@@ -587,7 +693,7 @@ public class RecurrenceProcessorTest extends TestCase {
                         "20060227T100000",
                         "20060228T100000",
                         "20060301T100000"
-                }, "20060302T020001");
+                }, "20060302T100001Z");
     }
 
     @SmallTest
@@ -2013,7 +2119,7 @@ public class RecurrenceProcessorTest extends TestCase {
 
     @SmallTest
     public void testFromGoogleCalendar8() throws Exception {
-        // Annually on October 3
+        // Annually on October 4
         verifyRecurrence("20061004T130000",
                 "FREQ=YEARLY;INTERVAL=1;WKST=SU",
                 null /* rdate */, null /* exrule */, null /* exdate */,
@@ -2132,6 +2238,257 @@ public class RecurrenceProcessorTest extends TestCase {
                 },
                 "");
     }
-}
 
+    @SmallTest
+    public void testYearly0() throws Exception {
+        verifyRecurrence("20080101T100000",
+                "FREQ=YEARLY;UNTIL=20090131T090000Z;BYMONTH=1;BYDAY=SU,MO",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "20080101T000000", "20090130T000000",
+                new String[]{
+                    "20080101T100000",
+                    "20080106T100000",
+                    "20080107T100000",
+                    "20080113T100000",
+                    "20080114T100000",
+                    "20080120T100000",
+                    "20080121T100000",
+                    "20080127T100000",
+                    "20080128T100000",
+                    "20090104T100000",
+                    "20090105T100000",
+                    "20090111T100000",
+                    "20090112T100000",
+                    "20090118T100000",
+                    "20090119T100000",
+                    "20090125T100000",
+                    "20090126T100000",
+                }, "20090131T010000");
+    }
 
+    /**
+     * This test fails because of a bug in RecurrenceProcessor.expand(). We
+     * don't have time to fix the bug yet but we don't want to lose track of
+     * this test either. The "failing" prefix on the method name prevents this
+     * test from being run. Remove the "failing" prefix when the bug is fixed.
+     * 
+     * @throws Exception
+     */
+    @SmallTest
+    public void failingTestYearly1() throws Exception {
+        verifyRecurrence("20060101T100000",
+                "FREQ=YEARLY;COUNT=10;BYYEARDAY=1,100,200",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "20060101T000000", "20090131T000000",
+                new String[]{
+                "20060101T100000",
+                "20060409T100000",
+                "20060718T100000",
+                "20070101T100000",
+                "20070409T100000",
+                "20070718T100000",
+                "20080101T100000",
+                "20080410T100000",
+                "20080719T100000",
+                "20090101T100000",
+                });
+    }
+
+    /**
+     * This test fails because of a bug in RecurrenceProcessor.expand(). We
+     * don't have time to fix the bug yet but we don't want to lose track of
+     * this test either. The "failing" prefix on the method name prevents this
+     * test from being run. Remove the "failing" prefix when the bug is fixed.
+     * 
+     * @throws Exception
+     */
+    @SmallTest
+    public void failingTestYearly2() throws Exception {
+        verifyRecurrence("20060101T100000",
+                "FREQ=YEARLY;COUNT=5;BYWEEKNO=6;BYDAY=MO;WKST=MO",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "20060101T000000", "20090131T000000",
+                new String[]{
+                "20060101T100000",
+                "20060206T100000",
+                "20070205T100000",
+                "20080204T100000",
+                "20090209T100000",
+                });
+    }
+
+    /**
+     * This test fails because of a bug in RecurrenceProcessor.expand(). We
+     * don't have time to fix the bug yet but we don't want to lose track of
+     * this test either. The "failing" prefix on the method name prevents this
+     * test from being run. Remove the "failing" prefix when the bug is fixed.
+     * 
+     * @throws Exception
+     */
+    @SmallTest
+    public void failingTestYearly3() throws Exception {
+        verifyRecurrence("20060101T100000",
+                "FREQ=YEARLY;BYMONTH=3;BYDAY=TH",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "20060101T000000", "20090131T000000",
+                new String[]{
+                "20060101T100000",
+                "20060302T100000",
+                "20060309T100000",
+                "20060316T100000",
+                "20060323T100000",
+                "20060330T100000",
+                "20070301T100000",
+                "20070308T100000",
+                "20070315T100000",
+                "20070322T100000",
+                "20070329T100000",
+                "20080306T100000",
+                "20080313T100000",
+                "20080320T100000",
+                "20080327T100000",
+                });
+    }
+
+    /**
+     * This test fails because of a bug in RecurrenceProcessor.expand(). We
+     * don't have time to fix the bug yet but we don't want to lose track of
+     * this test either. The "failing" prefix on the method name prevents this
+     * test from being run. Remove the "failing" prefix when the bug is fixed.
+     * 
+     * @throws Exception
+     */
+    @SmallTest
+    public void failingTestYearly4() throws Exception {
+        verifyRecurrence("19920101T100000",
+                "FREQ=YEARLY;INTERVAL=4;BYMONTH=11;BYDAY=TU;BYMONTHDAY=2,3,4,5,6,7,8",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "19920101T000000", "20121231T000000",
+                new String[]{
+                "19920101T100000",
+                "19921103T100000",
+                "19961105T100000",
+                "20001107T100000",
+                "20041102T100000",
+                "20081104T100000",
+                "20121106T100000",
+                });
+    }
+    
+    // These recurrence rules are used in the loop that measures the performance
+    // of recurrence expansion.
+    private static final String[] performanceRrules = new String[] {
+        "FREQ=DAILY;COUNT=100",
+        "FREQ=DAILY;INTERVAL=2;UNTIL=20080101T000000Z",
+        "FREQ=YEARLY;UNTIL=20090131T090000Z;BYMONTH=1;BYDAY=SU,MO,TU,WE,TH,FR,SA",
+        "FREQ=WEEKLY;INTERVAL=2;WKST=SU",
+        "FREQ=WEEKLY;COUNT=100;WKST=SU;BYDAY=MO,TU,WE,TH,FR",
+        "FREQ=MONTHLY;COUNT=100;BYDAY=1FR",
+        "FREQ=MONTHLY;INTERVAL=2;COUNT=100;BYDAY=1SU,-1SU",
+        "FREQ=MONTHLY;BYMONTHDAY=1,15",
+        "FREQ=MONTHLY;INTERVAL=3;COUNT=100;BYMONTHDAY=10,11,12,13,14",
+        "FREQ=YEARLY;COUNT=100;BYMONTH=6,7,8",
+        "FREQ=YEARLY;INTERVAL=2;BYMONTH=1,2,3,6,7,8",
+        "FREQ=YEARLY;COUNT=100;BYYEARDAY=1,100,200",
+        "FREQ=YEARLY;BYDAY=2MO",
+        "FREQ=YEARLY;BYWEEKNO=2,3,4;BYDAY=MO",
+        "FREQ=YEARLY;BYMONTH=3,4,5;BYDAY=TH",
+        "FREQ=MONTHLY;BYDAY=FR;BYMONTHDAY=13",
+        "FREQ=MONTHLY;BYDAY=SA;BYMONTHDAY=7,8,9,10,11,12,13",
+        "FREQ=YEARLY;INTERVAL=2;BYMONTH=11;BYDAY=TU;BYMONTHDAY=2,3,4,5,6,7,8",
+        "FREQ=WEEKLY;INTERVAL=2;COUNT=100;BYDAY=TU,SU;WKST=MO",
+        "FREQ=WEEKLY;INTERVAL=2;COUNT=100;BYDAY=TU,SU;WKST=SU",
+    };
+    
+    /**
+     * This test never fails.  It just runs for a while (about 10 seconds)
+     * in order to measure the performance of recurrence expansion.
+     * 
+     * @throws Exception
+     */
+    @LargeTest
+    public void performanceTextExpand() throws Exception {
+        String tz = "America/Los_Angeles";
+        Time dtstart = new Time(tz);
+        Time rangeStart = new Time(tz);
+        Time rangeEnd = new Time(tz);
+        TreeSet<Long> out = new TreeSet<Long>();
+
+        dtstart.parse("20010101T000000");
+        rangeStart.parse("20010101T000000");
+        rangeEnd.parse("20090101T000000");
+        long rangeStartMillis = rangeStart.toMillis(false /* use isDst */);
+        long rangeEndMillis = rangeEnd.toMillis(false /* use isDst */);
+
+        long startTime = System.currentTimeMillis();
+        for (int iterations = 0; iterations < 5; iterations++) {
+            RecurrenceProcessor rp = new RecurrenceProcessor();
+
+            int len = performanceRrules.length;
+            for (int i = 0; i < len; i++) {
+                String rrule = performanceRrules[i];
+                //Log.i(TAG, "expanding rule: " + rrule);
+                RecurrenceSet recur = new RecurrenceSet(rrule, null, null, null);
+                
+                long [] dates = rp.expand(dtstart, recur, rangeStartMillis, rangeEndMillis);
+                //Log.i(TAG, "num instances: " + out.size());
+                
+                // Also include the time to iterate through the expanded values
+                for (long date : dates) {
+                    // Use the date so that this loop is not optimized away.
+                    if (date == -1) {
+                        Log.e(TAG, "unexpected date");
+                        break;
+                    }
+                }
+                out.clear();
+            }
+        }
+        
+        long endTime = System.currentTimeMillis();
+        long elapsed = endTime - startTime;
+        Log.i(TAG, "testPerformanceExpand() expand() elapsed millis: " + elapsed);
+    }
+    
+    @LargeTest
+    public void performanceTestNormalize() throws Exception {
+        final int ITERATIONS = 50000; 
+
+        String tz = "America/Los_Angeles";
+        Time date = new Time(tz);
+        date.parse("20090404T100000");
+
+        long startTime = System.currentTimeMillis();
+
+        for (int i = 0; i < ITERATIONS; i++) {
+            date.month += 1;
+            date.monthDay += 100;
+            date.normalize(true);
+            date.month -= 1;
+            date.monthDay -= 100;
+            date.normalize(true);
+        }
+        
+        long endTime = System.currentTimeMillis();
+        long elapsed = endTime - startTime;
+        Log.i(TAG, "date: " + date.format2445());
+        Log.i(TAG, "testPerformanceNormalize() normalize() elapsed millis: " + elapsed);
+
+        // Time the unsafe version
+        date.parse("20090404T100000");
+        startTime = System.currentTimeMillis();
+        for (int i = 0; i < ITERATIONS; i++) {
+            date.month += 1;
+            date.monthDay += 100;
+            RecurrenceProcessor.unsafeNormalize(date);
+            date.month -= 1;
+            date.monthDay -= 100;
+            RecurrenceProcessor.unsafeNormalize(date);
+        }
+        
+        endTime = System.currentTimeMillis();
+        elapsed = endTime - startTime;
+        Log.i(TAG, "date: " + date.format2445());
+        Log.i(TAG, "testPerformanceNormalize() unsafeNormalize() elapsed millis: " + elapsed);
+    }
+ }

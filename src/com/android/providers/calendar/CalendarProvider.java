@@ -86,7 +86,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
-import java.util.TreeSet;
 
 public class CalendarProvider extends AbstractSyncableContentProvider {
 
@@ -181,15 +180,17 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     // A thread that runs in the background and schedules the next
     // calendar event alarm.
-    private class AlarmScheduler implements Runnable {
-
-        public AlarmScheduler() {
+    private class AlarmScheduler extends Thread {
+        boolean mRemoveAlarms;
+        
+        public AlarmScheduler(boolean removeAlarms) {
+            mRemoveAlarms = removeAlarms;
         }
 
         public void run() {
             try {
                 Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
-                runScheduleNextAlarm();
+                runScheduleNextAlarm(mRemoveAlarms);
             } catch (SQLException e) {
                 Log.e(TAG, "runScheduleNextAlarm() failed", e);
             }
@@ -230,7 +231,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 53;
+    private static final int DATABASE_VERSION = 54;
 
     private static final String EXPECTED_PROJECTION = "/full";
 
@@ -271,6 +272,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     private AlarmManager mAlarmManager;
 
     private CalendarSyncAdapter mSyncAdapter;
+    private CalendarAppWidgetProvider mAppWidgetProvider = CalendarAppWidgetProvider.getInstance();
 
     /**
      * Listens for timezone changes and disk-no-longer-full events
@@ -284,13 +286,13 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             }
             if (Intent.ACTION_TIMEZONE_CHANGED.equals(action)) {
                 updateTimezoneDependentFields();
-                scheduleNextAlarm();
+                scheduleNextAlarm(false /* do not remove alarms */);
             } else if (Intent.ACTION_DEVICE_STORAGE_OK.equals(action)) {
                 // Try to clean up if things were screwy due to a full disk
                 updateTimezoneDependentFields();
-                scheduleNextAlarm();
+                scheduleNextAlarm(false /* do not remove alarms */);
             } else if (Intent.ACTION_TIME_CHANGED.equals(action)) {
-                scheduleNextAlarm();
+                scheduleNextAlarm(false /* do not remove alarms */);
             }
         }
     };
@@ -538,6 +540,13 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             oldVersion += 1;
         }
 
+        if (oldVersion == 53) {
+            Log.w(TAG, "adding eventSyncAccountAndIdIndex");
+            db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
+                    + Events._SYNC_ACCOUNT + ", " + Events._SYNC_ID + ");");
+            oldVersion += 1;
+        }
+
         return true; // this was lossless
     }
 
@@ -622,6 +631,9 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         "originalAllDay INTEGER," +
                         "lastDate INTEGER" +               // millis since epoch
                     ");");
+
+        db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
+                + Events._SYNC_ACCOUNT + ", " + Events._SYNC_ID + ");");
 
         db.execSQL("CREATE INDEX eventsCalendarIdIndex ON Events (" +
                    Events.CALENDAR_ID +
@@ -1651,8 +1663,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
             RecurrenceProcessor rp = new RecurrenceProcessor();
 
-            TreeSet<Long> dates = new TreeSet<Long>();
-
             int statusColumn = entries.getColumnIndex(Events.STATUS);
             int dtstartColumn = entries.getColumnIndex(Events.DTSTART);
             int dtendColumn = entries.getColumnIndex(Events.DTEND);
@@ -1771,12 +1781,14 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         }
                     }
 
+                    long[] dates;
                     try {
-                        rp.expand(eventTime, recur,
-                                  begin /* range start */, end /* range end */, dates);
-                    }
-                    catch (DateException e) {
-                        Log.w(TAG, "RecurrenceProcessor.expand skipping",e);
+                        dates = rp.expand(eventTime, recur, begin, end);
+                    } catch (DateException e) {
+                        Log.w(TAG, "RecurrenceProcessor.expand skipping " + recur, e);
+                        continue;
+                    } catch (TimeFormatException e) {
+                        Log.w(TAG, "RecurrenceProcessor.expand skipping " + recur, e);
                         continue;
                     }
 
@@ -1788,12 +1800,13 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         eventTime.timezone = localTimezone;
                     }
 
+                    long durationMillis = duration.getMillis();
                     for (long date : dates) {
                         initialValues = new ContentValues();
                         initialValues.put(Instances.EVENT_ID, eventId);
 
                         initialValues.put(Instances.BEGIN, date);
-                        long dtendMillis = duration.addTo(date);
+                        long dtendMillis = date + durationMillis;
                         initialValues.put(Instances.END, dtendMillis);
 
                         computeTimezoneDependentFields(date, dtendMillis,
@@ -1830,10 +1843,9 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     // add events to the instances map if they don't actually fall within our
                     // expansion window.
                     if ((dtendMillis < begin) || (dtstartMillis > end)) {
-                        continue;
+                        initialValues.put(Events.STATUS, Events.STATUS_CANCELED);
                     }
 
-                    initialValues = new ContentValues();
                     initialValues.put(Instances.EVENT_ID, eventId);
                     initialValues.put(Instances.BEGIN, dtstartMillis);
 
@@ -1870,12 +1882,9 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
                     String originalEvent = values.getAsString(Events.ORIGINAL_EVENT);
                     long originalTime = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
-                    int status = values.getAsInteger(Events.STATUS);
-                    InstancesList originalList = instancesMap.get(originalEvent);
+                     InstancesList originalList = instancesMap.get(originalEvent);
                     if (originalList == null) {
-                        // The original recurrence does not exist so cancel
-                        // this recurrence exception.
-                        values.put(Events.STATUS, Events.STATUS_CANCELED);
+                        // The original recurrence is not present, so don't try canceling it.
                         continue;
                     }
 
@@ -2373,20 +2382,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             case EVENTS:
                 if (!isTemporary()) {
                     initialValues.put(Events._SYNC_DIRTY, 1);
-
-                    // Disallow inserting the attendee status in the Events
-                    // table because that makes it harder to keep the value
-                    // consistent with the corresponding entry in the
-                    // Attendees table.  Note that it's okay (and expected)
-                    // for the temporary table to contain the attendee status
-                    // because that comes from the server sync and the Events
-                    // table is already consistent with the Attendees table.
-                    if (initialValues.containsKey(Events.SELF_ATTENDEE_STATUS)) {
-                        throw new IllegalArgumentException("Inserting "
-                                + Events.SELF_ATTENDEE_STATUS
-                                + " in Events table is not allowed");
-                    }
-
                     if (!initialValues.containsKey(Events.DTSTART)) {
                         throw new RuntimeException("DTSTART field missing from event");
                     }
@@ -2406,6 +2401,14 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     updateEventRawTimesLocked(rowId, updatedValues);
                     updateInstancesLocked(updatedValues, rowId, true /* new event */, db);
                     insertBusyBitsLocked(rowId, updatedValues);
+                    
+                    // If we inserted a new event that specified the self-attendee
+                    // status, then we need to add an entry to the attendees table.
+                    if (initialValues.containsKey(Events.SELF_ATTENDEE_STATUS)) {
+                        int status = initialValues.getAsInteger(Events.SELF_ATTENDEE_STATUS);
+                        createAttendeeEntry(rowId, status);
+                    }
+                    triggerAppWidgetUpdate(rowId);
                 }
 
                 return uri;
@@ -2453,7 +2456,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     if (DEBUG_ALARMS) {
                         Log.i(TAG, "insertInternal() changing reminder");
                     }
-                    scheduleNextAlarm();
+                    scheduleNextAlarm(false /* do not remove alarms */);
                 }
                 return Uri.parse("content://calendars/reminders/" + rowID);
             case CALENDAR_ALERTS:
@@ -2511,7 +2514,68 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         Log.e(TAG, "unable to find the email address in calendar " + feed);
         return null;
     }
+    
+    /**
+     * Creates an entry in the Attendees table that refers to the given event
+     * and that has the given response status.
+     * 
+     * @param eventId the event id that the new entry in the Attendees table
+     * should refer to
+     * @param status the response status
+     */
+    private void createAttendeeEntry(long eventId, int status) {
+        ContentValues values = new ContentValues();
+        values.put(Attendees.EVENT_ID, eventId);
+        values.put(Attendees.ATTENDEE_STATUS, status);
+        values.put(Attendees.ATTENDEE_TYPE, Attendees.TYPE_NONE);
+        values.put(Attendees.ATTENDEE_RELATIONSHIP,
+                Attendees.RELATIONSHIP_ATTENDEE);
 
+        // Get the calendar id for this event
+        Cursor cursor = null;
+        long calId;
+        try {
+            cursor = query(ContentUris.withAppendedId(Events.CONTENT_URI, eventId),
+                    new String[] { Events.CALENDAR_ID },
+                    null /* selection */,
+                    null /* selectionArgs */,
+                    null /* sort */);
+            if (cursor == null) {
+                return;
+            }
+            cursor.moveToFirst();
+            calId = cursor.getLong(0);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+
+        // Get the email address of this user from this Calendar
+        String emailAddress = null;
+        cursor = null;
+        try {
+            cursor = query(ContentUris.withAppendedId(Calendars.CONTENT_URI, calId),
+                    new String[] { "_sync_account" },
+                    null /* selection */,
+                    null /* selectionArgs */,
+                    null /* sort */);
+            if (cursor == null) {
+                return;
+            }
+            cursor.moveToFirst();
+            emailAddress = cursor.getString(0);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+        values.put(Attendees.ATTENDEE_EMAIL, emailAddress);
+        
+        // We don't know the ATTENDEE_NAME but that will be filled in by the
+        // server and sent back to us.
+        mAttendeesInserter.insert(values);
+    }
 
     /**
      * Updates the attendee status in the Events table to be consistent with
@@ -2871,6 +2935,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         cursor.close();
                         cursor = null;
                     }
+                    triggerAppWidgetUpdate(-1);
                 }
 
                 // There is a delete trigger that will cause all instances
@@ -3039,7 +3104,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                             if (DEBUG_ALARMS) {
                                 Log.i(TAG, "updateInternal() changing event");
                             }
-                            scheduleNextAlarm();
+                            scheduleNextAlarm(false /* do not remove alarms */);
+                            triggerAppWidgetUpdate(id);
                         }
                     }
                 }
@@ -3068,7 +3134,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     if (DEBUG_ALARMS) {
                         Log.i(TAG, "updateInternal() changing reminder");
                     }
-                    scheduleNextAlarm();
+                    scheduleNextAlarm(false /* do not remove alarms */);
                 }
                 return result;
             }
@@ -3189,12 +3255,36 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         if (DEBUG_ALARMS) {
             Log.i(TAG, "onSyncStop() success: " + success);
         }
-        scheduleNextAlarm();
+        scheduleNextAlarm(false /* do not remove alarms */);
+        triggerAppWidgetUpdate(-1);
     }
 
     @Override
     protected Iterable<EventMerger> getMergers() {
         return Collections.singletonList(new EventMerger());
+    }
+    
+    /**
+     * Update any existing widgets with the changed events.
+     * 
+     * @param changedEventId Specific event known to be changed, otherwise -1.
+     *            If present, we use it to decide if an update is necessary.
+     */
+    private synchronized void triggerAppWidgetUpdate(long changedEventId) {
+        Context context = getContext();
+        if (context != null) {
+            mAppWidgetProvider.providerUpdated(context, changedEventId);
+        }
+    }
+    
+    void bootCompleted() {
+        // Remove alarms from the CalendarAlerts table that have been marked
+        // as "scheduled" but not fired yet.  We do this because the
+        // AlarmManagerService loses all information about alarms when the
+        // power turns off but we store the information in a database table
+        // that persists across reboots. See the documentation for
+        // scheduleNextAlarmLocked() for more information.
+        scheduleNextAlarm(true /* remove alarms */);
     }
 
     /* Retrieve and cache the alarm manager */
@@ -3247,8 +3337,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     /*
      * This method runs the alarm scheduler in a background thread.
      */
-    void scheduleNextAlarm() {
-        Thread thread = new Thread(new AlarmScheduler());
+    void scheduleNextAlarm(boolean removeAlarms) {
+        Thread thread = new AlarmScheduler(removeAlarms);
         thread.start();
     }
 
@@ -3256,9 +3346,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
      * This method runs in a background thread and schedules an alarm for
      * the next calendar event, if necessary.
      */
-    private void runScheduleNextAlarm() {
-        // Do not schedule any events while syncing or if this is a temporary
-        // database.
+    private void runScheduleNextAlarm(boolean removeAlarms) {
+        // Do not schedule any alarms if this is a temporary database.
         if (isTemporary()) {
             if (DEBUG_ALARMS) {
                 Log.i(TAG, "runScheduleNextAlarm cancelled because database is temporary");
@@ -3269,6 +3358,9 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         final SQLiteDatabase db = mOpenHelper.getWritableDatabase();
         db.beginTransaction();
         try {
+            if (removeAlarms) {
+                removeScheduledAlarmsLocked(db);
+            }
             scheduleNextAlarmLocked(db);
             db.setTransactionSuccessful();
         } finally {
@@ -3278,7 +3370,27 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     /**
      * This method looks at the 24-hour window from now for any events that it
-     * needs to schedule.  This method runs within a database transaction.
+     * needs to schedule.  This method runs within a database transaction. It
+     * also runs in a background thread.
+     * 
+     * The CalendarProvider keeps track of which alarms it has already scheduled
+     * to avoid scheduling them more than once and for debugging problems with
+     * alarms.  It stores this knowledge in a database table called CalendarAlerts
+     * which persists across reboots.  But the actual alarm list is in memory
+     * and disappears if the phone loses power.  To avoid missing an alarm, we
+     * clear the entries in the CalendarAlerts table when we start up the
+     * CalendarProvider.
+     * 
+     * Scheduling an alarm multiple times is not tragic -- we filter out the
+     * extra ones when we receive them. But we still need to keep track of the
+     * scheduled alarms. The main reason is that we need to prevent multiple
+     * notifications for the same alarm (on the receive side) in case we
+     * accidentally schedule the same alarm multiple times.  We don't have
+     * visibility into the system's alarm list so we can never know for sure if
+     * we have already scheduled an alarm and it's better to err on scheduling
+     * an alarm twice rather than missing an alarm.  Another reason we keep
+     * track of scheduled alarms in a database table is that it makes it easy to
+     * run an SQL query to find the next reminder that we haven't scheduled.
      *
      * @param db the database
      */
@@ -3345,7 +3457,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             + " AND CA.alarmTime=myAlarmTime)"
             + " ORDER BY myAlarmTime,begin,title";
 
-        acquireInstanceRange(start, end, false /* don't use minimum expansion windows */);
+        acquireInstanceRangeLocked(start, end, false /* don't use minimum expansion windows */);
         Cursor cursor = null;
         try {
             cursor = db.rawQuery(query, null);
@@ -3361,7 +3473,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 time.set(nextAlarmTime);
                 String alarmTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
                 Log.i(TAG, "nextAlarmTime: " + alarmTimeStr
-                        + " cursor results: " + cursor.getCount());
+                        + " cursor results: " + cursor.getCount()
+                        + " query: " + query);
             }
 
             while (cursor.moveToNext()) {
@@ -3469,6 +3582,30 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         } else {
             scheduleNextAlarmCheck(currentMillis + android.text.format.DateUtils.DAY_IN_MILLIS);
         }
+    }
+    
+    /**
+     * Removes the entries in the CalendarAlerts table for alarms that we have
+     * scheduled but that have not fired yet. We do this to ensure that we
+     * don't miss an alarm.  The CalendarAlerts table keeps track of the
+     * alarms that we have scheduled but the actual alarm list is in memory
+     * and will be cleared if the phone reboots.
+     * 
+     * We don't need to remove entries that have already fired, and in fact
+     * we should not remove them because we need to display the notifications
+     * until the user dismisses them.
+     * 
+     * We could remove entries that have fired and been dismissed, but we leave
+     * them around for a while because it makes it easier to debug problems.
+     * Entries that are old enough will be cleaned up later when we schedule
+     * new alarms.
+     */
+    private void removeScheduledAlarmsLocked(SQLiteDatabase db) {
+        if (DEBUG_ALARMS) {
+            Log.i(TAG, "removing scheduled alarms");
+        }
+        db.delete(CalendarAlerts.TABLE_NAME,
+                CalendarAlerts.STATE + "=" + CalendarAlerts.SCHEDULED, null /* whereArgs */);
     }
 
     private static String sEventsTable = "Events";

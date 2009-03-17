@@ -16,12 +16,12 @@
 
 package com.android.providers.calendar;
 
+import android.content.BroadcastReceiver;
 import android.content.ContentProvider;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.IContentProvider;
 import android.content.Intent;
-import android.content.BroadcastReceiver;
 
 /**
  * This IntentReceiver executes when the boot completes and ensures that
@@ -43,9 +43,9 @@ public class CalendarReceiver extends BroadcastReceiver {
         provider = (CalendarProvider) ContentProvider.
                 coerceToLocalContentProvider(icp);
         if (action.equals(SCHEDULE)) {
-            provider.scheduleNextAlarm();
+            provider.scheduleNextAlarm(false /* do not remove alarms */);
         } else if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
-            provider.scheduleNextAlarm();
+            provider.bootCompleted();
         }
         cr.releaseProvider(icp);
     }

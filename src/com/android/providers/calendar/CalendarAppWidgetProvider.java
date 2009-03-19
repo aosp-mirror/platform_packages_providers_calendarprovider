@@ -50,6 +50,11 @@ public class CalendarAppWidgetProvider extends AppWidgetProvider {
      * Maximum time to hold {@link WakeLock} when performing widget updates.
      */
     static final long WAKE_LOCK_TIMEOUT = DateUtils.MINUTE_IN_MILLIS;
+    
+    static final String PACKAGE_THIS_APPWIDGET =
+        "com.android.providers.calendar";
+    static final String CLASS_THIS_APPWIDGET =
+        "com.android.providers.calendar.CalendarAppWidgetProvider";
 
     private static CalendarAppWidgetProvider sInstance;
     
@@ -130,7 +135,7 @@ public class CalendarAppWidgetProvider extends AppWidgetProvider {
      * {@link AppWidgetProvider}
      */
     static ComponentName getComponentName(Context context) {
-        return new ComponentName(context, CalendarAppWidgetProvider.class);
+        return new ComponentName(PACKAGE_THIS_APPWIDGET, CLASS_THIS_APPWIDGET);
     }
 
     /**
@@ -143,8 +148,13 @@ public class CalendarAppWidgetProvider extends AppWidgetProvider {
      */
     void providerUpdated(Context context, long changedEventId) {
         if (hasInstances(context)) {
-            performUpdate(context, null /* all widgets */,
-                    new long[] { changedEventId }, false /* force */);
+            // Only pass along changedEventId if not -1
+            long[] changedEventIds = null;
+            if (changedEventId != -1) {
+                changedEventIds = new long[] { changedEventId };
+            }
+            
+            performUpdate(context, null /* all widgets */, changedEventIds, false /* force */);
         }
     }
 

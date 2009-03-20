@@ -31,8 +31,7 @@ import java.util.Set;
  */
 public class AppWidgetShared {
     static final String TAG = "AppWidgetShared";
-    // STOPSHIP: remove this debugging flag
-    static final boolean LOGD = true;
+    static final boolean LOGD = false;
     
     static Object sLock = new Object();
     static WakeLock sWakeLock;

@@ -409,7 +409,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
         if (!isTemporary()) {
             mCalendarClient = new CalendarClient(
-                new AndroidGDataClient(getContext().getContentResolver()),
+                new AndroidGDataClient(getContext(), CalendarSyncAdapter.USER_AGENT_APP_VERSION),
                 new XmlCalendarGDataParserFactory(
                 new AndroidXmlParserFactory()));
         }
@@ -1936,23 +1936,18 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 InstancesList list = instancesMap.get(syncId);
                 for (ContentValues values : list) {
 
-                    // If this instance is a recurrence exception that wasn't
-                    // canceled, then create a new instance.
-                    if (values.containsKey(Events.ORIGINAL_EVENT)) {
-                        int status = values.getAsInteger(Events.STATUS);
-
-                        // If this recurrence exception is marked as "canceled"
-                        // then do not add this recurrence exception.
-                        if (status == Events.STATUS_CANCELED) {
-                            continue;
-                        }
-
-                        // Remove these fields before inserting a new instance
-                        values.remove(Events.ORIGINAL_EVENT);
-                        values.remove(Events.ORIGINAL_INSTANCE_TIME);
-                        values.remove(Events.STATUS);
+                    // If this instance was cancelled then don't create a new
+                    // instance.
+                    Integer status = values.getAsInteger(Events.STATUS);
+                    if (status != null && status == Events.STATUS_CANCELED) {
+                        continue;
                     }
 
+                    // Remove these fields before inserting a new instance
+                    values.remove(Events.ORIGINAL_EVENT);
+                    values.remove(Events.ORIGINAL_INSTANCE_TIME);
+                    values.remove(Events.STATUS);
+                    
                     mInstancesInserter.replace(values);
                     if (false) {
                         // yield the lock if anyone else is trying to

@@ -45,8 +45,7 @@ import java.util.TimeZone;
 
 public class CalendarAppWidgetService extends Service implements Runnable {
     static final String TAG = "CalendarAppWidgetService";
-    // STOPSHIP: remove this debugging flag
-    static final boolean LOGD = true;
+    static final boolean LOGD = false;
     
     static final String EVENT_SORT_ORDER = "startDay ASC, allDay DESC, begin ASC";
 

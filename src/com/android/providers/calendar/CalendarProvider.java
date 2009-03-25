@@ -1950,9 +1950,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         // Remove these fields before inserting a new instance
                         values.remove(Events.ORIGINAL_EVENT);
                         values.remove(Events.ORIGINAL_INSTANCE_TIME);
-                        values.remove(Events.STATUS);
                     }
 
+                    // Remove the 'eventStatus' before inserting a new instance
+                    values.remove(Events.STATUS);
                     mInstancesInserter.replace(values);
                     if (false) {
                         // yield the lock if anyone else is trying to

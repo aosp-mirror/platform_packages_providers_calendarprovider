@@ -409,7 +409,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
         if (!isTemporary()) {
             mCalendarClient = new CalendarClient(
-                new AndroidGDataClient(getContext().getContentResolver()),
+                new AndroidGDataClient(getContext(), CalendarSyncAdapter.USER_AGENT_APP_VERSION),
                 new XmlCalendarGDataParserFactory(
                 new AndroidXmlParserFactory()));
         }

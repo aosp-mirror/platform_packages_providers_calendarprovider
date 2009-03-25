@@ -71,6 +71,8 @@ import java.util.Vector;
  */
 public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
+    /* package */ static final String USER_AGENT_APP_VERSION = "Android-GData-Calendar/1.1";
+
     private static final String SELECT_BY_ACCOUNT = Calendars._SYNC_ACCOUNT + "=?";
     private static final String SELECT_BY_ACCOUNT_AND_FEED =
             SELECT_BY_ACCOUNT + " AND " + Calendars.URL + "=?";
@@ -116,7 +118,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
     protected CalendarSyncAdapter(Context context, SyncableContentProvider provider) {
         super(context, provider);
         mCalendarClient = new CalendarClient(
-                new AndroidGDataClient(context),
+                new AndroidGDataClient(context, USER_AGENT_APP_VERSION),
                 new XmlCalendarGDataParserFactory(new AndroidXmlParserFactory()));
     }
 

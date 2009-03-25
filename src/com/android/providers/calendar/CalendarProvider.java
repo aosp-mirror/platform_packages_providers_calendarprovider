@@ -859,9 +859,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         }
 
         Set<String> handledAccounts = Sets.newHashSet();
-        ContentResolver cr = getContext().getContentResolver();
         if (Config.LOGV) Log.v(TAG, "querying calendars");
-        Cursor c = cr.query(Calendars.CONTENT_URI, ACCOUNTS_PROJECTION, null, null, null);
+        Cursor c = queryInternal(Calendars.CONTENT_URI, ACCOUNTS_PROJECTION, null, null, null);
         try {
             while (c.moveToNext()) {
                 String account = c.getString(0);
@@ -913,7 +912,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             // when the user does a sync.
             values.put(Calendars.TIMEZONE, Time.getCurrentTimezone());
             values.put(Calendars.ACCESS_LEVEL, Calendars.OWNER_ACCESS);
-            cr.insert(Calendars.CONTENT_URI, values);
+            insertInternal(Calendars.CONTENT_URI, values);
 
             scheduleSync(account, false /* do a full sync */, null /* no url */);
         }

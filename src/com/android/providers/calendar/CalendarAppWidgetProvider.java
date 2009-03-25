@@ -34,8 +34,7 @@ import android.util.Log;
  */
 public class CalendarAppWidgetProvider extends AppWidgetProvider {
     static final String TAG = "CalendarAppWidgetProvider";
-    // STOPSHIP: remove this debugging flag
-    static final boolean LOGD = true;
+    static final boolean LOGD = false;
 
     static final String ACTION_CALENDAR_APPWIDGET_UPDATE =
             "com.android.providers.calendar.APPWIDGET_UPDATE";

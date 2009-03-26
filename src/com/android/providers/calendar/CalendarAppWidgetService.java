@@ -353,8 +353,6 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         views.setTextColor(R.id.when, colorFilter);
         views.setTextColor(R.id.title, colorFilter);
         views.setTextColor(R.id.where, colorFilter);
-        views.setDrawableParameters(R.id.divider, true, -1,
-                res.getColor(R.color.appwidget_date), PorterDuff.Mode.SRC_IN, -1);
         
         // When
         long start = cursor.getLong(INDEX_BEGIN);

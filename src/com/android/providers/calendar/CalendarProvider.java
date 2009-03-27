@@ -90,7 +90,6 @@ import java.util.TimeZone;
 public class CalendarProvider extends AbstractSyncableContentProvider {
 
     private static final boolean PROFILE = false;
-    private static final boolean DEBUG_ALARMS = false;
     private static final boolean MULTIPLE_ATTENDEES_PER_EVENT = false;
     private static final String[] ACCOUNTS_PROJECTION = new String[] { Calendars._SYNC_ACCOUNT};
 
@@ -281,8 +280,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
-            if (DEBUG_ALARMS) {
-                Log.i(TAG, "onReceive() " + action);
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "onReceive() " + action);
             }
             if (Intent.ACTION_TIMEZONE_CHANGED.equals(action)) {
                 updateTimezoneDependentFields();
@@ -362,6 +361,11 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         MetaData.Fields fields = mMetaData.getFields();
         String localTimezone = TimeZone.getDefault().getID();
         if (TextUtils.equals(fields.timezone, localTimezone)) {
+            // Even if the timezone hasn't changed, check for missed alarms.
+            // This code executes when the CalendarProvider is created and
+            // helps to catch missed alarms when the Calendar process is
+            // killed (because of low-memory conditions) and then restarted.
+            rescheduleMissedAlarms();
             return;
         }
 
@@ -387,6 +391,16 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         qb = new SQLiteQueryBuilder();
         handleBusyBitsQuery(qb, startDay, endDay, sBusyBitProjection,
                 null /* selection */, null /* sort */);
+        rescheduleMissedAlarms();
+    }
+
+    private void rescheduleMissedAlarms() {
+        AlarmManager manager = getAlarmManager();
+        if (manager != null) {
+            Context context = getContext();
+            ContentResolver cr = context.getContentResolver();
+            CalendarAlerts.rescheduleMissedAlarms(cr, context, manager);
+        }
     }
 
     @Override
@@ -395,7 +409,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
         if (!isTemporary()) {
             mCalendarClient = new CalendarClient(
-                new AndroidGDataClient(getContext().getContentResolver()),
+                new AndroidGDataClient(getContext(), CalendarSyncAdapter.USER_AGENT_APP_VERSION),
                 new XmlCalendarGDataParserFactory(
                 new AndroidXmlParserFactory()));
         }
@@ -1922,23 +1936,18 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 InstancesList list = instancesMap.get(syncId);
                 for (ContentValues values : list) {
 
-                    // If this instance is a recurrence exception that wasn't
-                    // canceled, then create a new instance.
-                    if (values.containsKey(Events.ORIGINAL_EVENT)) {
-                        int status = values.getAsInteger(Events.STATUS);
-
-                        // If this recurrence exception is marked as "canceled"
-                        // then do not add this recurrence exception.
-                        if (status == Events.STATUS_CANCELED) {
-                            continue;
-                        }
-
-                        // Remove these fields before inserting a new instance
-                        values.remove(Events.ORIGINAL_EVENT);
-                        values.remove(Events.ORIGINAL_INSTANCE_TIME);
-                        values.remove(Events.STATUS);
+                    // If this instance was cancelled then don't create a new
+                    // instance.
+                    Integer status = values.getAsInteger(Events.STATUS);
+                    if (status != null && status == Events.STATUS_CANCELED) {
+                        continue;
                     }
 
+                    // Remove these fields before inserting a new instance
+                    values.remove(Events.ORIGINAL_EVENT);
+                    values.remove(Events.ORIGINAL_INSTANCE_TIME);
+                    values.remove(Events.STATUS);
+                    
                     mInstancesInserter.replace(values);
                     if (false) {
                         // yield the lock if anyone else is trying to
@@ -2453,8 +2462,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
                 if (!isTemporary()) {
                     // Schedule another event alarm, if necessary
-                    if (DEBUG_ALARMS) {
-                        Log.i(TAG, "insertInternal() changing reminder");
+                    if (Log.isLoggable(TAG, Log.DEBUG)) {
+                        Log.d(TAG, "insertInternal() changing reminder");
                     }
                     scheduleNextAlarm(false /* do not remove alarms */);
                 }
@@ -3101,8 +3110,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         if (values.containsKey(Events.DTSTART)) {
                             // The start time of the event changed, so run the
                             // event alarm scheduler.
-                            if (DEBUG_ALARMS) {
-                                Log.i(TAG, "updateInternal() changing event");
+                            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                                Log.d(TAG, "updateInternal() changing event");
                             }
                             scheduleNextAlarm(false /* do not remove alarms */);
                             triggerAppWidgetUpdate(id);
@@ -3131,8 +3140,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 if (!isTemporary()) {
                     // Reschedule the event alarms because the
                     // "minutes" field may have changed.
-                    if (DEBUG_ALARMS) {
-                        Log.i(TAG, "updateInternal() changing reminder");
+                    if (Log.isLoggable(TAG, Log.DEBUG)) {
+                        Log.d(TAG, "updateInternal() changing reminder");
                     }
                     scheduleNextAlarm(false /* do not remove alarms */);
                 }
@@ -3252,8 +3261,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     @Override
     public void onSyncStop(SyncContext context, boolean success) {
         super.onSyncStop(context, success);
-        if (DEBUG_ALARMS) {
-            Log.i(TAG, "onSyncStop() success: " + success);
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "onSyncStop() success: " + success);
         }
         scheduleNextAlarm(false /* do not remove alarms */);
         triggerAppWidgetUpdate(-1);
@@ -3315,20 +3324,17 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         PendingIntent pending = PendingIntent.getBroadcast(context,
                 0, intent, PendingIntent.FLAG_NO_CREATE);
         if (pending != null) {
-            if (DEBUG_ALARMS) {
-                Log.i(TAG, "cancelling pending alarm " + pending);
-            }
             // Cancel any previous alarms that do the same thing.
             manager.cancel(pending);
         }
         pending = PendingIntent.getBroadcast(context,
                 0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
 
-        if (DEBUG_ALARMS) {
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
             Time time = new Time();
             time.set(triggerTime);
             String timeStr = time.format(" %a, %b %d, %Y %I:%M%P");
-            Log.i(TAG, "scheduleNextAlarmCheck at: " + triggerTime + timeStr);
+            Log.d(TAG, "scheduleNextAlarmCheck at: " + triggerTime + timeStr);
         }
 
         manager.set(AlarmManager.RTC_WAKEUP, triggerTime, pending);
@@ -3349,9 +3355,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     private void runScheduleNextAlarm(boolean removeAlarms) {
         // Do not schedule any alarms if this is a temporary database.
         if (isTemporary()) {
-            if (DEBUG_ALARMS) {
-                Log.i(TAG, "runScheduleNextAlarm cancelled because database is temporary");
-            }
             return;
         }
 
@@ -3405,11 +3408,11 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         final long start = currentMillis - SCHEDULE_ALARM_SLACK;
         final long end = start + (24 * 60 * 60 * 1000);
         ContentResolver cr = getContext().getContentResolver();
-        if (DEBUG_ALARMS) {
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
             Time time = new Time();
             time.set(start);
             String startTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
-            Log.i(TAG, "runScheduleNextAlarm() start search: " + startTimeStr);
+            Log.d(TAG, "runScheduleNextAlarm() start search: " + startTimeStr);
         }
 
         // Clear old alarms but keep alarms around for a while to prevent
@@ -3468,11 +3471,11 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             int alarmTimeIndex = cursor.getColumnIndex("myAlarmTime");
             int minutesIndex = cursor.getColumnIndex(Reminders.MINUTES);
 
-            if (DEBUG_ALARMS) {
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
                 Time time = new Time();
                 time.set(nextAlarmTime);
                 String alarmTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
-                Log.i(TAG, "nextAlarmTime: " + alarmTimeStr
+                Log.d(TAG, "nextAlarmTime: " + alarmTimeStr
                         + " cursor results: " + cursor.getCount()
                         + " query: " + query);
             }
@@ -3490,7 +3493,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 int minutes = cursor.getInt(minutesIndex);
                 long startTime = cursor.getLong(beginIndex);
 
-                if (DEBUG_ALARMS) {
+                if (Log.isLoggable(TAG, Log.DEBUG)) {
                     int titleIndex = cursor.getColumnIndex(Events.TITLE);
                     String title = cursor.getString(titleIndex);
                     Time time = new Time();
@@ -3503,7 +3506,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     String endTimeStr = time.format(" - %a, %b %d, %Y %I:%M%P");
                     time.set(currentMillis);
                     String currentTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
-                    Log.i(TAG, "  looking at id: " + eventId + " " + title
+                    Log.d(TAG, "  looking at id: " + eventId + " " + title
                             + " " + startTime
                             + startTimeStr + endTimeStr + " alarm: "
                             + alarmTime + schedTime
@@ -3521,10 +3524,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 // Avoid an SQLiteContraintException by checking if this alarm
                 // already exists in the table.
                 if (CalendarAlerts.alarmExists(cr, eventId, startTime, alarmTime)) {
-                    if (DEBUG_ALARMS) {
+                    if (Log.isLoggable(TAG, Log.DEBUG)) {
                         int titleIndex = cursor.getColumnIndex(Events.TITLE);
                         String title = cursor.getString(titleIndex);
-                        Log.i(TAG, "  alarm exists for id: " + eventId + " " + title);
+                        Log.d(TAG, "  alarm exists for id: " + eventId + " " + title);
                     }
                     continue;
                 }
@@ -3545,7 +3548,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 // we cannot determine that from the Events database table.
                 intent.putExtra(android.provider.Calendar.EVENT_BEGIN_TIME, startTime);
                 intent.putExtra(android.provider.Calendar.EVENT_END_TIME, endTime);
-                if (DEBUG_ALARMS) {
+                if (Log.isLoggable(TAG, Log.DEBUG)) {
                     int titleIndex = cursor.getColumnIndex(Events.TITLE);
                     String title = cursor.getString(titleIndex);
                     Time time = new Time();
@@ -3557,7 +3560,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     String endTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
                     time.set(currentMillis);
                     String currentTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
-                    Log.i(TAG, "  scheduling " + title
+                    Log.d(TAG, "  scheduling " + title
                             + startTimeStr  + " - " + endTimeStr + " alarm: " + schedTime
                             + " currentTime: " + currentTimeStr
                             + " uri: " + uri);
@@ -3601,8 +3604,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
      * new alarms.
      */
     private void removeScheduledAlarmsLocked(SQLiteDatabase db) {
-        if (DEBUG_ALARMS) {
-            Log.i(TAG, "removing scheduled alarms");
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "removing scheduled alarms");
         }
         db.delete(CalendarAlerts.TABLE_NAME,
                 CalendarAlerts.STATE + "=" + CalendarAlerts.SCHEDULED, null /* whereArgs */);

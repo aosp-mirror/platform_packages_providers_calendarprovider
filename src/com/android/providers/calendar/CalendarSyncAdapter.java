@@ -71,6 +71,8 @@ import java.util.Vector;
  */
 public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
+    /* package */ static final String USER_AGENT_APP_VERSION = "Android-GData-Calendar/1.1";
+
     private static final String SELECT_BY_ACCOUNT = Calendars._SYNC_ACCOUNT + "=?";
     private static final String SELECT_BY_ACCOUNT_AND_FEED =
             SELECT_BY_ACCOUNT + " AND " + Calendars.URL + "=?";
@@ -116,7 +118,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
     protected CalendarSyncAdapter(Context context, SyncableContentProvider provider) {
         super(context, provider);
         mCalendarClient = new CalendarClient(
-                new AndroidGDataClient(context),
+                new AndroidGDataClient(context, USER_AGENT_APP_VERSION),
                 new XmlCalendarGDataParserFactory(new AndroidXmlParserFactory()));
     }
 
@@ -544,6 +546,10 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
      * Clear out the map and stuff an Entry into it in a format that can
      * be inserted into a content provider.
      *
+     * If a date is before 1970 or past 2038, ENTRY_INVALID is returned, and DTSTART
+     * is set to -1.  This is due to the current 32-bit time restriction and
+     * will be fixed in a future release.
+     *
      * @return ENTRY_OK, ENTRY_DELETED, or ENTRY_INVALID
      */
     private int entryToContentValues(EventEntry event, Long syncLocalId,
@@ -739,7 +745,15 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                     map.put(Events.EVENT_TIMEZONE, syncInfo.calendarTimezone);
                 }
 
-                map.put(Events.DTSTART, time.toMillis(false /* use isDst */));
+                long dtstart = time.toMillis(false /* use isDst */);
+                if (dtstart < 0) {
+                    if (Config.LOGD) {
+                        Log.d(TAG, "dtstart out of range: " + startTime);
+                    }
+                    map.put(Events.DTSTART, -1);  // Flag to caller that date is out of range
+                    return ENTRY_INVALID;
+                }
+                map.put(Events.DTSTART, dtstart);
 
                 timesSet = true;
             }
@@ -747,7 +761,15 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             String endTime = when.getEndTime();
             if (!StringUtils.isEmpty(endTime)) {
                 time.parse3339(endTime);
-                map.put(Events.DTEND, time.toMillis(false /* use isDst */));
+                long dtend = time.toMillis(false /* use isDst */);
+                if (dtend < 0) {
+                    if (Config.LOGD) {
+                        Log.d(TAG, "dtend out of range: " + endTime);
+                    }
+                    map.put(Events.DTSTART, -1);  // Flag to caller that date is out of range
+                    return ENTRY_INVALID;
+                }
+                map.put(Events.DTEND, dtend);
             }
         }
 

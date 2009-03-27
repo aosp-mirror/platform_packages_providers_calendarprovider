@@ -26,12 +26,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.database.Cursor;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Paint;
 import android.graphics.PorterDuff;
-import android.graphics.Typeface;
-import android.graphics.Paint.FontMetrics;
 import android.net.Uri;
 import android.os.IBinder;
 import android.provider.Calendar.Attendees;
@@ -50,8 +45,7 @@ import java.util.TimeZone;
 
 public class CalendarAppWidgetService extends Service implements Runnable {
     static final String TAG = "CalendarAppWidgetService";
-    // STOPSHIP: remove this debugging flag
-    static final boolean LOGD = true;
+    static final boolean LOGD = false;
     
     static final String EVENT_SORT_ORDER = "startDay ASC, allDay DESC, begin ASC";
 
@@ -188,7 +182,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         }
         
         AppWidgetManager gm = AppWidgetManager.getInstance(context);
-        if (appWidgetIds != null) {
+        if (appWidgetIds != null && appWidgetIds.length > 0) {
             gm.updateAppWidget(appWidgetIds, views);
         } else {
             ComponentName thisWidget = CalendarAppWidgetProvider.getComponentName(context);
@@ -292,6 +286,30 @@ public class CalendarAppWidgetService extends Service implements Runnable {
             return (start + end) / 2;
         }
     }
+
+    /**
+     * Set visibility of various widget components if there are events, or if no
+     * events were found.
+     * 
+     * @param views Set of {@link RemoteViews} to apply visibility.
+     * @param noEvents True if no events found, otherwise false.
+     */
+    private void setNoEventsVisible(RemoteViews views, boolean noEvents) {
+        views.setViewVisibility(R.id.no_events, noEvents ? View.VISIBLE : View.GONE);
+        
+        int otherViews = noEvents ? View.GONE : View.VISIBLE;
+        views.setViewVisibility(R.id.day_of_month, otherViews);
+        views.setViewVisibility(R.id.day_of_week, otherViews);
+        views.setViewVisibility(R.id.divider, otherViews);
+        views.setViewVisibility(R.id.when, otherViews);
+        views.setViewVisibility(R.id.title, otherViews);
+
+        // Don't force-show views that are handled elsewhere 
+        if (noEvents) {
+            views.setViewVisibility(R.id.conflict, otherViews);
+            views.setViewVisibility(R.id.where, otherViews);
+        }
+    }
     
     /**
      * Build a set of {@link RemoteViews} that describes how to update any
@@ -305,6 +323,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         ContentResolver resolver = context.getContentResolver();
         
         RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.agenda_appwidget);
+        setNoEventsVisible(views, false);
         
         // Clicking on widget launches the agenda view in Calendar
         Intent agendaIntent = new Intent();
@@ -318,205 +337,91 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         time.setToNow();
         int yearDay = time.yearDay;
         int dateNumber = time.monthDay;
-
-        // Set calendar icon with actual date
-        views.setImageViewBitmap(R.id.icon, getDateOverlay(res, dateNumber));
-        views.setViewVisibility(R.id.icon, View.VISIBLE);
-        views.setViewVisibility(R.id.no_events, View.GONE);
-
+        
+        // Calendar header
+        String dayOfWeek = DateUtils.getDayOfWeekString(time.weekDay + 1,
+                DateUtils.LENGTH_MEDIUM).toUpperCase();
+        
+        views.setTextViewText(R.id.day_of_week, dayOfWeek);
+        views.setTextViewText(R.id.day_of_month, Integer.toString(time.monthDay));
+        
         // Fill primary event details
-        if (events.primaryRow != -1) {
-            views.setViewVisibility(R.id.primary_card, View.VISIBLE);
-            cursor.moveToPosition(events.primaryRow);
+        cursor.moveToPosition(events.primaryRow);
+        
+        // Color stripe
+        int colorFilter = cursor.getInt(INDEX_COLOR);
+        views.setTextColor(R.id.when, colorFilter);
+        views.setTextColor(R.id.title, colorFilter);
+        views.setTextColor(R.id.where, colorFilter);
+        
+        // When
+        long start = cursor.getLong(INDEX_BEGIN);
+        boolean allDay = cursor.getInt(INDEX_ALL_DAY) != 0;
+        
+        int flags;
+        String whenString;
+        if (allDay) {
+            flags = DateUtils.FORMAT_ABBREV_ALL | DateUtils.FORMAT_UTC
+                    | DateUtils.FORMAT_SHOW_DATE;
+        } else {
+            flags = DateUtils.FORMAT_ABBREV_ALL | DateUtils.FORMAT_SHOW_TIME;
             
-            // Color stripe
-            int colorFilter = cursor.getInt(INDEX_COLOR);
-            views.setDrawableParameters(R.id.when, true, -1, colorFilter,
-                    PorterDuff.Mode.SRC_IN, -1);
-            views.setTextColor(R.id.title, colorFilter);
-            views.setTextColor(R.id.where, colorFilter);
-            views.setDrawableParameters(R.id.divider, true, -1, colorFilter,
-                    PorterDuff.Mode.SRC_IN, -1);
-            views.setTextColor(R.id.title2, colorFilter);
+            // Show date if different from today
+            time.set(start);
+            if (yearDay != time.yearDay) {
+                flags = flags | DateUtils.FORMAT_SHOW_DATE;
+            }
+        }
+        if (DateFormat.is24HourFormat(context)) {
+            flags |= DateUtils.FORMAT_24HOUR;
+        }
+        whenString = DateUtils.formatDateRange(context, start, start, flags);
+        views.setTextViewText(R.id.when, whenString);
 
-            // When
-            long start = cursor.getLong(INDEX_BEGIN);
-            boolean allDay = cursor.getInt(INDEX_ALL_DAY) != 0;
-            
-            int flags;
-            String whenString;
-            if (allDay) {
-                flags = DateUtils.FORMAT_ABBREV_ALL | DateUtils.FORMAT_UTC
-                        | DateUtils.FORMAT_SHOW_DATE;
-            } else {
-                flags = DateUtils.FORMAT_ABBREV_ALL | DateUtils.FORMAT_SHOW_TIME;
-                
-                // Show date if different from today
-                time.set(start);
-                if (yearDay != time.yearDay) {
-                    flags = flags | DateUtils.FORMAT_SHOW_DATE;
-                }
-            }
-            if (DateFormat.is24HourFormat(context)) {
-                flags |= DateUtils.FORMAT_24HOUR;
-            }
-            whenString = DateUtils.formatDateRange(context, start, start, flags);
-            views.setTextViewText(R.id.when, whenString);
-
-            // What
-            String titleString = cursor.getString(INDEX_TITLE);
-            if (titleString == null || titleString.length() == 0) {
-                titleString = context.getString(R.string.no_title_label);
-            }
-            views.setTextViewText(R.id.title, titleString);
-            
-            // Where
-            String whereString = cursor.getString(INDEX_EVENT_LOCATION);
-            if (whereString != null && whereString.length() > 0) {
-                views.setViewVisibility(R.id.where, View.VISIBLE);
-                views.setViewVisibility(R.id.stub_where, View.INVISIBLE);
-                views.setTextViewText(R.id.where, whereString);
-            } else {
-                views.setViewVisibility(R.id.where, View.GONE);
-                views.setViewVisibility(R.id.stub_where, View.GONE);
-            }
+        // What
+        String titleString = cursor.getString(INDEX_TITLE);
+        if (titleString == null || titleString.length() == 0) {
+            titleString = context.getString(R.string.no_title_label);
+        }
+        views.setTextViewText(R.id.title, titleString);
+        
+        // Conflicts
+        int titleLines = 4;
+        if (events.primaryCount > 1) {
+            int count = events.primaryCount - 1;
+            String conflictString = String.format(res.getQuantityString(
+                    R.plurals.gadget_more_events, count), count);
+            views.setTextViewText(R.id.conflict, conflictString);
+            views.setViewVisibility(R.id.conflict, View.VISIBLE);
+            titleLines -= 1;
+        } else {
+            views.setViewVisibility(R.id.conflict, View.GONE);
         }
         
-        // Fill other primary events, if present
-        if (events.primaryConflictRow != -1) {
-            views.setViewVisibility(R.id.divider, View.VISIBLE);
-            views.setViewVisibility(R.id.title2, View.VISIBLE);
-
-            if (events.primaryCount > 2) {
-                // If more than two primary conflicts, format multiple message
-                int count = events.primaryCount - 1;
-                String titleString = String.format(res.getQuantityString(
-                        R.plurals.gadget_more_events, count), count);
-                views.setTextViewText(R.id.title2, titleString);
-            } else {
-                cursor.moveToPosition(events.primaryConflictRow);
-
-                // What
-                String titleString = cursor.getString(INDEX_TITLE);
-                if (titleString == null || titleString.length() == 0) {
-                    titleString = context.getString(R.string.no_title_label);
-                }
-                views.setTextViewText(R.id.title2, titleString);
-            }
+        // Where
+        String whereString = cursor.getString(INDEX_EVENT_LOCATION);
+        if (whereString != null && whereString.length() > 0) {
+            views.setViewVisibility(R.id.where, View.VISIBLE);
+            views.setTextViewText(R.id.where, whereString);
+            titleLines -= 1;
         } else {
-            views.setViewVisibility(R.id.divider, View.GONE);
-            views.setViewVisibility(R.id.title2, View.GONE);
+            views.setViewVisibility(R.id.where, View.GONE);
         }
         
-        // Fill secondary event
-        if (events.secondaryRow != -1) {
-            views.setViewVisibility(R.id.secondary_card, View.VISIBLE);
-            views.setViewVisibility(R.id.secondary_when, View.VISIBLE);
-            views.setViewVisibility(R.id.secondary_title, View.VISIBLE);
-            
-            cursor.moveToPosition(events.secondaryRow);
-            
-            // Color stripe
-            int colorFilter = cursor.getInt(INDEX_COLOR);
-            views.setDrawableParameters(R.id.secondary_when, true, -1, colorFilter,
-                    PorterDuff.Mode.SRC_IN, -1);
-            views.setTextColor(R.id.secondary_title, colorFilter);
-            
-            // When
-            long start = cursor.getLong(INDEX_BEGIN);
-            boolean allDay = cursor.getInt(INDEX_ALL_DAY) != 0;
-            
-            int flags;
-            String whenString;
-            if (allDay) {
-                flags = DateUtils.FORMAT_ABBREV_ALL | DateUtils.FORMAT_UTC
-                        | DateUtils.FORMAT_SHOW_DATE;
-            } else {
-                flags = DateUtils.FORMAT_ABBREV_ALL | DateUtils.FORMAT_SHOW_TIME;
-                
-                // Show date if different from today
-                time.set(start);
-                if (yearDay != time.yearDay) {
-                    flags = flags | DateUtils.FORMAT_SHOW_DATE;
-                }
-            }
-            if (DateFormat.is24HourFormat(context)) {
-                flags |= DateUtils.FORMAT_24HOUR;
-            }
-            whenString = DateUtils.formatDateRange(context, start, start, flags);
-            views.setTextViewText(R.id.secondary_when, whenString);
-            
-            if (events.secondaryCount > 1) {
-                // If more than two secondary conflicts, format multiple message
-                int count = events.secondaryCount;
-                String titleString = String.format(res.getQuantityString(
-                        R.plurals.gadget_more_events, count), count);
-                views.setTextViewText(R.id.secondary_title, titleString);
-            } else {
-                // What
-                String titleString = cursor.getString(INDEX_TITLE);
-                if (titleString == null || titleString.length() == 0) {
-                    titleString = context.getString(R.string.no_title_label);
-                }
-                views.setTextViewText(R.id.secondary_title, titleString);
-            }
-        } else {
-            views.setViewVisibility(R.id.secondary_when, View.GONE);
-            views.setViewVisibility(R.id.secondary_title, View.GONE);
-        }
+        // Trim title lines based on details shown. In landscape we're using
+        // singleLine which means this value is ignored.
+        views.setInt(R.id.title, "setMaxLines", titleLines);
         
         return views;
     }
 
     /**
-     * Build date overlay bitmap for positioning on widget. This is the textual
-     * number that has been corrected for font leading issues.
-     * 
-     * @param res {@link Resources} to use for paint color.
-     * @param dateNumber Numerical date to display.
-     */
-    public Bitmap getDateOverlay(Resources res, int dateNumber) {
-        String dateString = Integer.toString(dateNumber);
-        
-        Paint paint = new Paint();
-        paint.setTypeface(Typeface.DEFAULT_BOLD);
-        paint.setTextSize(18);
-        paint.setAntiAlias(true);
-        paint.setSubpixelText(true);
-        paint.setColor(res.getColor(R.color.appwidget_date));
-        
-        // Calculate exact size of text
-        FontMetrics metrics = paint.getFontMetrics();
-        int width = (int) Math.ceil(paint.measureText(dateString));
-        int height = (int) Math.ceil(-metrics.top + metrics.descent);
-        
-        // Add padding to left edge based on various obscure rules
-        // to make font center correctly
-        char firstChar = dateString.charAt(0);
-        char lastChar = dateString.charAt(dateString.length() - 1);
-        int leftPadding = (dateString.length() == 1 || firstChar == '2' ||
-                lastChar == '1' || lastChar == '0') ? 1 : 0;
-        
-        Bitmap overlay = Bitmap.createBitmap(width + leftPadding,
-                height, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(overlay);
-        canvas.drawText(dateString, leftPadding, -metrics.top, paint);
-        
-        return overlay;
-    }
-    
-    /**
      * Build a set of {@link RemoteViews} that describes an error state.
      */
     private RemoteViews getAppWidgetNoEvents(Context context) {
         RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.agenda_appwidget);
+        setNoEventsVisible(views, true);
 
-        views.setViewVisibility(R.id.no_events, View.VISIBLE);
-        
-        views.setViewVisibility(R.id.icon, View.GONE);
-        views.setViewVisibility(R.id.primary_card, View.GONE);
-        views.setViewVisibility(R.id.secondary_card, View.GONE);
-        
         // Clicking on widget launches the agenda view in Calendar
         Intent agendaIntent = new Intent();
         agendaIntent.setComponent(new ComponentName(ACTION_PACKAGE, ACTION_CLASS));

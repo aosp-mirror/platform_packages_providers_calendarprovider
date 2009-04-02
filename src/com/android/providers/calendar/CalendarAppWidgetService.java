@@ -78,7 +78,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
     static final long UPDATE_NO_EVENTS = DateUtils.HOUR_IN_MILLIS * 6;
     
     static final String ACTION_PACKAGE = "com.android.calendar";
-    static final String ACTION_CLASS = "com.android.calendar.AgendaActivity";
+    static final String ACTION_CLASS = "com.android.calendar.LaunchActivity";
     
     @Override
     public void onStart(Intent intent, int startId) {

@@ -20,8 +20,7 @@ package com.android.providers.calendar;
 import com.google.android.collect.Sets;
 import com.google.android.gdata.client.AndroidGDataClient;
 import com.google.android.gdata.client.AndroidXmlParserFactory;
-import com.google.android.googlelogin.GoogleLoginServiceBlockingHelper;
-import com.google.android.googlelogin.GoogleLoginServiceNotFoundException;
+import com.google.android.googlelogin.GoogleLoginServiceHelper;
 import com.google.android.providers.AbstractGDataSyncAdapter;
 import com.google.android.providers.AbstractGDataSyncAdapter.GDataSyncData;
 import com.google.wireless.gdata.calendar.client.CalendarClient;
@@ -75,6 +74,7 @@ import android.text.format.Time;
 import android.util.Config;
 import android.util.Log;
 import android.util.TimeFormatException;
+import android.accounts.*;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -1075,36 +1075,40 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             return;
         }
 
-        GoogleLoginServiceBlockingHelper loginHelper = null;
         String username = null;
         String authToken = null;
 
-        try {
-            loginHelper = new GoogleLoginServiceBlockingHelper(getContext());
-
-            // TODO: allow caller to specify which account's feeds should be updated
-            username = loginHelper.getAccount(false);
-            if (TextUtils.isEmpty(username)) {
-                Log.w(TAG, "Unable to update calendars from server -- "
-                      + "no users configured.");
-                return;
-            }
-
-            try {
-                authToken = loginHelper.getAuthToken(username,
-                                                     mCalendarClient.getServiceName());
-            } catch (GoogleLoginServiceBlockingHelper.AuthenticationException e) {
-                Log.w(TAG, "Unable to update calendars from server -- could not "
-                      + "authenticate user " + username, e);
-                return;
-            }
-        } catch (GoogleLoginServiceNotFoundException e) {
-            Log.e(TAG, "Could not find Google login service", e);
+        // TODO: allow caller to specify which account's feeds should be updated
+        username = GoogleLoginServiceHelper.blockingGetAccount(getContext(), false);
+        if (TextUtils.isEmpty(username)) {
+            Log.w(TAG, "Unable to update calendars from server -- "
+                  + "no users configured.");
             return;
-        } finally {
-            if (loginHelper != null) {
-                loginHelper.close();
+        }
+
+        try {
+            Bundle bundle = AccountManager.get(getContext()).getAuthToken(
+                    new Account(username, "com.google.GAIA"), mCalendarClient.getServiceName(),
+                    true /* notifyAuthFailure */, null /* callback */, null /* handler */)
+                    .getResult();
+            authToken = bundle.getString(Constants.AUTHTOKEN_KEY);
+            if (authToken == null) {
+                Log.w(TAG, "Unable to update calendars from server -- could not "
+                      + "authenticate user " + username);
+                return;
             }
+        } catch (IOException e) {
+            Log.w(TAG, "Unable to update calendars from server -- could not "
+                  + "authenticate user " + username, e);
+            return;
+        } catch (AuthenticatorException e) {
+            Log.w(TAG, "Unable to update calendars from server -- could not "
+                  + "authenticate user " + username, e);
+            return;
+        } catch (OperationCanceledException e) {
+            Log.w(TAG, "Unable to update calendars from server -- could not "
+                  + "authenticate user " + username, e);
+            return;
         }
 
         // get the current set of calendars.  we'll need to pay attention to

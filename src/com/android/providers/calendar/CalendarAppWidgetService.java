@@ -78,7 +78,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
     static final long UPDATE_NO_EVENTS = DateUtils.HOUR_IN_MILLIS * 6;
     
     static final String ACTION_PACKAGE = "com.android.calendar";
-    static final String ACTION_CLASS = "com.android.calendar.AgendaActivity";
+    static final String ACTION_CLASS = "com.android.calendar.LaunchActivity";
     
     @Override
     public void onStart(Intent intent, int startId) {
@@ -326,11 +326,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         setNoEventsVisible(views, false);
         
         // Clicking on widget launches the agenda view in Calendar
-        Intent agendaIntent = new Intent();
-        agendaIntent.setComponent(new ComponentName(ACTION_PACKAGE, ACTION_CLASS));
-        PendingIntent pendingIntent = PendingIntent.getActivity(context, 0 /* no requestCode */,
-                agendaIntent, 0 /* no flags */);
-        
+        PendingIntent pendingIntent = getLaunchPendingIntent(context);
         views.setOnClickPendingIntent(R.id.agenda_appwidget, pendingIntent);
         
         Time time = new Time();
@@ -423,14 +419,26 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         setNoEventsVisible(views, true);
 
         // Clicking on widget launches the agenda view in Calendar
-        Intent agendaIntent = new Intent();
-        agendaIntent.setComponent(new ComponentName(ACTION_PACKAGE, ACTION_CLASS));
-        PendingIntent pendingIntent = PendingIntent.getActivity(context, 0 /* no requestCode */,
-                agendaIntent, 0 /* no flags */);
-        
+        PendingIntent pendingIntent = getLaunchPendingIntent(context);
         views.setOnClickPendingIntent(R.id.agenda_appwidget, pendingIntent);
 
         return views;
+    }
+
+    /**
+     * Build a {@link PendingIntent} to launch the Calendar app. This correctly
+     * sets action, category, and flags so that we don't duplicate tasks when
+     * Calendar was also launched from a normal desktop icon.
+     */
+    private PendingIntent getLaunchPendingIntent(Context context) {
+        Intent launchIntent = new Intent();
+        launchIntent.setComponent(new ComponentName(ACTION_PACKAGE, ACTION_CLASS));
+        launchIntent.setAction(Intent.ACTION_MAIN);
+        launchIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+        launchIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
+                Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+        return PendingIntent.getActivity(context, 0 /* no requestCode */,
+                launchIntent, 0 /* no flags */);
     }
     
     private class MarkedEvents {

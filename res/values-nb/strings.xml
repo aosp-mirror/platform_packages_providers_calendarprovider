@@ -15,11 +15,11 @@
 -->
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-    <!-- no translation found for gadget_title (3673051912300198724) -->
-    <skip />
+    <string name="gadget_title">"Kalender"</string>
     <string name="no_title_label">"(Mangler emne)"</string>
-    <!-- no translation found for gadget_more_events:one (4209472169696459059) -->
-    <!-- no translation found for gadget_more_events:other (2850138968496439596) -->
-    <!-- no translation found for gadget_no_events (5219179980474526479) -->
-    <skip />
+  <plurals name="gadget_more_events">
+    <item quantity="one">"én hendelse til"</item>
+    <item quantity="other">"<xliff:g id="NUMBER">%d</xliff:g> hendelser til"</item>
+  </plurals>
+    <string name="gadget_no_events">"Ingen framtidige kalenderhendelser"</string>
 </resources>

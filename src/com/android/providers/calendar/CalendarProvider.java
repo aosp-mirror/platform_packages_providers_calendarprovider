@@ -20,7 +20,7 @@ package com.android.providers.calendar;
 import com.google.android.collect.Sets;
 import com.google.android.gdata.client.AndroidGDataClient;
 import com.google.android.gdata.client.AndroidXmlParserFactory;
-import com.google.android.googlelogin.GoogleLoginServiceHelper;
+import com.google.android.googlelogin.GoogleLoginServiceConstants;
 import com.google.android.providers.AbstractGDataSyncAdapter;
 import com.google.android.providers.AbstractGDataSyncAdapter.GDataSyncData;
 import com.google.wireless.gdata.calendar.client.CalendarClient;
@@ -1078,15 +1078,20 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         String username = null;
         String authToken = null;
 
-        // TODO: allow caller to specify which account's feeds should be updated
-        username = GoogleLoginServiceHelper.blockingGetAccount(getContext(), false);
-        if (TextUtils.isEmpty(username)) {
-            Log.w(TAG, "Unable to update calendars from server -- "
-                  + "no users configured.");
-            return;
-        }
 
         try {
+            // TODO: allow caller to specify which account's feeds should be updated
+            Account[] accounts = AccountManager.get(getContext())
+                    .blockingGetAccountsWithTypeAndFeatures(
+                            GoogleLoginServiceConstants.ACCOUNT_TYPE,
+                            new String[]{GoogleLoginServiceConstants.FEATURE_GOOGLE_OR_DASHER});
+            if (accounts.length == 0) {
+                Log.w(TAG, "Unable to update calendars from server -- no users configured.");
+                return;
+            }
+
+            username = accounts[0].mName;
+
             Bundle bundle = AccountManager.get(getContext()).getAuthToken(
                     new Account(username, "com.google.GAIA"), mCalendarClient.getServiceName(),
                     true /* notifyAuthFailure */, null /* callback */, null /* handler */)

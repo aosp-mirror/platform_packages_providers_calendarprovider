@@ -1706,6 +1706,19 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             Duration duration = new Duration();
             Time eventTime = new Time();
 
+            // Invariant: entries contains all events that affect the current
+            // window.  It consists of:
+            // a) Individual events that fall in the window.  These will be
+            //    displayed.
+            // b) Recurrences that included the window.  These will be displayed
+            //    if not canceled.
+            // c) Recurrence exceptions that fall in the window.  These will be
+            //    displayed if not cancellations.
+            // d) Recurrence exceptions that modify an instance inside the
+            //    window (subject to 1 week assumption above), but are outside
+            //    the window.  These will not be displayed.  Cases c and d are
+            //    distingushed by the start / end time.
+
             while (entries.moveToNext()) {
                 initialValues = null;
 
@@ -1885,6 +1898,21 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 }
             }
 
+            // Invariant: instancesMap contains all instances that affect the
+            // window, indexed by original sync id.  It consists of:
+            // a) Individual events that fall in the window.  They have:
+            //   EVENT_ID, BEGIN, END
+            // b) Instances of recurrences that fall in the window.  They may
+            //   be subject to exceptions.  They have:
+            //   EVENT_ID, BEGIN, END
+            // c) Exceptions that fall in the window.  They have:
+            //   ORIGINAL_EVENT, ORIGINAL_INSTANCE_TIME, STATUS (since they can
+            //   be a modification or cancellation), EVENT_ID, BEGIN, END
+            // d) Recurrence exceptions that modify an instance inside the
+            //   window but fall outside the window.  They have:
+            //   ORIGINAL_EVENT, ORIGINAL_INSTANCE_TIME, STATUS =
+            //   STATUS_CANCELED, EVENT_ID, BEGIN, END
+
             // First, delete the original instances corresponding to recurrence
             // exceptions.  We do this by iterating over the list and for each
             // recurrence exception, we search the list for an instance with a
@@ -1933,6 +1961,16 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     }
                 }
             }
+
+            // Invariant: instancesMap contains filtered instances.
+            // It consists of:
+            // a) Individual events that fall in the window.
+            // b) Instances of recurrences that fall in the window and have not
+            //   been subject to exceptions.
+            // c) Exceptions that fall in the window.  They will have
+            //   STATUS_CANCELED if they are cancellations.
+            // d) Recurrence exceptions that modify an instance inside the
+            //   window but fall outside the window.  These are STATUS_CANCELED.
 
             // Now do the inserts.  Since the db lock is held when this method is executed,
             // this will be done in a transaction.

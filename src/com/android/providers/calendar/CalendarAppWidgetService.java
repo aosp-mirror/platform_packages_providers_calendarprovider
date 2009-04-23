@@ -271,16 +271,20 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         }
         return result;
     }
-    
+
     /**
      * Calculate flipping point for the given event; when we should hide this
      * event and show the next one. This is usually half-way through the event.
+     * <p>
+     * Events with duration longer than one day as treated as all-day events
+     * when computing the flipping point.
      * 
      * @param start Event start time in local timezone.
      * @param end Event end time in local timezone.
      */
     private long getEventFlip(Cursor cursor, long start, long end, boolean allDay) {
-        if (allDay) {
+        long duration = end - start;
+        if (allDay || duration > DateUtils.DAY_IN_MILLIS) {
             return start;
         } else {
             return (start + end) / 2;

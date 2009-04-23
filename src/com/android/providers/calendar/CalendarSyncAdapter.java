@@ -58,6 +58,7 @@ import android.text.TextUtils;
 import android.text.format.Time;
 import android.util.Config;
 import android.util.Log;
+import android.accounts.Account;
 
 import java.util.Enumeration;
 import java.util.Hashtable;
@@ -73,18 +74,21 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
     /* package */ static final String USER_AGENT_APP_VERSION = "Android-GData-Calendar/1.1";
 
-    private static final String SELECT_BY_ACCOUNT = Calendars._SYNC_ACCOUNT + "=?";
+    private static final String SELECT_BY_ACCOUNT =
+            Calendars._SYNC_ACCOUNT + "=? AND " + Calendars._SYNC_ACCOUNT_TYPE + "=?";
     private static final String SELECT_BY_ACCOUNT_AND_FEED =
             SELECT_BY_ACCOUNT + " AND " + Calendars.URL + "=?";
 
     private static final String[] CALENDAR_KEY_COLUMNS =
-            new String[]{Calendars._SYNC_ACCOUNT, Calendars.URL};
+            new String[]{Calendars._SYNC_ACCOUNT, Calendars._SYNC_ACCOUNT_TYPE, Calendars.URL};
     private static final String CALENDAR_KEY_SORT_ORDER =
-            Calendars._SYNC_ACCOUNT + "," + Calendars.URL;
+            Calendars._SYNC_ACCOUNT + "," + Calendars._SYNC_ACCOUNT_TYPE + "," + Calendars.URL;
     private static final String[] FEEDS_KEY_COLUMNS =
-            new String[]{SubscribedFeeds.Feeds._SYNC_ACCOUNT, SubscribedFeeds.Feeds.FEED};
+            new String[]{SubscribedFeeds.Feeds._SYNC_ACCOUNT,
+                    SubscribedFeeds.Feeds._SYNC_ACCOUNT_TYPE, SubscribedFeeds.Feeds.FEED};
     private static final String FEEDS_KEY_SORT_ORDER =
-            SubscribedFeeds.Feeds._SYNC_ACCOUNT + ", " + SubscribedFeeds.Feeds.FEED;
+            SubscribedFeeds.Feeds._SYNC_ACCOUNT + ", " + SubscribedFeeds.Feeds._SYNC_ACCOUNT_TYPE
+                    + ", " + SubscribedFeeds.Feeds.FEED;
 
     public static class SyncInfo {
         // public String feedUrl;
@@ -514,14 +518,17 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
     protected boolean handleAllDeletedUnavailable(GDataSyncData syncData, String feed) {
         syncData.feedData.remove(feed);
+        final Account account = getAccount();
         getContext().getContentResolver().delete(Calendar.Calendars.CONTENT_URI,
-                Calendar.Calendars._SYNC_ACCOUNT + "=? AND " + Calendar.Calendars.URL + "=?",
-                new String[]{getAccount(), feed});
+                Calendar.Calendars._SYNC_ACCOUNT + "=? AND "
+                        + Calendar.Calendars._SYNC_ACCOUNT_TYPE + "=? AND "
+                        + Calendar.Calendars.URL + "=?",
+                new String[]{account.mName, account.mType, feed});
         return true;
     }
 
     @Override
-    public void onSyncStarting(SyncContext context, String account, boolean forced,
+    public void onSyncStarting(SyncContext context, Account account, boolean forced,
             SyncResult result) {
         mContentResolver = getContext().getContentResolver();
         mServerDiffs = 0;
@@ -593,10 +600,11 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         // Base sync info
         map.put(Events._SYNC_ID, event.getId());
         String version = event.getEditUri();
+        final Account account = getAccount();
         if (!StringUtils.isEmpty(version)) {
             // Always rewrite the edit URL to https for dasher account to avoid
             // redirection.
-            map.put(Events._SYNC_VERSION, rewriteUrlforAccount(getAccount(), version));
+            map.put(Events._SYNC_VERSION, rewriteUrlforAccount(account, version));
         }
 
         // see if this is an exception to an existing event/recurrence.
@@ -799,7 +807,8 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             return ENTRY_INVALID;
         }
 
-        map.put(SyncConstValue._SYNC_ACCOUNT, getAccount());
+        map.put(SyncConstValue._SYNC_ACCOUNT, account.mName);
+        map.put(SyncConstValue._SYNC_ACCOUNT_TYPE, account.mType);
         return ENTRY_OK;
     }
 
@@ -1033,9 +1042,11 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         }
 
         // select the set of calendars for this account.
+        final Account account = getAccount();
+        final String[] accountSelectionArgs = new String[]{account.mName, account.mType};
         Cursor cursor = cr.query(Calendar.Calendars.CONTENT_URI,
                 CALENDARS_PROJECTION, SELECT_BY_ACCOUNT,
-                new String[] { getAccount() }, null /* sort order */);
+                accountSelectionArgs, null /* sort order */);
 
         Bundle syncExtras = new Bundle();
 
@@ -1059,7 +1070,6 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                     context.setStatusText("Fetching list of calendars");
                     // get rid of the current cursor and fetch from the server.
                     cursor.close();
-                    final String[] accountSelectionArgs = new String[]{getAccount()};
                     cursor = cr.query(
                         Calendar.Calendars.LIVE_CONTENT_URI, CALENDARS_PROJECTION,
                         SELECT_BY_ACCOUNT, accountSelectionArgs, null /* sort order */);
@@ -1086,9 +1096,10 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         final SyncInfo syncInfo = (SyncInfo) baseSyncInfo;
         final GDataSyncData syncData = (GDataSyncData) baseSyncData;
 
+        final Account account = getAccount();
         Cursor cursor = getContext().getContentResolver().query(Calendar.Calendars.CONTENT_URI,
                 CALENDARS_PROJECTION, SELECT_BY_ACCOUNT_AND_FEED,
-                new String[] { getAccount(), feed }, null /* sort order */);
+                new String[] { account.mName, account.mType, feed }, null /* sort order */);
 
         ContentValues map = new ContentValues();
         int maxResults = getMaxEntriesPerSync();
@@ -1149,10 +1160,12 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         
         // populate temp provider with calendar ids, so joins work.
         ContentValues map = new ContentValues();
+        final Account account = getAccount();
         Cursor c = getContext().getContentResolver().query(
                 Calendar.Calendars.CONTENT_URI,
                 CALENDARS_PROJECTION,
-                SELECT_BY_ACCOUNT, new String[]{getAccount()}, null /* sort order */);
+                SELECT_BY_ACCOUNT, new String[]{account.mName, account.mType},
+                null /* sort order */);
         final int idIndex = c.getColumnIndexOrThrow(Calendars._ID);
         final int urlIndex = c.getColumnIndexOrThrow(Calendars.URL);
         final int timezoneIndex = c.getColumnIndexOrThrow(Calendars.TIMEZONE);
@@ -1166,7 +1179,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         c.close();
     }
 
-    public void onAccountsChanged(String[] accountsArray) {
+    public void onAccountsChanged(Account[] accountsArray) {
         if (!"yes".equals(SystemProperties.get("ro.config.sync"))) {
             return;
         }
@@ -1183,12 +1196,17 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             cursorA = Calendar.Calendars.query(cr, null /* projection */,
                     Calendar.Calendars.SELECTED + "=1", CALENDAR_KEY_SORT_ORDER);
             int urlIndexA = cursorA.getColumnIndexOrThrow(Calendar.Calendars.URL);
-            int accountIndexA = cursorA.getColumnIndexOrThrow(Calendar.Calendars._SYNC_ACCOUNT);
+            int accountNameIndexA = cursorA.getColumnIndexOrThrow(Calendar.Calendars._SYNC_ACCOUNT);
+            int accountTypeIndexA =
+                    cursorA.getColumnIndexOrThrow(Calendar.Calendars._SYNC_ACCOUNT_TYPE);
             cursorB = SubscribedFeeds.Feeds.query(cr, FEEDS_KEY_COLUMNS,
                     SubscribedFeeds.Feeds.AUTHORITY + "=?", new String[]{Calendar.AUTHORITY},
                     FEEDS_KEY_SORT_ORDER);
             int urlIndexB = cursorB.getColumnIndexOrThrow(SubscribedFeeds.Feeds.FEED);
-            int accountIndexB = cursorB.getColumnIndexOrThrow(SubscribedFeeds.Feeds._SYNC_ACCOUNT);
+            int accountNameIndexB =
+                    cursorB.getColumnIndexOrThrow(SubscribedFeeds.Feeds._SYNC_ACCOUNT);
+            int accountTypeIndexB =
+                    cursorB.getColumnIndexOrThrow(SubscribedFeeds.Feeds._SYNC_ACCOUNT_TYPE);
             for (CursorJoiner.Result joinerResult :
                     new CursorJoiner(cursorA, CALENDAR_KEY_COLUMNS, cursorB, FEEDS_KEY_COLUMNS)) {
                 switch (joinerResult) {
@@ -1196,7 +1214,8 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                         SubscribedFeeds.addFeed(
                                 cr,
                                 cursorA.getString(urlIndexA),
-                                cursorA.getString(accountIndexA),
+                                new Account(cursorA.getString(accountNameIndexA),
+                                        cursorA.getString(accountTypeIndexA)),
                                 Calendar.AUTHORITY,
                                 CalendarClient.SERVICE);
                         break;
@@ -1204,7 +1223,8 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                         SubscribedFeeds.deleteFeed(
                                 cr,
                                 cursorB.getString(urlIndexB),
-                                cursorB.getString(accountIndexB),
+                                new Account(cursorB.getString(accountNameIndexB),
+                                        cursorB.getString(accountTypeIndexB)),
                                 Calendar.AUTHORITY);
                         break;
                     case BOTH:
@@ -1224,7 +1244,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
      * to/from the device, and thus is determined and passed around as a local variable, where
      * appropriate.
      */
-    protected String getFeedUrl(String account) {
+    protected String getFeedUrl(Account account) {
         throw new UnsupportedOperationException("getFeedUrl() should not get called.");
     }
 

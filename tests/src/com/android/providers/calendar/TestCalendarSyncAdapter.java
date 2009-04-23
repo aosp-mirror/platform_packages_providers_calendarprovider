@@ -26,6 +26,7 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.format.DateUtils;
+import android.accounts.Account;
 
 import java.util.Calendar;
 import java.util.TimeZone;
@@ -40,7 +41,7 @@ public class TestCalendarSyncAdapter extends TempProviderSyncAdapter {
     }
 
     @Override
-    public void onSyncStarting(SyncContext context, String account, boolean forced,
+    public void onSyncStarting(SyncContext context, Account account, boolean forced,
             SyncResult result)
     {
     }
@@ -162,7 +163,7 @@ public class TestCalendarSyncAdapter extends TempProviderSyncAdapter {
         throw new UnsupportedOperationException("not implemented");
     }
 
-    public void onAccountsChanged(String[] accounts) {
+    public void onAccountsChanged(Account[] accounts) {
     }
 }
 

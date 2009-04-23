@@ -17,6 +17,7 @@
 
 package com.android.providers.calendar;
 
+import com.google.android.collect.Maps;
 import com.google.android.collect.Sets;
 import com.google.android.gdata.client.AndroidGDataClient;
 import com.google.android.gdata.client.AndroidXmlParserFactory;
@@ -68,7 +69,6 @@ import android.provider.Calendar.Events;
 import android.provider.Calendar.ExtendedProperties;
 import android.provider.Calendar.Instances;
 import android.provider.Calendar.Reminders;
-import android.provider.SyncConstValue;
 import android.text.TextUtils;
 import android.text.format.Time;
 import android.util.Config;
@@ -91,12 +91,14 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     private static final boolean PROFILE = false;
     private static final boolean MULTIPLE_ATTENDEES_PER_EVENT = false;
-    private static final String[] ACCOUNTS_PROJECTION = new String[] { Calendars._SYNC_ACCOUNT};
+    private static final String[] ACCOUNTS_PROJECTION =
+            new String[] {Calendars._SYNC_ACCOUNT, Calendars._SYNC_ACCOUNT_TYPE};
 
     private static final String[] EVENTS_PROJECTION = new String[] {
         Events._SYNC_ID,
         Events._SYNC_VERSION,
         Events._SYNC_ACCOUNT,
+        Events._SYNC_ACCOUNT_TYPE,
         Events.CALENDAR_ID,
         Events.RRULE,
         Events.RDATE,
@@ -104,11 +106,12 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         };
     private static final int EVENTS_SYNC_ID_INDEX = 0;
     private static final int EVENTS_SYNC_VERSION_INDEX = 1;
-    private static final int EVENTS_SYNC_ACCOUNT_INDEX = 2;
-    private static final int EVENTS_CALENDAR_ID_INDEX = 3;
-    private static final int EVENTS_RRULE_INDEX = 4;
-    private static final int EVENTS_RDATE_INDEX = 5;
-    private static final int EVENTS_ORIGINAL_EVENT_INDEX = 6;
+    private static final int EVENTS_SYNC_ACCOUNT_NAME_INDEX = 2;
+    private static final int EVENTS_SYNC_ACCOUNT_TYPE_INDEX = 3;
+    private static final int EVENTS_CALENDAR_ID_INDEX = 4;
+    private static final int EVENTS_RRULE_INDEX = 5;
+    private static final int EVENTS_RDATE_INDEX = 6;
+    private static final int EVENTS_ORIGINAL_EVENT_INDEX = 7;
 
     private DatabaseUtils.InsertHelper mCalendarsInserter;
     private DatabaseUtils.InsertHelper mEventsInserter;
@@ -230,7 +233,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 54;
+    private static final int DATABASE_VERSION = 55;
 
     private static final String EXPECTED_PROJECTION = "/full";
 
@@ -561,6 +564,27 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             oldVersion += 1;
         }
 
+        if (oldVersion == 54) {
+            db.execSQL("ALTER TABLE Calendars ADD COLUMN _sync_account_type TEXT;");
+            db.execSQL("ALTER TABLE Events ADD COLUMN _sync_account_type TEXT;");
+            db.execSQL("ALTER TABLE DeletedEvents ADD COLUMN _sync_account_type TEXT;");
+            db.execSQL("UPDATE Calendars"
+                    + " SET _sync_account_type='com.google.GAIA'"
+                    + " WHERE _sync_account IS NOT NULL");
+            db.execSQL("UPDATE Events"
+                    + " SET _sync_account_type='com.google.GAIA'"
+                    + " WHERE _sync_account IS NOT NULL");
+            db.execSQL("UPDATE DeletedEvents"
+                    + " SET _sync_account_type='com.google.GAIA'"
+                    + " WHERE _sync_account IS NOT NULL");
+            Log.w(TAG, "re-creating eventSyncAccountAndIdIndex");
+            db.execSQL("DROP INDEX eventSyncAccountAndIdIndex");
+            db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
+                    + Events._SYNC_ACCOUNT_TYPE + ", " + Events._SYNC_ACCOUNT + ", "
+                    + Events._SYNC_ID + ");");
+            oldVersion += 1;
+        }
+
         return true; // this was lossless
     }
 
@@ -584,6 +608,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         db.execSQL("CREATE TABLE Calendars (" +
                         "_id INTEGER PRIMARY KEY," +
                         "_sync_account TEXT," +
+                        "_sync_account_type TEXT," +
                         "_sync_id TEXT," +
                         "_sync_version TEXT," +
                         "_sync_time TEXT," +            // UTC
@@ -613,6 +638,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         db.execSQL("CREATE TABLE Events (" +
                         "_id INTEGER PRIMARY KEY," +
                         "_sync_account TEXT," +
+                        "_sync_account_type TEXT," +
                         "_sync_id TEXT," +
                         "_sync_version TEXT," +
                         "_sync_time TEXT," +            // UTC
@@ -647,7 +673,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     ");");
 
         db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
-                + Events._SYNC_ACCOUNT + ", " + Events._SYNC_ID + ");");
+                + Events._SYNC_ACCOUNT_TYPE + ", " + Events._SYNC_ACCOUNT + ", "
+                + Events._SYNC_ID + ");");
 
         db.execSQL("CREATE INDEX eventsCalendarIdIndex ON Events (" +
                    Events.CALENDAR_ID +
@@ -670,6 +697,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         "_sync_id TEXT," +
                         "_sync_version TEXT," +
                         "_sync_account TEXT," +
+                        "_sync_account_type TEXT," +
                         (isTemporary() ? "_sync_local_id INTEGER," : "") + // Used while syncing,
                         "_sync_mark INTEGER," + // To filter out new rows
                         "calendar_id INTEGER" +
@@ -826,18 +854,17 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
      * syncable.
      */
     @Override
-    protected void onAccountsChanged(String[] accountsArray) {
+    protected void onAccountsChanged(Account[] accountsArray) {
         super.onAccountsChanged(accountsArray);
 
-        Map<String, Boolean> accounts = new HashMap<String, Boolean>();
-        for (String account : accountsArray) {
+        Map<Account, Boolean> accounts = Maps.newHashMap();
+        for (Account account : accountsArray) {
             accounts.put(account, false);
         }
 
         mDb.beginTransaction();
         try {
-            deleteRowsForRemovedAccounts(accounts, "Calendars",
-                    SyncConstValue._SYNC_ACCOUNT);
+            deleteRowsForRemovedAccounts(accounts, "Calendars");
             mDb.setTransactionSuccessful();
         } finally {
             mDb.endTransaction();
@@ -851,27 +878,28 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         // If there are no calendars at all for a given account, add the
         // default calendar.
 
-        for (Map.Entry<String, Boolean> entry : accounts.entrySet()) {
+        for (Map.Entry<Account, Boolean> entry : accounts.entrySet()) {
             entry.setValue(false);
             // TODO: remove this break when Calendar supports multiple accounts. Until then
             // pretend that only the first account exists.
             break;
         }
 
-        Set<String> handledAccounts = Sets.newHashSet();
+        Set<Account> handledAccounts = Sets.newHashSet();
         if (Config.LOGV) Log.v(TAG, "querying calendars");
         Cursor c = queryInternal(Calendars.CONTENT_URI, ACCOUNTS_PROJECTION, null, null, null);
         try {
             while (c.moveToNext()) {
-                String account = c.getString(0);
+                final String accountName = c.getString(0);
+                final String accountType = c.getString(1);
+                final Account account = new Account(accountName, accountType);
                 if (handledAccounts.contains(account)) {
                     continue;
                 }
                 handledAccounts.add(account);
                 if (accounts.containsKey(account)) {
                     if (Config.LOGV) {
-                        Log.v(TAG, "calendars for account " + account
-                                + " exist");
+                        Log.v(TAG, "calendars for account " + account + " exist");
                     }
                     accounts.put(account, true /* hasCalendar */);
                 }
@@ -884,8 +912,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         if (Config.LOGV) {
             Log.v(TAG, "scanning over " + accounts.size() + " account(s)");
         }
-        for (Map.Entry<String, Boolean> entry : accounts.entrySet()) {
-            String account = entry.getKey();
+        for (Map.Entry<Account, Boolean> entry : accounts.entrySet()) {
+            final Account account = entry.getKey();
             boolean hasCalendar = entry.getValue();
             if (hasCalendar) {
                 if (Config.LOGV) {
@@ -894,14 +922,15 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 }
                 continue;
             }
-            String feedUrl = mCalendarClient.getDefaultCalendarUrl(account,
+            String feedUrl = mCalendarClient.getDefaultCalendarUrl(account.mName,
                     CalendarClient.PROJECTION_PRIVATE_SELF_ATTENDANCE, null/* query params */);
             feedUrl = CalendarSyncAdapter.rewriteUrlforAccount(account, feedUrl);
             if (Config.LOGV) {
                 Log.v(TAG, "adding default calendar for account " + account);
             }
             ContentValues values = new ContentValues();
-            values.put(Calendars._SYNC_ACCOUNT, account);
+            values.put(Calendars._SYNC_ACCOUNT, account.mName);
+            values.put(Calendars._SYNC_ACCOUNT_TYPE, account.mType);
             values.put(Calendars.URL, feedUrl);
             values.put(Calendars.DISPLAY_NAME, "Default");
             values.put(Calendars.SYNC_EVENTS, 1);
@@ -1075,7 +1104,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             return;
         }
 
-        String username = null;
+        Account account = null;
         String authToken = null;
 
 
@@ -1090,29 +1119,29 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 return;
             }
 
-            username = accounts[0].mName;
+            account = accounts[0];
 
             Bundle bundle = AccountManager.get(getContext()).getAuthToken(
-                    new Account(username, "com.google.GAIA"), mCalendarClient.getServiceName(),
+                    account, mCalendarClient.getServiceName(),
                     true /* notifyAuthFailure */, null /* callback */, null /* handler */)
                     .getResult();
             authToken = bundle.getString(Constants.AUTHTOKEN_KEY);
             if (authToken == null) {
                 Log.w(TAG, "Unable to update calendars from server -- could not "
-                      + "authenticate user " + username);
+                      + "authenticate user " + account);
                 return;
             }
         } catch (IOException e) {
             Log.w(TAG, "Unable to update calendars from server -- could not "
-                  + "authenticate user " + username, e);
+                  + "authenticate user " + account, e);
             return;
         } catch (AuthenticatorException e) {
             Log.w(TAG, "Unable to update calendars from server -- could not "
-                  + "authenticate user " + username, e);
+                  + "authenticate user " + account, e);
             return;
         } catch (OperationCanceledException e) {
             Log.w(TAG, "Unable to update calendars from server -- could not "
-                  + "authenticate user " + username, e);
+                  + "authenticate user " + account, e);
             return;
         }
 
@@ -1129,11 +1158,11 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             // get and process the calendars meta feed
             GDataParser parser = null;
             try {
-                String feedUrl = mCalendarClient.getUserCalendarsUrl(username);
-                feedUrl = CalendarSyncAdapter.rewriteUrlforAccount(username, feedUrl);
+                String feedUrl = mCalendarClient.getUserCalendarsUrl(account.mName);
+                feedUrl = CalendarSyncAdapter.rewriteUrlforAccount(account, feedUrl);
                 parser = mCalendarClient.getParserForUserCalendars(feedUrl, authToken);
                 // process the calendars
-                processCalendars(username, parser, existingCalendarIds);
+                processCalendars(account, parser, existingCalendarIds);
             } catch (ParseException pe) {
                 Log.w(TAG, "Unable to process calendars from server -- could not "
                         + "parse calendar feed.", pe);
@@ -1192,7 +1221,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         }
     }
 
-    private void processCalendars(String username,
+    private void processCalendars(Account account,
                                   GDataParser parser,
                                   Set<Long> existingCalendarIds)
             throws ParseException, IOException {
@@ -1204,7 +1233,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             entry = parser.readNextEntry(entry);
             if (Config.LOGV) Log.v(TAG, "Read entry: " + entry.toString());
             CalendarEntry calendarEntry = (CalendarEntry) entry;
-            String feedUrl = calendarEntryToContentValues(username, feed, calendarEntry, map);
+            String feedUrl = calendarEntryToContentValues(account, feed, calendarEntry, map);
             if (TextUtils.isEmpty(feedUrl)) {
                 continue;
             }
@@ -1245,7 +1274,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 map.put(Calendars.SYNC_EVENTS, syncAndDisplay);
                 map.put(Calendars.SELECTED, syncAndDisplay);
                 map.put(Calendars.HIDDEN, 0);
-                map.put(Calendars._SYNC_ACCOUNT, username);
+                map.put(Calendars._SYNC_ACCOUNT, account.mName);
+                map.put(Calendars._SYNC_ACCOUNT_TYPE, account.mType);
                 if (Config.LOGV) Log.v(TAG, "Adding calendar " + map);
                 // write to db directly, so we don't send a notification.
                 Uri row = insertInternal(calendarContentUri, map);
@@ -1275,7 +1305,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
      * Convert the CalenderEntry to a Bundle that can be inserted/updated into the
      * Calendars table.
      */
-    private String calendarEntryToContentValues(String account, CalendarsFeed feed,
+    private String calendarEntryToContentValues(Account account, CalendarsFeed feed,
             CalendarEntry entry,
             ContentValues map) {
         map.clear();
@@ -2471,7 +2501,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 if (!isTemporary()) {
                     Integer syncEvents = initialValues.getAsInteger(Calendars.SYNC_EVENTS);
                     if (syncEvents != null && syncEvents == 1) {
-                        String account = initialValues.getAsString(Calendars._SYNC_ACCOUNT);
+                        String accountName = initialValues.getAsString(Calendars._SYNC_ACCOUNT);
+                        String accountType = initialValues.getAsString(
+                                Calendars._SYNC_ACCOUNT_TYPE);
+                        final Account account = new Account(accountName, accountType);
                         String calendarUrl = initialValues.getAsString(Calendars.URL);
                         scheduleSync(account, false /* two-way sync */, calendarUrl);
                     }
@@ -2958,13 +2991,17 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                             String syncId = cursor.getString(EVENTS_SYNC_ID_INDEX);
                             if (!TextUtils.isEmpty(syncId)) {
                                 String syncVersion = cursor.getString(EVENTS_SYNC_VERSION_INDEX);
-                                String syncAccount = cursor.getString(EVENTS_SYNC_ACCOUNT_INDEX);
+                                String syncAccountName =
+                                        cursor.getString(EVENTS_SYNC_ACCOUNT_NAME_INDEX);
+                                String syncAccountType =
+                                        cursor.getString(EVENTS_SYNC_ACCOUNT_TYPE_INDEX);
                                 Long calId = cursor.getLong(EVENTS_CALENDAR_ID_INDEX);
 
                                 ContentValues values = new ContentValues();
                                 values.put(Events._SYNC_ID, syncId);
                                 values.put(Events._SYNC_VERSION, syncVersion);
-                                values.put(Events._SYNC_ACCOUNT, syncAccount);
+                                values.put(Events._SYNC_ACCOUNT, syncAccountName);
+                                values.put(Events._SYNC_ACCOUNT_TYPE, syncAccountType);
                                 values.put(Events.CALENDAR_ID, calId);
                                 mDeletedEventsInserter.insert(values);
 
@@ -3207,12 +3244,12 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
      * Schedule a calendar sync for the account.
      * @param account the account for which to schedule a sync
      * @param uploadChangesOnly if set, specify that the sync should only send
-     *   up local changes
+ *   up local changes
      * @param url the url feed for the calendar to sync (may be null)
      */
-    private void scheduleSync(String account, boolean uploadChangesOnly, String url) {
+    private void scheduleSync(Account account, boolean uploadChangesOnly, String url) {
         Bundle extras = new Bundle();
-        extras.putString(ContentResolver.SYNC_EXTRAS_ACCOUNT, account);
+        extras.putParcelable(ContentResolver.SYNC_EXTRAS_ACCOUNT, account);
         extras.putBoolean(ContentResolver.SYNC_EXTRAS_UPLOAD, uploadChangesOnly);
         if (url != null) {
             extras.putString("feed", url);
@@ -3225,28 +3262,29 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         // get the account, url, and current selected state
         // for this calendar.
         Cursor cursor = query(ContentUris.withAppendedId(Calendars.CONTENT_URI, id),
-                new String[] { Calendars._SYNC_ACCOUNT,
-                               Calendars.URL,
-                               Calendars.SYNC_EVENTS},
+                new String[] {Calendars._SYNC_ACCOUNT, Calendars._SYNC_ACCOUNT_TYPE,
+                        Calendars.URL, Calendars.SYNC_EVENTS},
                 null /* selection */,
                 null /* selectionArgs */,
                 null /* sort */);
 
-        String account = null;
+        Account account = null;
         String calendarUrl = null;
         boolean oldSyncEvents = false;
         if (cursor != null) {
             try {
                 cursor.moveToFirst();
-                account = cursor.getString(0);
-                calendarUrl = cursor.getString(1);
-                oldSyncEvents = (cursor.getInt(2) != 0);
+                final String accountName = cursor.getString(0);
+                final String accountType = cursor.getString(1);
+                account = new Account(accountName, accountType);
+                calendarUrl = cursor.getString(2);
+                oldSyncEvents = (cursor.getInt(3) != 0);
             } finally {
                 cursor.close();
             }
         }
 
-        if (TextUtils.isEmpty(account) || TextUtils.isEmpty(calendarUrl)) {
+        if (account == null || TextUtils.isEmpty(calendarUrl)) {
             // should not happen?
             Log.w(TAG, "Cannot update subscription because account "
             + "or calendar url empty -- should not happen.");
@@ -3906,6 +3944,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events._SYNC_VERSION, values);
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events._SYNC_DIRTY, values);
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events._SYNC_ACCOUNT, values);
+            DatabaseUtils.cursorStringToContentValues(diffsCursor,
+                    Events._SYNC_ACCOUNT_TYPE, values);
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events.HTML_URI, values);
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events.TITLE, values);
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events.EVENT_LOCATION, values);
@@ -4026,6 +4066,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         sEventsProjectionMap.put(Events._SYNC_LOCAL_ID, "Events._sync_local_id AS _sync_local_id");
         sEventsProjectionMap.put(Events._SYNC_DIRTY, "Events._sync_dirty AS _sync_dirty");
         sEventsProjectionMap.put(Events._SYNC_ACCOUNT, "Events._sync_account AS _sync_account");
+        sEventsProjectionMap.put(Events._SYNC_ACCOUNT_TYPE,
+                "Events._sync_account_type AS _sync_account_type");
 
         // Instances columns
         sInstancesProjectionMap.put(Instances.BEGIN, "begin");

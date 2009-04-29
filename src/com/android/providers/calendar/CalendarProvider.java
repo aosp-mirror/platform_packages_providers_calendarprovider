@@ -1633,95 +1633,122 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             Debug.startMethodTracing("expandInstanceRangeLocked");
         }
 
-        final SQLiteDatabase db = getDatabase();
-        Cursor entries = null;
-
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "Expanding events between " + begin + " and " + end);
         }
 
+        Cursor entries = getEntries(begin, end);
         try {
-            SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
-            qb.setTables("Events INNER JOIN Calendars ON (calendar_id = Calendars._id)");
-            qb.setProjectionMap(sEventsProjectionMap);
-
-            String beginString = String.valueOf(begin);
-            String endString = String.valueOf(end);
-
-            qb.appendWhere("(dtstart <= ");
-            qb.appendWhere(endString);
-            qb.appendWhere(" AND ");
-            qb.appendWhere("(lastDate IS NULL OR lastDate >= ");
-            qb.appendWhere(beginString);
-            qb.appendWhere(")) OR (");
-            // grab recurrence exceptions that fall outside our expansion window but modify
-            // recurrences that do fall within our window.  we won't insert these into the output
-            // set of instances, but instead will just add them to our cancellations list, so we
-            // can cancel the correct recurrence expansion instances.
-            qb.appendWhere("originalInstanceTime IS NOT NULL ");
-            qb.appendWhere("AND originalInstanceTime <= ");
-            qb.appendWhere(endString);
-            qb.appendWhere(" AND ");
-            // we don't have originalInstanceDuration or end time.  for now, assume the original
-            // instance lasts no longer than 1 week.
-            // TODO: compute the originalInstanceEndTime or get this from the server.
-            qb.appendWhere("originalInstanceTime >= ");
-            qb.appendWhere(String.valueOf(begin - 7*24*60*60*1000 /* 1 week */));
-            qb.appendWhere(")");
-
-            if (Log.isLoggable(TAG, Log.VERBOSE)) {
-                Log.v(TAG, "Retrieving events to expand: " + qb.toString());
+            performInstanceExpansion(begin, end, localTimezone, entries);
+        } finally {
+            if (entries != null) {
+                entries.close();
             }
+        }
+        if (PROFILE) {
+            Debug.stopMethodTracing();
+        }
+    }
 
-            entries = qb.query(db, EXPAND_COLUMNS, null, null, null, null, null);
+    /**
+     * Get all entries affecting the given window.
+     * @param begin Window start (ms).
+     * @param end Window end (ms).
+     * @return Cursor for the entries; caller must close it.
+     */
+    private Cursor getEntries(long begin, long end) {
+        final SQLiteDatabase db = getDatabase();
+        SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
+        qb.setTables("Events INNER JOIN Calendars ON (calendar_id = Calendars._id)");
+        qb.setProjectionMap(sEventsProjectionMap);
 
-            RecurrenceProcessor rp = new RecurrenceProcessor();
+        String beginString = String.valueOf(begin);
+        String endString = String.valueOf(end);
 
-            int statusColumn = entries.getColumnIndex(Events.STATUS);
-            int dtstartColumn = entries.getColumnIndex(Events.DTSTART);
-            int dtendColumn = entries.getColumnIndex(Events.DTEND);
-            int eventTimezoneColumn = entries.getColumnIndex(Events.EVENT_TIMEZONE);
-            int durationColumn = entries.getColumnIndex(Events.DURATION);
-            int rruleColumn = entries.getColumnIndex(Events.RRULE);
-            int rdateColumn = entries.getColumnIndex(Events.RDATE);
-            int exruleColumn = entries.getColumnIndex(Events.EXRULE);
-            int exdateColumn = entries.getColumnIndex(Events.EXDATE);
-            int allDayColumn = entries.getColumnIndex(Events.ALL_DAY);
-            int idColumn = entries.getColumnIndex(Events._ID);
-            int syncIdColumn = entries.getColumnIndex(Events._SYNC_ID);
-            int originalEventColumn = entries.getColumnIndex(Events.ORIGINAL_EVENT);
-            int originalInstanceTimeColumn = entries.getColumnIndex(Events.ORIGINAL_INSTANCE_TIME);
+        qb.appendWhere("(dtstart <= ");
+        qb.appendWhere(endString);
+        qb.appendWhere(" AND ");
+        qb.appendWhere("(lastDate IS NULL OR lastDate >= ");
+        qb.appendWhere(beginString);
+        qb.appendWhere(")) OR (");
+        // grab recurrence exceptions that fall outside our expansion window but modify
+        // recurrences that do fall within our window.  we won't insert these into the output
+        // set of instances, but instead will just add them to our cancellations list, so we
+        // can cancel the correct recurrence expansion instances.
+        qb.appendWhere("originalInstanceTime IS NOT NULL ");
+        qb.appendWhere("AND originalInstanceTime <= ");
+        qb.appendWhere(endString);
+        qb.appendWhere(" AND ");
+        // we don't have originalInstanceDuration or end time.  for now, assume the original
+        // instance lasts no longer than 1 week.
+        // TODO: compute the originalInstanceEndTime or get this from the server.
+        qb.appendWhere("originalInstanceTime >= ");
+        qb.appendWhere(String.valueOf(begin - 7*24*60*60*1000 /* 1 week */));
+        qb.appendWhere(")");
 
-            ContentValues initialValues;
-            EventInstancesMap instancesMap = new EventInstancesMap();
+        if (Log.isLoggable(TAG, Log.VERBOSE)) {
+            Log.v(TAG, "Retrieving events to expand: " + qb.toString());
+        }
 
-            Duration duration = new Duration();
-            Time eventTime = new Time();
+        return qb.query(db, EXPAND_COLUMNS, null, null, null, null, null);
+    }
 
-            // Invariant: entries contains all events that affect the current
-            // window.  It consists of:
-            // a) Individual events that fall in the window.  These will be
-            //    displayed.
-            // b) Recurrences that included the window.  These will be displayed
-            //    if not canceled.
-            // c) Recurrence exceptions that fall in the window.  These will be
-            //    displayed if not cancellations.
-            // d) Recurrence exceptions that modify an instance inside the
-            //    window (subject to 1 week assumption above), but are outside
-            //    the window.  These will not be displayed.  Cases c and d are
-            //    distingushed by the start / end time.
+    /**
+     * Perform instance expansion on the given entries.
+     * @param begin Window start (ms).
+     * @param end Window end (ms).
+     * @param localTimezone
+     * @param entries The entries to process.
+     */
+    private void performInstanceExpansion(long begin, long end, String localTimezone, Cursor entries) {
+        RecurrenceProcessor rp = new RecurrenceProcessor();
 
-            while (entries.moveToNext()) {
+        int statusColumn = entries.getColumnIndex(Events.STATUS);
+        int dtstartColumn = entries.getColumnIndex(Events.DTSTART);
+        int dtendColumn = entries.getColumnIndex(Events.DTEND);
+        int eventTimezoneColumn = entries.getColumnIndex(Events.EVENT_TIMEZONE);
+        int durationColumn = entries.getColumnIndex(Events.DURATION);
+        int rruleColumn = entries.getColumnIndex(Events.RRULE);
+        int rdateColumn = entries.getColumnIndex(Events.RDATE);
+        int exruleColumn = entries.getColumnIndex(Events.EXRULE);
+        int exdateColumn = entries.getColumnIndex(Events.EXDATE);
+        int allDayColumn = entries.getColumnIndex(Events.ALL_DAY);
+        int idColumn = entries.getColumnIndex(Events._ID);
+        int syncIdColumn = entries.getColumnIndex(Events._SYNC_ID);
+        int originalEventColumn = entries.getColumnIndex(Events.ORIGINAL_EVENT);
+        int originalInstanceTimeColumn = entries.getColumnIndex(Events.ORIGINAL_INSTANCE_TIME);
+
+        ContentValues initialValues;
+        EventInstancesMap instancesMap = new EventInstancesMap();
+
+        Duration duration = new Duration();
+        Time eventTime = new Time();
+
+        // Invariant: entries contains all events that affect the current
+        // window.  It consists of:
+        // a) Individual events that fall in the window.  These will be
+        //    displayed.
+        // b) Recurrences that included the window.  These will be displayed
+        //    if not canceled.
+        // c) Recurrence exceptions that fall in the window.  These will be
+        //    displayed if not cancellations.
+        // d) Recurrence exceptions that modify an instance inside the
+        //    window (subject to 1 week assumption above), but are outside
+        //    the window.  These will not be displayed.  Cases c and d are
+        //    distingushed by the start / end time.
+
+        while (entries.moveToNext()) {
+            try {
                 initialValues = null;
 
                 boolean allDay = entries.getInt(allDayColumn) != 0;
 
                 String eventTimezone = entries.getString(eventTimezoneColumn);
                 if (allDay || TextUtils.isEmpty(eventTimezone)) {
-                  // in the events table, allDay events start at midnight.
-                  // this forces them to stay at midnight for all day events
-                  // TODO: check that this actually does the right thing.
-                  eventTimezone = Time.TIMEZONE_UTC;
+                    // in the events table, allDay events start at midnight.
+                    // this forces them to stay at midnight for all day events
+                    // TODO: check that this actually does the right thing.
+                    eventTimezone = Time.TIMEZONE_UTC;
                 }
 
                 long dtstartMillis = entries.getLong(dtstartColumn);
@@ -1767,7 +1794,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     if (status == Events.STATUS_CANCELED) {
                         // should not happen!
                         Log.e(TAG, "Found canceled recurring event in "
-                        + "Events table.  Ignoring.");
+                                + "Events table.  Ignoring.");
                         continue;
                     }
 
@@ -1809,15 +1836,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     }
 
                     long[] dates;
-                    try {
-                        dates = rp.expand(eventTime, recur, begin, end);
-                    } catch (DateException e) {
-                        Log.w(TAG, "RecurrenceProcessor.expand skipping " + recur, e);
-                        continue;
-                    } catch (TimeFormatException e) {
-                        Log.w(TAG, "RecurrenceProcessor.expand skipping " + recur, e);
-                        continue;
-                    }
+                    dates = rp.expand(eventTime, recur, begin, end);
 
                     // Initialize the "eventTime" timezone outside the loop.
                     // This is used in computeTimezoneDependentFields().
@@ -1893,124 +1912,112 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
                     instancesMap.add(syncId, initialValues);
                 }
+            } catch (DateException e) {
+                Log.w(TAG, "RecurrenceProcessor error ", e);
+            } catch (TimeFormatException e) {
+                Log.w(TAG, "RecurrenceProcessor error ", e);
             }
+        }
 
-            // Invariant: instancesMap contains all instances that affect the
-            // window, indexed by original sync id.  It consists of:
-            // a) Individual events that fall in the window.  They have:
-            //   EVENT_ID, BEGIN, END
-            // b) Instances of recurrences that fall in the window.  They may
-            //   be subject to exceptions.  They have:
-            //   EVENT_ID, BEGIN, END
-            // c) Exceptions that fall in the window.  They have:
-            //   ORIGINAL_EVENT, ORIGINAL_INSTANCE_TIME, STATUS (since they can
-            //   be a modification or cancellation), EVENT_ID, BEGIN, END
-            // d) Recurrence exceptions that modify an instance inside the
-            //   window but fall outside the window.  They have:
-            //   ORIGINAL_EVENT, ORIGINAL_INSTANCE_TIME, STATUS =
-            //   STATUS_CANCELED, EVENT_ID, BEGIN, END
+        // Invariant: instancesMap contains all instances that affect the
+        // window, indexed by original sync id.  It consists of:
+        // a) Individual events that fall in the window.  They have:
+        //   EVENT_ID, BEGIN, END
+        // b) Instances of recurrences that fall in the window.  They may
+        //   be subject to exceptions.  They have:
+        //   EVENT_ID, BEGIN, END
+        // c) Exceptions that fall in the window.  They have:
+        //   ORIGINAL_EVENT, ORIGINAL_INSTANCE_TIME, STATUS (since they can
+        //   be a modification or cancellation), EVENT_ID, BEGIN, END
+        // d) Recurrence exceptions that modify an instance inside the
+        //   window but fall outside the window.  They have:
+        //   ORIGINAL_EVENT, ORIGINAL_INSTANCE_TIME, STATUS =
+        //   STATUS_CANCELED, EVENT_ID, BEGIN, END
 
-            // First, delete the original instances corresponding to recurrence
-            // exceptions.  We do this by iterating over the list and for each
-            // recurrence exception, we search the list for an instance with a
-            // matching "original instance time".  If we find such an instance,
-            // we remove it from the list.  If we don't find such an instance
-            // then we cancel the recurrence exception.
-            Set<String> keys = instancesMap.keySet();
-            for (String syncId : keys) {
-                InstancesList list = instancesMap.get(syncId);
-                for (ContentValues values : list) {
+        // First, delete the original instances corresponding to recurrence
+        // exceptions.  We do this by iterating over the list and for each
+        // recurrence exception, we search the list for an instance with a
+        // matching "original instance time".  If we find such an instance,
+        // we remove it from the list.  If we don't find such an instance
+        // then we cancel the recurrence exception.
+        Set<String> keys = instancesMap.keySet();
+        for (String syncId : keys) {
+            InstancesList list = instancesMap.get(syncId);
+            for (ContentValues values : list) {
 
-                    // If this instance is not a recurrence exception, then
-                    // skip it.
-                    if (!values.containsKey(Events.ORIGINAL_EVENT)) {
-                        continue;
-                    }
+                // If this instance is not a recurrence exception, then
+                // skip it.
+                if (!values.containsKey(Events.ORIGINAL_EVENT)) {
+                    continue;
+                }
 
-                    String originalEvent = values.getAsString(Events.ORIGINAL_EVENT);
-                    long originalTime = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
-                     InstancesList originalList = instancesMap.get(originalEvent);
-                    if (originalList == null) {
-                        // The original recurrence is not present, so don't try canceling it.
-                        continue;
-                    }
+                String originalEvent = values.getAsString(Events.ORIGINAL_EVENT);
+                long originalTime = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
+                InstancesList originalList = instancesMap.get(originalEvent);
+                if (originalList == null) {
+                    // The original recurrence is not present, so don't try canceling it.
+                    continue;
+                }
 
-                    // Search the original event for a matching original
-                    // instance time.  If there is a matching one, then remove
-                    // the original one.  We do this both for exceptions that
-                    // change the original instance as well as for exceptions
-                    // that delete the original instance.
-                    boolean found = false;
-                    for (int num = originalList.size() - 1; num >= 0; num--) {
-                        ContentValues originalValues = originalList.get(num);
-                        long beginTime = originalValues.getAsLong(Instances.BEGIN);
-                        if (beginTime == originalTime) {
-                            // We found the original instance, so remove it.
-                            found = true;
-                            originalList.remove(num);
-                        }
-                    }
-
-                    // If we didn't find a matching instance time then cancel
-                    // this recurrence exception.
-                    if (!found) {
-                        values.put(Events.STATUS, Events.STATUS_CANCELED);
+                // Search the original event for a matching original
+                // instance time.  If there is a matching one, then remove
+                // the original one.  We do this both for exceptions that
+                // change the original instance as well as for exceptions
+                // that delete the original instance.
+                boolean found = false;
+                for (int num = originalList.size() - 1; num >= 0; num--) {
+                    ContentValues originalValues = originalList.get(num);
+                    long beginTime = originalValues.getAsLong(Instances.BEGIN);
+                    if (beginTime == originalTime) {
+                        // We found the original instance, so remove it.
+                        found = true;
+                        originalList.remove(num);
                     }
                 }
-            }
 
-            // Invariant: instancesMap contains filtered instances.
-            // It consists of:
-            // a) Individual events that fall in the window.
-            // b) Instances of recurrences that fall in the window and have not
-            //   been subject to exceptions.
-            // c) Exceptions that fall in the window.  They will have
-            //   STATUS_CANCELED if they are cancellations.
-            // d) Recurrence exceptions that modify an instance inside the
-            //   window but fall outside the window.  These are STATUS_CANCELED.
-
-            // Now do the inserts.  Since the db lock is held when this method is executed,
-            // this will be done in a transaction.
-            // NOTE: if there is lock contention (e.g., a sync is trying to merge into the db
-            // while the calendar app is trying to query the db (expanding instances)), we will
-            // not be "polite" and yield the lock until we're done.  This will favor local query
-            // operations over sync/write operations.
-            for (String syncId : keys) {
-                InstancesList list = instancesMap.get(syncId);
-                for (ContentValues values : list) {
-
-                    // If this instance was cancelled then don't create a new
-                    // instance.
-                    Integer status = values.getAsInteger(Events.STATUS);
-                    if (status != null && status == Events.STATUS_CANCELED) {
-                        continue;
-                    }
-
-                    // Remove these fields before inserting a new instance
-                    values.remove(Events.ORIGINAL_EVENT);
-                    values.remove(Events.ORIGINAL_INSTANCE_TIME);
-                    values.remove(Events.STATUS);
-                    
-                    mInstancesInserter.replace(values);
-                    if (false) {
-                        // yield the lock if anyone else is trying to
-                        // perform a db operation here.
-                        db.yieldIfContended();
-                    }
+                // If we didn't find a matching instance time then cancel
+                // this recurrence exception.
+                if (!found) {
+                    values.put(Events.STATUS, Events.STATUS_CANCELED);
                 }
             }
-        } catch (TimeFormatException e) {
-            Log.w(TAG, "Exception in instance query preparation", e);
         }
-        finally {
-            if (entries != null) {
-                entries.close();
+
+        // Invariant: instancesMap contains filtered instances.
+        // It consists of:
+        // a) Individual events that fall in the window.
+        // b) Instances of recurrences that fall in the window and have not
+        //   been subject to exceptions.
+        // c) Exceptions that fall in the window.  They will have
+        //   STATUS_CANCELED if they are cancellations.
+        // d) Recurrence exceptions that modify an instance inside the
+        //   window but fall outside the window.  These are STATUS_CANCELED.
+
+        // Now do the inserts.  Since the db lock is held when this method is executed,
+        // this will be done in a transaction.
+        // NOTE: if there is lock contention (e.g., a sync is trying to merge into the db
+        // while the calendar app is trying to query the db (expanding instances)), we will
+        // not be "polite" and yield the lock until we're done.  This will favor local query
+        // operations over sync/write operations.
+        for (String syncId : keys) {
+            InstancesList list = instancesMap.get(syncId);
+            for (ContentValues values : list) {
+
+                // If this instance was cancelled then don't create a new
+                // instance.
+                Integer status = values.getAsInteger(Events.STATUS);
+                if (status != null && status == Events.STATUS_CANCELED) {
+                    continue;
+                }
+
+                // Remove these fields before inserting a new instance
+                values.remove(Events.ORIGINAL_EVENT);
+                values.remove(Events.ORIGINAL_INSTANCE_TIME);
+                values.remove(Events.STATUS);
+
+                mInstancesInserter.replace(values);
             }
         }
-        if (PROFILE) {
-            Debug.stopMethodTracing();
-        }
-        //System.out.println("EXIT  insertInstanceRange begin=" + begin + " end=" + end);
     }
 
     /**

@@ -1908,7 +1908,12 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     // add events to the instances map if they don't actually fall within our
                     // expansion window.
                     if ((dtendMillis < begin) || (dtstartMillis > end)) {
-                        initialValues.put(Events.STATUS, Events.STATUS_CANCELED);
+                        if (originalEvent != null && originalInstanceTimeMillis != -1) {
+                            initialValues.put(Events.STATUS, Events.STATUS_CANCELED);
+                        } else {
+                            Log.w(TAG, "Unexpected event outside window: " + syncId);
+                            continue;
+                        }
                     }
 
                     initialValues.put(Instances.EVENT_ID, eventId);

@@ -45,7 +45,6 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SyncAdapter;
 import android.content.SyncContext;
 import android.content.UriMatcher;
 import android.database.Cursor;
@@ -88,7 +87,6 @@ import java.util.Set;
 import java.util.TimeZone;
 
 public class CalendarProvider extends AbstractSyncableContentProvider {
-
     private static final boolean PROFILE = false;
     private static final boolean MULTIPLE_ATTENDEES_PER_EVENT = false;
     private static final String[] ACCOUNTS_PROJECTION =
@@ -273,7 +271,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     private AlarmManager mAlarmManager;
 
-    private CalendarSyncAdapter mSyncAdapter;
     private CalendarAppWidgetProvider mAppWidgetProvider = CalendarAppWidgetProvider.getInstance();
 
     /**
@@ -306,6 +303,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     @Override
     public boolean onCreate() {
         super.onCreate();
+
+        setTempProviderSyncAdapter(new CalendarSyncAdapter(getContext(), this));
 
         // Register for Intent broadcasts
         IntentFilter filter = new IntentFilter();
@@ -3344,14 +3343,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         // If the calendar is not selected for syncing, then don't download
         // events.
         scheduleSync(account, !syncEvents, calendarUrl);
-    }
-
-    @Override
-    public synchronized SyncAdapter getSyncAdapter() {
-        if (mSyncAdapter == null) {
-            mSyncAdapter = new CalendarSyncAdapter(getContext(), this);
-        }
-        return mSyncAdapter;
     }
 
     @Override

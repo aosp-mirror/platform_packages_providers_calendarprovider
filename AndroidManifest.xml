@@ -39,6 +39,13 @@
                 android:syncable="true" android:multiprocess="false"
                 android:readPermission="android.permission.READ_CALENDAR"
                 android:writePermission="android.permission.WRITE_CALENDAR" />
+        <service android:name="CalendarSyncAdapterService" android:exported="true">
+            <intent-filter>
+                <action android:name="android.content.SyncAdapter" />
+            </intent-filter>
+            <meta-data android:name="android.content.SyncAdapter"
+                       android:resource="@xml/syncadapter" />
+        </service>
         <activity android:name="CalendarContentProviderTests" android:label="Calendar Content Provider">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

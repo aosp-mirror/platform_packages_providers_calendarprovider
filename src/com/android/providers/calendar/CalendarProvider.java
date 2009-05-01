@@ -145,6 +145,11 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         0x1fffffff, 0x3fffffff, 0x7fffffff, 0xffffffff,
     };
 
+    // To determine if a recurrence exception originally overlapped the
+    // window, we need to assume a maximum duration, since we only know
+    // the original start time.
+    private static final int MAX_ASSUMED_DURATION = 7*24*60*60*1000;
+
     public static final class TimeRange {
         public long begin;
         public long end;
@@ -1683,7 +1688,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         // instance lasts no longer than 1 week.
         // TODO: compute the originalInstanceEndTime or get this from the server.
         qb.appendWhere("originalInstanceTime >= ");
-        qb.appendWhere(String.valueOf(begin - 7*24*60*60*1000 /* 1 week */));
+        qb.appendWhere(String.valueOf(begin - MAX_ASSUMED_DURATION));
         qb.appendWhere(")");
 
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
@@ -2731,15 +2736,17 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         db.update("Events", values, "_id="+eventId, null);
     }
 
+    /**
+     * Updates the instances table when an event is added or updated.
+     * @param values The new values of the event.
+     * @param rowId The database row id of the event.
+     * @param newEvent true if the event is new.
+     * @param db The database
+     */
     private void updateInstancesLocked(ContentValues values,
-                                       long rowId,
-                                       boolean newEvent,
-                                       SQLiteDatabase db) {
-        if (isRecurrenceEvent(values))  {
-            // TODO: insert the new recurrence into the instances table.
-            mMetaData.clearInstanceRange();
-            return;
-        }
+            long rowId,
+            boolean newEvent,
+            SQLiteDatabase db) {
 
         // If there are no expanded Instances, then return.
         MetaData.Fields fields = mMetaData.getFieldsLocked();
@@ -2747,13 +2754,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             return;
         }
 
-        // if the event is in the expanded range, insert
-        // into the instances table.
-        // TODO: deal with durations.  currently, durations are only used in
-        // recurrences.
-
         Long dtstartMillis = values.getAsLong(Events.DTSTART);
-
         if (dtstartMillis == null) {
             if (newEvent) {
                 // must be present for a new event.
@@ -2764,14 +2765,46 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             return;
         }
 
+        Long lastDateMillis = values.getAsLong(Events.LAST_DATE);
+        Long originalInstanceTime = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
+
         if (!newEvent) {
+            // Want to do this for regular event, recurrence, or exception.
+            // For recurrence or exception, more deletion may happen below if we
+            // do an instance expansion.  This deletion will suffice if the exception
+            // is moved outside the window, for instance.
             db.delete("Instances", "event_id=" + rowId, null /* selectionArgs */);
+        }
+
+        if (isRecurrenceEvent(values))  {
+            // The recurrence or exception needs to be (re-)expanded if:
+            // a) Exception or recurrence that falls inside window
+            boolean insideWindow = dtstartMillis <= fields.maxInstance &&
+                    (lastDateMillis == null || lastDateMillis >= fields.minInstance);
+            // b) Exception that affects instance inside window
+            // These conditions match the query in getEntries
+            //  See getEntries comment for explanation of subtracting 1 week.
+            boolean affectsWindow = originalInstanceTime != null &&
+                    originalInstanceTime <= fields.maxInstance &&
+                    originalInstanceTime >= fields.minInstance - MAX_ASSUMED_DURATION;
+            if (insideWindow || affectsWindow) {
+                updateRecurrenceInstancesLocked(values, rowId, db);
+            }
+            // TODO: an exception creation or update could be optimized by
+            // updating just the affected instances, instead of regenerating
+            // the recurrence.
+            return;
         }
 
         Long dtendMillis = values.getAsLong(Events.DTEND);
         if (dtendMillis == null) {
             dtendMillis = dtstartMillis;
         }
+
+        // if the event is in the expanded range, insert
+        // into the instances table.
+        // TODO: deal with durations.  currently, durations are only used in
+        // recurrences.
 
         if (dtstartMillis <= fields.maxInstance && dtendMillis >= fields.minInstance) {
             ContentValues instanceValues = new ContentValues();
@@ -2796,6 +2829,102 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             computeTimezoneDependentFields(dtstartMillis, dtendMillis, local, instanceValues);
             mInstancesInserter.insert(instanceValues);
         }
+    }
+
+    /**
+     * Determines the recurrence entries associated with a particular recurrence.
+     * This set is the base recurrence and any exception.
+     *
+     * Normally the entries are indicated by the sync id of the base recurrence
+     * (which is the originalEvent in the exceptions).
+     * However, a complication is that a recurrence may not yet have a sync id.
+     * In that case, the recurrence is specified by the rowId.
+     *
+     * @param recurrenceSyncId The sync id of the base recurrence, or null.
+     * @param rowId The row id of the base recurrence.
+     * @return the relevant entries.
+     */
+    private Cursor getRelevantRecurrenceEntries(String recurrenceSyncId, long rowId) {
+        final SQLiteDatabase db = getDatabase();
+        SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
+
+        qb.setTables("Events INNER JOIN Calendars ON (calendar_id = Calendars._id)");
+        qb.setProjectionMap(sEventsProjectionMap);
+        if (recurrenceSyncId == null) {
+            String where = "Events._id = " + rowId;
+            qb.appendWhere(where);
+        } else {
+            String where = "Events._sync_id = \"" + recurrenceSyncId + "\""
+                    + " OR Events.originalEvent = \"" + recurrenceSyncId + "\"";
+            qb.appendWhere(where);
+        }
+        if (Log.isLoggable(TAG, Log.VERBOSE)) {
+            Log.v(TAG, "Retrieving events to expand: " + qb.toString());
+        }
+
+        return qb.query(db, EXPAND_COLUMNS, null /* selection */, null /* selectionArgs */, null /* groupBy */, null /* having */, null /* sortOrder */);
+    }
+
+    /**
+     * Do incremental Instances update of a recurrence or recurrence exception.
+     *
+     * This method does performInstanceExpansion on just the modified recurrence,
+     * to avoid the overhead of recomputing the entire instance table.
+     *
+     * @param values The new values of the event.
+     * @param rowId The database row id of the event.
+     * @param db The database
+     */
+    private void updateRecurrenceInstancesLocked(ContentValues values,
+            long rowId,
+            SQLiteDatabase db) {
+        MetaData.Fields fields = mMetaData.getFieldsLocked();
+        String originalEvent = values.getAsString(Events.ORIGINAL_EVENT);
+        String recurrenceSyncId = null;
+        if (originalEvent != null) {
+            recurrenceSyncId = originalEvent;
+        } else {
+            // Get the recurrence's sync id from the database
+            recurrenceSyncId = DatabaseUtils.stringForQuery(db, "SELECT _sync_id FROM Events"
+                    + " WHERE _id = " + rowId, null /* selection args */);
+        }
+        // recurrenceSyncId is the _sync_id of the underlying recurrence
+        // If the recurrence hasn't gone to the server, it will be null.
+
+        // Need to clear out old instances
+        if (recurrenceSyncId == null) {
+            // Creating updating a recurrence that hasn't gone to the server.
+            // Need to delete based on row id
+            String where = "_id IN (SELECT Instances._id as _id"
+                    + " FROM Instances INNER JOIN Events"
+                    + " ON (Events._id = Instances.event_id)"
+                    + " WHERE Events._id =?)";
+            db.delete("Instances", where, new String[]{"" + rowId});
+        } else {
+            // Creating or modifying a recurrence or exception.
+            // Delete instances for recurrence (_sync_id = recurrenceSyncId)
+            // and all exceptions (originalEvent = recurrenceSyncId)
+            String where = "_id IN (SELECT Instances._id as _id"
+                    + " FROM Instances INNER JOIN Events"
+                    + " ON (Events._id = Instances.event_id)"
+                    + " WHERE Events._sync_id =?"
+                    + " OR Events.originalEvent =?)";
+            db.delete("Instances", where, new String[]{recurrenceSyncId, recurrenceSyncId});
+        }
+
+        // Now do instance expansion
+        Cursor entries = getRelevantRecurrenceEntries(recurrenceSyncId, rowId);
+        try {
+            performInstanceExpansion(fields.minInstance, fields.maxInstance, fields.timezone, entries);
+        } finally {
+            if (entries != null) {
+                entries.close();
+            }
+        }
+
+        // Clear busy bits
+        mMetaData.writeLocked(fields.timezone, fields.minInstance, fields.maxInstance,
+                0 /* startDay */, 0 /* endDay */);
     }
 
     long calculateLastDate(ContentValues values)

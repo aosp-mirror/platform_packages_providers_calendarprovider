@@ -54,10 +54,12 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
     private MockContentResolver mResolver;
     private Uri mEventsUri = Uri.parse("content://calendar/events");
     private int mCalendarId;
+
+    protected boolean mWipe = false;
     
     // We need a unique id to put in the _sync_id field so that we can create
     // recurrence exceptions that refer to recurring events.
-    private int mGlobalSyncId = 1;
+    private int mGlobalSyncId = 1000;
     
     /**
      * KeyValue is a simple class that stores a pair of strings representing
@@ -136,9 +138,13 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
             this.eventName = eventName;
             this.pairs = pairs;
         }
-        
+
         public void execute() {
             Log.i(TAG, "update " + eventName);
+            if (mWipe) {
+                // Wipe instance table so it will be regenerated
+                mMetaData.clearInstanceRange();
+            }
             ContentValues map = new ContentValues();
             for (KeyValue pair : pairs) {
                 String value = pair.value;
@@ -261,7 +267,7 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
                 this.instances[index++] = time.toMillis(false /* use isDst */);
             }
         }
-        
+
         public void execute() {
             Cursor cursor = queryInstances(begin, end);
             int len = 0;
@@ -269,7 +275,7 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
                 len = instances.length;
             }
             assertEquals("number of instances don't match", len, cursor.getCount());
-            
+
             if (instances == null) {
                 return;
             }
@@ -827,7 +833,8 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
      * checks that the recurrence exception does not occur in the Instances
      * database table.
      */
-    private Command[] mExceptionWithTruncatedRecurrence = {
+    private Command[]
+            mExceptionWithTruncatedRecurrence = {
             new Insert("daily0"),
             // Verify 4 occurrences of the "daily0" repeating event
             new VerifyAllInstances("2008-05-01T00:00:00", "2008-05-04T00:01:00",
@@ -923,6 +930,7 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
             Log.i(TAG, "}");
             index += 1;
         }
+        cursor.moveToFirst();
     }
 
     private int insertCal(String name, String timezone) {
@@ -938,6 +946,10 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
     }
     
     private Uri insertEvent(int calId, EventInfo event) {
+        if (mWipe) {
+            // Wipe instance table so it will be regenerated
+            mMetaData.clearInstanceRange();
+        }
         ContentValues m = new ContentValues();
         m.put(Events.CALENDAR_ID, calId);
         m.put(Events.TITLE, event.mTitle);
@@ -1288,18 +1300,43 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
         }
     }
 
-    public void testCommandSequences() throws Exception {
+    /**
+     * Run commands, wiping instance table at each step.
+     * This tests full instance expansion.
+     * @throws Exception
+     */
+    public void testCommandSequences1() throws Exception {
+        commandSequences(true);
+    }
+
+    /**
+     * Run commands normally.
+     * This tests incremental instance expansion.
+     * @throws Exception
+     */
+    public void testCommandSequences2() throws Exception {
+        commandSequences(false);
+    }
+
+    /**
+     * Run thorough set of command sequences
+     * @param wipe true if instances should be wiped and regenerated
+     * @throws Exception
+     */
+    private void commandSequences(boolean wipe) throws Exception {
         Cursor cursor;
         Uri url = null;
+        mWipe = wipe; // Set global flag
 
         mCalendarId = insertCal("Calendar0", DEFAULT_TIMEZONE);
 
         cursor = mResolver.query(mEventsUri, null, null, null, null);
         assertEquals(0, cursor.getCount());
         cursor.close();
+        Command[] commands;
 
         Log.i(TAG, "Normal insert/delete");
-        Command[] commands = mNormalInsertDelete;
+        commands = mNormalInsertDelete;
         for (Command command : commands) {
             command.execute();
         }

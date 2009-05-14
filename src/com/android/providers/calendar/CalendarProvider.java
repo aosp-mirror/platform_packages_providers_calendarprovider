@@ -1969,21 +1969,13 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 // the original one.  We do this both for exceptions that
                 // change the original instance as well as for exceptions
                 // that delete the original instance.
-                boolean found = false;
                 for (int num = originalList.size() - 1; num >= 0; num--) {
                     ContentValues originalValues = originalList.get(num);
                     long beginTime = originalValues.getAsLong(Instances.BEGIN);
                     if (beginTime == originalTime) {
                         // We found the original instance, so remove it.
-                        found = true;
                         originalList.remove(num);
                     }
-                }
-
-                // If we didn't find a matching instance time then cancel
-                // this recurrence exception.
-                if (!found) {
-                    values.put(Events.STATUS, Events.STATUS_CANCELED);
                 }
             }
         }

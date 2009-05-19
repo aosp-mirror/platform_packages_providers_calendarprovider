@@ -63,6 +63,7 @@ import android.accounts.Account;
 import java.util.Enumeration;
 import java.util.Hashtable;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.Vector;
 
 /**
@@ -306,7 +307,11 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             // in order to format the "originalStartTime" correctly.
             boolean originalAllDay = c.getInt(c.getColumnIndex(Events.ORIGINAL_ALL_DAY)) != 0;
 
-            Time originalTime = new Time(c.getString(c.getColumnIndex(Events.EVENT_TIMEZONE)));
+            String timezone = c.getString(c.getColumnIndex(Events.EVENT_TIMEZONE));
+            if (TextUtils.isEmpty(timezone)) {
+                timezone = TimeZone.getDefault().getID();
+            }
+            Time originalTime = new Time(timezone);
             originalTime.set(originalStartTime);
 
             utc.set(originalStartTime);

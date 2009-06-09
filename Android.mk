@@ -22,7 +22,7 @@ LOCAL_SRC_FILES := $(call all-java-files-under,src)
 
 # We depend on googlelogin-client also, but that is already
 # being included by google-framework
-LOCAL_STATIC_JAVA_LIBRARIES := google-framework googlelogin-client
+LOCAL_STATIC_JAVA_LIBRARIES := google-framework
 
 LOCAL_PACKAGE_NAME := CalendarProvider
 

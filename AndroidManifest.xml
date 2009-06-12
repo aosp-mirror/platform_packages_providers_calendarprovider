@@ -72,5 +72,19 @@
             </intent-filter>
         </receiver>
         <service android:name=".CalendarAppWidgetService" />
+        <activity android:name="CalendarDebug" android:label="@string/calendar_info">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <receiver android:name="CalendarDebugReceiver">
+            <intent-filter>
+                 <action android:name="android.provider.Telephony.SECRET_CODE" />
+                 <data android:scheme="android_secret_code" android:host="225" />
+            </intent-filter>
+       </receiver>
+
+
     </application>
 </manifest>

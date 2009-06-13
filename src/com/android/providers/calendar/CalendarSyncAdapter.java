@@ -110,6 +110,9 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
     private static final String FEEDS_SUBSTRING = "/feeds/";
     private static final String FULL_SELFATTENDANCE = "/full-selfattendance/";
 
+    /** System property to enable sliding window sync **/
+    private static final String USE_SLIDING_WINDOW = "sync.slidingwindows";
+
     public static class SyncInfo {
         // public String feedUrl;
         public long calendarId;
@@ -138,6 +141,10 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
     // Counters for sync event logging
     private static int mServerDiffs;
     private static int mRefresh;
+
+    /** These are temporary until a real policy is implemented. **/
+    private static final long MONTH_IN_MS = 2592000000L; // 30 days
+    private static final long YEAR_IN_MS = 31600000000L; // approximately
 
     protected CalendarSyncAdapter(Context context, SyncableContentProvider provider) {
         super(context, provider);
@@ -866,6 +873,26 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
         int entryState = entryToContentValues(event, syncLocalId, map, syncInfo);
 
+        // See if event is inside the window
+        if (entryState == ENTRY_OK && feedSyncData.newWindowEnd == 0) {
+            // A regular sync.  Accept the event if it is inside the sync window or
+            // it is a recurrence exception for something inside the sync window.
+
+            Long dtstart = map.getAsLong(Events.DTSTART);
+            if (dtstart != null && dtstart < feedSyncData.windowEnd) {
+                //  dstart inside window, keeping event
+            } else {
+                Long originalInstanceTime = map.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
+                if (originalInstanceTime != null &&
+                        originalInstanceTime.longValue() <= feedSyncData.windowEnd) {
+                    // originalInstanceTime inside the window, keeping event
+                } else {
+                    // "Rejecting event as outside window
+                    return;
+                }
+            }
+        }
+
         if (entryState == ENTRY_DELETED) {
             if (Config.LOGV) {
                 Log.v(TAG, "Got deleted entry from server: "
@@ -1055,6 +1082,15 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         }
     }
 
+    /**
+     * Converts an old non-sliding-windows database to sliding windows
+     * @param feedSyncData State of the sync.
+     */
+    private void upgradeToSlidingWindows(GDataSyncData.FeedData feedSyncData) {
+        feedSyncData.windowEnd = getSyncWindowEnd();
+        // TODO: Should prune old events
+    }
+
     @Override
     public void getServerDiffs(SyncContext context,
             SyncData baseSyncData, SyncableContentProvider tempProvider,
@@ -1069,7 +1105,37 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                 Log.d(TAG, "metafeedonly and feed both set.");
                 return;
             }
+            StringBuilder sb = new StringBuilder();
+            extrasToStringBuilder(extras, sb);
             String feedUrl = extras.getString("feed");
+
+            GDataSyncData.FeedData feedSyncData = getFeedData(feedUrl, baseSyncData);
+            if (feedSyncData != null && feedSyncData.windowEnd == 0) {
+                upgradeToSlidingWindows(feedSyncData);
+            } else if (feedSyncData == null) {
+                feedSyncData = new GDataSyncData.FeedData(0, 0, false, "", 0);
+                feedSyncData.windowEnd = getSyncWindowEnd();
+                ((GDataSyncData) baseSyncData).feedData.put(feedUrl, feedSyncData);
+            }
+
+            if (extras.getBoolean("moveWindow", false)) {
+                // This is a move window sync.  Set the new end.
+                // Setting newWindowEnd makes this a sliding window expansion sync.
+                if (feedSyncData.newWindowEnd == 0) {
+                    feedSyncData.newWindowEnd = getSyncWindowEnd();
+                }
+            } else {
+                // TODO The window move needs to be done only occasionally
+                if (getSyncWindowEnd() > feedSyncData.windowEnd) {
+                    // Schedule a move-the-window sync
+
+                    Bundle syncExtras = new Bundle();
+                    syncExtras.clear();
+                    syncExtras.putBoolean("moveWindow", true);
+                    syncExtras.putString("feed", feedUrl);
+                    mContentResolver.startSync(Calendar.CONTENT_URI, syncExtras);
+                }
+            }
             getServerDiffsForFeed(context, baseSyncData, tempProvider, feedUrl,
                     baseSyncInfo, syncResult);
             return;
@@ -1112,7 +1178,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                 syncExtras.clear();
                 syncExtras.putAll(extras);
                 syncExtras.putString("feed", feedUrl);
-                ContentResolver.requestSync(account, 
+                ContentResolver.requestSync(account,
                         Calendar.Calendars.CONTENT_URI.getAuthority(), syncExtras);
             }
         } finally {
@@ -1120,6 +1186,21 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         }
     }
 
+    /**
+     * Gets end of the sliding sync window.
+     * Window is approximately 1 year from now on approximately month boundaries.
+     * Could make this accurately hit month boundaries if it matters.
+     *
+     * @return end of window in ms
+     */
+    private static long getSyncWindowEnd() {
+        long now = System.currentTimeMillis();
+        if ("true".equals(SystemProperties.get(USE_SLIDING_WINDOW))) {
+            return ((now + YEAR_IN_MS)/ MONTH_IN_MS) * MONTH_IN_MS;
+        } else {
+            return Long.MAX_VALUE;
+        }
+    }
 
     private void getServerDiffsForFeed(SyncContext context, SyncData baseSyncData,
             SyncableContentProvider tempProvider,
@@ -1188,7 +1269,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
     protected void initTempProvider(SyncableContentProvider cp) {
         // TODO: don't use the real db's calendar id's.  create new ones locally and translate
         // during CalendarProvider's merge.
-        
+
         // populate temp provider with calendar ids, so joins work.
         ContentValues map = new ContentValues();
         final Account account = getAccount();
@@ -1283,9 +1364,31 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         return EventEntry.class;
     }
 
+    // XXX temporary debugging
+    private static void extrasToStringBuilder(Bundle bundle, StringBuilder sb) {
+        sb.append("[");
+        for (String key : bundle.keySet()) {
+            sb.append(key).append("=").append(bundle.get(key)).append(" ");
+        }
+        sb.append("]");
+    }
+
+
     @Override
     protected void updateQueryParameters(QueryParams params, GDataSyncData.FeedData feedSyncData) {
-        if (params.getUpdatedMin() == null) {
+        if (feedSyncData.newWindowEnd > 0) {
+            // Advancing the sliding window: set the parameters to the new part of the window
+            params.setUpdatedMin(null);
+            params.setParamValue("requirealldeleted", "false");
+            Time startMinTime = new Time(Time.TIMEZONE_UTC);
+            Time startMaxTime = new Time(Time.TIMEZONE_UTC);
+            startMinTime.set(feedSyncData.windowEnd);
+            startMaxTime.set(feedSyncData.newWindowEnd);
+            String startMin = startMinTime.format("%Y-%m-%dT%H:%M:%S.000Z");
+            String startMax = startMaxTime.format("%Y-%m-%dT%H:%M:%S.000Z");
+            params.setParamValue("start-min", startMin);
+            params.setParamValue("start-max", startMax);
+        } else if (params.getUpdatedMin() == null) {
             // if this is the first sync, only bother syncing starting from
             // one month ago.
             // TODO: remove this restriction -- we may want all of
@@ -1294,17 +1397,21 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             lastMonth.setToNow();
             --lastMonth.month;
             lastMonth.normalize(true /* ignore isDst */);
-            String startMin = lastMonth.format("%Y-%m-%dT%H:%M:%S.000Z");
             // TODO: move start-min to CalendarClient?
             // or create CalendarQueryParams subclass (extra class)?
+            String startMin = lastMonth.format("%Y-%m-%dT%H:%M:%S.000Z");
             params.setParamValue("start-min", startMin);
-            // HACK: specify that we want to expand recurrences ijn the past,
-            // so the server does not expand any recurrences.  we do this to
-            // avoid a large number of gd:when elements that we do not need,
-            // since we process gd:recurrence elements instead.
-            params.setParamValue("recurrence-expansion-start", "1970-01-01");
-            params.setParamValue("recurrence-expansion-end", "1970-01-01");
+            // Note: start-max is not set for regular syncs.  The sync needs to pick up events
+            // outside the window in case an event inside the window got moved outside.
+            // The event will be discarded later.
         }
+
+        // HACK: specify that we want to expand recurrences in the past,
+        // so the server does not expand any recurrences.  we do this to
+        // avoid a large number of gd:when elements that we do not need,
+        // since we process gd:recurrence elements instead.
+        params.setParamValue("recurrence-expansion-start", "1970-01-01");
+        params.setParamValue("recurrence-expansion-end", "1970-01-01");
         // we want to get the events ordered by last modified, so we can
         // recover in case we cannot process the entire feed.
         params.setParamValue("orderby", "lastmodified");

@@ -30,7 +30,7 @@
     <uses-permission android:name="android.permission.SUBSCRIBED_FEEDS_WRITE" />
 
     <application android:process="com.android.calendar"
-                 android:label="Calendar Storage"
+                 android:label="@string/calendar_storage"
                  android:icon="@drawable/app_icon">
         <!-- TODO: Remove dependency of application on the test runner
              (android.test) library. -->

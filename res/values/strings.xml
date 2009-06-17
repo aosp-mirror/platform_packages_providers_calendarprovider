@@ -16,6 +16,9 @@
 
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
 
+    <!-- Title for the Calendar Storage process. -->
+    <string name="calendar_storage">Calendar Storage</string>
+
     <!-- Title for calendar gadget when displayed in list of all other gadgets -->
     <string name="gadget_title">Calendar</string>
 

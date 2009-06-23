@@ -41,7 +41,7 @@ public class TestCalendarSyncAdapter extends TempProviderSyncAdapter {
     }
 
     @Override
-    public void onSyncStarting(SyncContext context, Account account, boolean forced,
+    public void onSyncStarting(SyncContext context, Account account, boolean manualSync,
             SyncResult result)
     {
     }

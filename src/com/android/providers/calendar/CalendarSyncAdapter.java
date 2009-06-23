@@ -552,12 +552,12 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
     }
 
     @Override
-    public void onSyncStarting(SyncContext context, Account account, boolean forced,
+    public void onSyncStarting(SyncContext context, Account account, boolean manualSync,
             SyncResult result) {
         mContentResolver = getContext().getContentResolver();
         mServerDiffs = 0;
         mRefresh = 0;
-        super.onSyncStarting(context, account, forced, result);
+        super.onSyncStarting(context, account, manualSync, result);
     }
 
     private void deletedEntryToContentValues(Long syncLocalId, EventEntry event,
@@ -1108,7 +1108,8 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                 syncExtras.clear();
                 syncExtras.putAll(extras);
                 syncExtras.putString("feed", feedUrl);
-                cr.startSync(Calendar.CONTENT_URI, syncExtras);
+                ContentResolver.requestSync(account, 
+                        Calendar.Calendars.CONTENT_URI.getAuthority(), syncExtras);
             }
         } finally {
             cursor.close();

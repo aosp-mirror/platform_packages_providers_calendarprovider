@@ -3073,13 +3073,12 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
      */
     private void scheduleSync(Account account, boolean uploadChangesOnly, String url) {
         Bundle extras = new Bundle();
-        extras.putParcelable(ContentResolver.SYNC_EXTRAS_ACCOUNT, account);
         extras.putBoolean(ContentResolver.SYNC_EXTRAS_UPLOAD, uploadChangesOnly);
         if (url != null) {
             extras.putString("feed", url);
-            extras.putBoolean(ContentResolver.SYNC_EXTRAS_FORCE, true);
+            extras.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
         }
-        getContext().getContentResolver().startSync(android.provider.Calendar.CONTENT_URI, extras);
+        ContentResolver.requestSync(account, Calendars.CONTENT_URI.getAuthority(), extras);
     }
 
     private void modifyCalendarSubscription(long id, boolean syncEvents) {

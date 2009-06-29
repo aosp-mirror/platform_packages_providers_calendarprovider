@@ -18,10 +18,7 @@ package com.android.providers.calendar;
 
 import com.android.internal.database.ArrayListCursor;
 
-import android.content.ContentProvider;
-import android.content.ContentUris;
-import android.content.ContentValues;
-import android.content.Context;
+import android.content.*;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
@@ -1360,6 +1357,68 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
                 assertEquals(busyInfo.mAllDayCounts[dayIndex], allDayCounts[dayIndex]);
             }
         }
+    }
+
+    public void testEntityQuery() throws Exception {
+        testInsertNormalEvents(); // To initialize
+
+        ContentValues reminder = new ContentValues();
+        reminder.put(Calendar.Reminders.EVENT_ID, 1);
+        reminder.put(Calendar.Reminders.MINUTES, 10);
+        reminder.put(Calendar.Reminders.METHOD, Calendar.Reminders.METHOD_SMS);
+        mResolver.insert(Calendar.Reminders.CONTENT_URI, reminder);
+        reminder.put(Calendar.Reminders.MINUTES, 20);
+        mResolver.insert(Calendar.Reminders.CONTENT_URI, reminder);
+
+        ContentValues extended = new ContentValues();
+        extended.put(Calendar.ExtendedProperties.NAME, "foo");
+        extended.put(Calendar.ExtendedProperties.VALUE, "bar");
+        extended.put(Calendar.ExtendedProperties.EVENT_ID, 2);
+        mResolver.insert(Calendar.ExtendedProperties.CONTENT_URI, extended);
+        extended.put(Calendar.ExtendedProperties.EVENT_ID, 1);
+        mResolver.insert(Calendar.ExtendedProperties.CONTENT_URI, extended);
+        extended.put(Calendar.ExtendedProperties.NAME, "foo2");
+        extended.put(Calendar.ExtendedProperties.VALUE, "bar2");
+        mResolver.insert(Calendar.ExtendedProperties.CONTENT_URI, extended);
+
+// Currently can't add attendees
+//        ContentValues attendee = new ContentValues();
+//        attendee.put(Calendar.Attendees.ATTENDEE_NAME, "Joe");
+//        attendee.put(Calendar.Attendees.ATTENDEE_EMAIL, "joe@joe.com");
+//        attendee.put(Calendar.Attendees.ATTENDEE_STATUS, Calendar.Attendees.ATTENDEE_STATUS_DECLINED);
+//        attendee.put(Calendar.Attendees.ATTENDEE_TYPE, Calendar.Attendees.TYPE_REQUIRED);
+//        attendee.put(Calendar.Attendees.ATTENDEE_RELATIONSHIP, Calendar.Attendees.RELATIONSHIP_PERFORMER);
+//        attendee.put(Calendar.Attendees.EVENT_ID, 3);
+//        mResolver.insert(Calendar.Attendees.CONTENT_URI, attendee);
+
+        EntityIterator ei = mResolver.queryEntities(mEventsUri, null, null, null);
+        int count = 0;
+        while (ei.hasNext()) {
+            Entity entity = ei.next();
+            ContentValues values = entity.getEntityValues();
+            ArrayList<Entity.NamedContentValues> subvalues = entity.getSubValues();
+            switch (values.getAsInteger("_id")) {
+                case 1:
+                    assertEquals(4, subvalues.size());
+                    break;
+                case 2:
+                    assertEquals(1, subvalues.size());
+                    break;
+                default:
+                    assertEquals(0, subvalues.size());
+                    break;
+            }
+            count += 1;
+        }
+        assertEquals(5, count);
+
+        ei = mResolver.queryEntities(mEventsUri, "Events._id = 3", null, null);
+        count = 0;
+        while (ei.hasNext()) {
+            Entity entity = ei.next();
+            count += 1;
+        }
+        assertEquals(1, count);
     }
 
     /**

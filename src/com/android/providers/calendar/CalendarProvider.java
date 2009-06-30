@@ -380,7 +380,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         long end = begin + MINIMUM_EXPANSION_SPAN;
         SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
         handleInstanceQuery(qb, begin, end, new String[] { Instances._ID },
-                null /* selection */, null /* sort */);
+                null /* selection */, null /* sort */, false /* searchByDayInsteadOfMillis */);
 
         // Also pre-compute the BusyBits table for this month.
         int startDay = Time.getJulianDay(begin, time.gmtoff);
@@ -981,6 +981,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 qb.appendWhere(url.getPathSegments().get(1));
                 break;
             case INSTANCES:
+            case INSTANCES_BY_DAY:
                 long begin;
                 long end;
                 try {
@@ -996,7 +997,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                             + url.getPathSegments().get(3));
                 }
                 return handleInstanceQuery(qb, begin, end, projectionIn,
-                        selection, sort);
+                        selection, sort, match == INSTANCES_BY_DAY);
             case BUSYBITS:
                 int startDay;
                 int endDay;
@@ -1090,16 +1091,22 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
      */
     private Cursor handleInstanceQuery(SQLiteQueryBuilder qb, long rangeBegin,
             long rangeEnd, String[] projectionIn,
-            String selection, String sort) {
+            String selection, String sort, boolean searchByDay) {
         final SQLiteDatabase db = getDatabase();
         // will lock the database.
         acquireInstanceRange(rangeBegin, rangeEnd, true /* use minimum expansion window */);
         qb.setTables("Instances INNER JOIN Events ON (Instances.event_id=Events._id) " +
                 "INNER JOIN Calendars ON (Events.calendar_id = Calendars._id)");
         qb.setProjectionMap(sInstancesProjectionMap);
-        qb.appendWhere("begin <= ");
-        qb.appendWhere(String.valueOf(rangeEnd));
-        qb.appendWhere(" AND end >= ");
+        if (searchByDay) {
+            qb.appendWhere("startDay <= ");
+            qb.appendWhere(String.valueOf(rangeEnd));
+            qb.appendWhere(" AND endDay >= ");
+        } else {
+            qb.appendWhere("begin <= ");
+            qb.appendWhere(String.valueOf(rangeEnd));
+            qb.appendWhere(" AND end >= ");
+        }
         qb.appendWhere(String.valueOf(rangeBegin));
         return qb.query(db, projectionIn, selection, null, null, null, sort);
     }
@@ -2150,6 +2157,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             case CALENDAR_ALERTS_ID:
                 return "vnd.android.cursor.item/calendar-alert";
             case INSTANCES:
+            case INSTANCES_BY_DAY:
                 return "vnd.android.cursor.dir/event-instance";
             case BUSYBITS:
                 return "vnd.android.cursor.dir/busybits";
@@ -2281,6 +2289,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             case CALENDAR_ALERTS_ID:
             case EXTENDED_PROPERTIES_ID:
             case INSTANCES:
+            case INSTANCES_BY_DAY:
                 throw new UnsupportedOperationException("Cannot insert into that URL");
             default:
                 throw new IllegalArgumentException("Unknown URL " + url);
@@ -2918,6 +2927,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             case CALENDARS:
                 return deleteMatchingCalendars(where);
             case INSTANCES:
+            case INSTANCES_BY_DAY:
                 throw new UnsupportedOperationException("Cannot delete that URL");
             default:
                 throw new IllegalArgumentException("Unknown URL " + url);
@@ -3813,6 +3823,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     private static final int CALENDAR_ALERTS_ID = 14;
     private static final int CALENDAR_ALERTS_BY_INSTANCE = 15;
     private static final int BUSYBITS = 16;
+    private static final int INSTANCES_BY_DAY = 17;
 
     private static final UriMatcher sURLMatcher = new UriMatcher(UriMatcher.NO_MATCH);
     private static final HashMap<String, String> sInstancesProjectionMap;
@@ -3824,6 +3835,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     static {
         sURLMatcher.addURI("calendar", "instances/when/*/*", INSTANCES);
+        sURLMatcher.addURI("calendar", "instances/whenbyday/*/*", INSTANCES_BY_DAY);
         sURLMatcher.addURI("calendar", "events", EVENTS);
         sURLMatcher.addURI("calendar", "events/#", EVENTS_ID);
         sURLMatcher.addURI("calendar", "calendars", CALENDARS);

@@ -32,6 +32,7 @@ import android.provider.Calendar.Instances;
 import android.test.ProviderTestCase2;
 import android.test.mock.MockContentResolver;
 import android.test.suitebuilder.annotation.LargeTest;
+import android.test.suitebuilder.annotation.Suppress;
 import android.util.Log;
 
 import java.util.ArrayList;
@@ -1517,6 +1518,20 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
         for (Command command : commands) {
             command.execute();
         }
+    }
+
+    /**
+     * Test Time toString.
+     * @throws Exception
+     */
+    // Suppressed because toString currently hangs.
+    @Suppress
+    public void testTimeToString() throws Exception {
+        Time time = new Time(Time.TIMEZONE_UTC);
+        String str = "2039-01-01T23:00:00.000Z";
+        String result = "20390101T230000UTC(0,0,0,-1,0)";
+        time.parse3339(str);
+        assertEquals(result, time.toString());
     }
     
     private Cursor queryInstances(long begin, long end) {

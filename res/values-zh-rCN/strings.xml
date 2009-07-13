@@ -15,11 +15,13 @@
 -->
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <!-- no translation found for calendar_storage (5387668002987562770) -->
+    <skip />
     <string name="gadget_title">"日历"</string>
     <string name="no_title_label">"（无主题）"</string>
   <plurals name="gadget_more_events">
-    <item quantity="one">"还有 1 个活动"</item>
-    <item quantity="other">"还有 <xliff:g id="NUMBER">%d</xliff:g> 个活动"</item>
+    <item quantity="one">"1 个其他活动"</item>
+    <item quantity="other">"<xliff:g id="NUMBER">%d</xliff:g> 个其他活动"</item>
   </plurals>
-    <string name="gadget_no_events">"近期没有活动"</string>
+    <string name="gadget_no_events">"没有即将进行的日历活动"</string>
 </resources>

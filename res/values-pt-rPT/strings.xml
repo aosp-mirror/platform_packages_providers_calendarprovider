@@ -15,12 +15,13 @@
 -->
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-    <string name="calendar_storage">"Stockage de l\'agenda"</string>
-    <string name="gadget_title">"Agenda"</string>
-    <string name="no_title_label">"(Aucun objet)"</string>
+    <!-- no translation found for calendar_storage (5387668002987562770) -->
+    <skip />
+    <string name="gadget_title">"Calendário"</string>
+    <string name="no_title_label">"(Sem assunto)"</string>
   <plurals name="gadget_more_events">
-    <item quantity="one">"1 autre événement"</item>
-    <item quantity="other">"<xliff:g id="NUMBER">%d</xliff:g> autres événements"</item>
+    <item quantity="one">"mais 1 evento"</item>
+    <item quantity="other">"mais <xliff:g id="NUMBER">%d</xliff:g> eventos"</item>
   </plurals>
-    <string name="gadget_no_events">"Aucun événement à venir"</string>
+    <string name="gadget_no_events">"Sem eventos futuros no calendário"</string>
 </resources>

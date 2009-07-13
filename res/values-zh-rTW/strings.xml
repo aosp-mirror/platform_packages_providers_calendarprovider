@@ -15,6 +15,7 @@
 -->
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage">"日曆儲存空間"</string>
     <string name="gadget_title">"日曆"</string>
     <string name="no_title_label">"(無主題)"</string>
   <plurals name="gadget_more_events">

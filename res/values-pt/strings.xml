@@ -15,6 +15,8 @@
 -->
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <!-- no translation found for calendar_storage (5387668002987562770) -->
+    <skip />
     <string name="gadget_title">"Agenda"</string>
     <string name="no_title_label">"(Sem título)"</string>
   <plurals name="gadget_more_events">

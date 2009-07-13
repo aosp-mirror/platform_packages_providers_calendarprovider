@@ -15,6 +15,7 @@
 -->
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage">"Kalenderspeicher"</string>
     <string name="gadget_title">"Kalender"</string>
     <string name="no_title_label">"(kein Thema)"</string>
   <plurals name="gadget_more_events">

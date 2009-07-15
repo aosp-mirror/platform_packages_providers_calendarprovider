@@ -26,9 +26,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.database.Cursor;
-import android.graphics.PorterDuff;
 import android.net.Uri;
 import android.os.IBinder;
+import android.provider.Calendar;
 import android.provider.Calendar.Attendees;
 import android.provider.Calendar.Calendars;
 import android.provider.Calendar.Instances;
@@ -79,6 +79,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
     
     static final String ACTION_PACKAGE = "com.android.calendar";
     static final String ACTION_CLASS = "com.android.calendar.LaunchActivity";
+    static final String KEY_DETAIL_VIEW = "DETAIL_VIEW";
     
     @Override
     public void onStart(Intent intent, int startId) {
@@ -328,11 +329,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         
         RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.agenda_appwidget);
         setNoEventsVisible(views, false);
-        
-        // Clicking on widget launches the agenda view in Calendar
-        PendingIntent pendingIntent = getLaunchPendingIntent(context);
-        views.setOnClickPendingIntent(R.id.agenda_appwidget, pendingIntent);
-        
+
         Time time = new Time();
         time.setToNow();
         int yearDay = time.yearDay;
@@ -378,7 +375,11 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         whenString = DateUtils.formatDateRange(context, start, start, flags);
         views.setTextViewText(R.id.when, whenString);
 
-        // What
+        // Clicking on the widget launches Calendar
+        PendingIntent pendingIntent = getLaunchPendingIntent(context, start);
+        views.setOnClickPendingIntent(R.id.agenda_appwidget, pendingIntent);
+
+       // What
         String titleString = cursor.getString(INDEX_TITLE);
         if (titleString == null || titleString.length() == 0) {
             titleString = context.getString(R.string.no_title_label);
@@ -423,7 +424,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         setNoEventsVisible(views, true);
 
         // Clicking on widget launches the agenda view in Calendar
-        PendingIntent pendingIntent = getLaunchPendingIntent(context);
+        PendingIntent pendingIntent = getLaunchPendingIntent(context, 0);
         views.setOnClickPendingIntent(R.id.agenda_appwidget, pendingIntent);
 
         return views;
@@ -433,18 +434,23 @@ public class CalendarAppWidgetService extends Service implements Runnable {
      * Build a {@link PendingIntent} to launch the Calendar app. This correctly
      * sets action, category, and flags so that we don't duplicate tasks when
      * Calendar was also launched from a normal desktop icon.
+     * @param goToTime time that calendar should take the user to 
      */
-    private PendingIntent getLaunchPendingIntent(Context context) {
+    private PendingIntent getLaunchPendingIntent(Context context, long goToTime) {
         Intent launchIntent = new Intent();
         launchIntent.setComponent(new ComponentName(ACTION_PACKAGE, ACTION_CLASS));
         launchIntent.setAction(Intent.ACTION_MAIN);
         launchIntent.addCategory(Intent.CATEGORY_LAUNCHER);
         launchIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
                 Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+        if (goToTime != 0) {
+            launchIntent.putExtra(Calendar.EVENT_BEGIN_TIME, goToTime);
+            launchIntent.putExtra(KEY_DETAIL_VIEW, true);
+        }
         return PendingIntent.getActivity(context, 0 /* no requestCode */,
-                launchIntent, 0 /* no flags */);
+                launchIntent, PendingIntent.FLAG_UPDATE_CURRENT);
     }
-    
+
     private class MarkedEvents {
         long primaryTime = -1;
         int primaryRow = -1;

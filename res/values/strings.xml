@@ -25,6 +25,9 @@
     <!-- Title of event when no explicit title is specified by the user -->
     <string name="no_title_label">(No subject)</string>
 
+    <!-- Temporary Calendar name to use before we have the calendar name from the server -->
+    <string name="calendar_default_name">Default</string>
+
     <!-- Shown in gadget when additional events are available for display, but no room remaining -->
     <plurals name="gadget_more_events">
         <!-- additional events message for 1 event -->

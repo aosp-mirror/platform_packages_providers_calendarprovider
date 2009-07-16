@@ -926,7 +926,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             values.put(Calendars._SYNC_ACCOUNT, account.mName);
             values.put(Calendars._SYNC_ACCOUNT_TYPE, account.mType);
             values.put(Calendars.URL, feedUrl);
-            values.put(Calendars.DISPLAY_NAME, "Default");
+            values.put(Calendars.DISPLAY_NAME,
+                    getContext().getString(R.string.calendar_default_name));
             values.put(Calendars.SYNC_EVENTS, 1);
             values.put(Calendars.SELECTED, 1);
             values.put(Calendars.HIDDEN, 0);

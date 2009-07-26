@@ -19,7 +19,7 @@
     <string name="no_title_label">"(Geen onderwerp)"</string>
   <plurals name="gadget_more_events">
     <item quantity="one">"Nog 1 afspraak"</item>
-    <item quantity="other">"Nog <xliff:g id="NUMBER">%d</xliff:g> andere afspraken"</item>
+    <item quantity="other">"Nog <xliff:g id="NUMBER">%d</xliff:g>andere afspraken"</item>
   </plurals>
     <string name="gadget_no_events">"Geen lopende agenda-afspraken"</string>
 </resources>

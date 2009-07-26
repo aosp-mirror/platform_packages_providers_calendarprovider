@@ -18,13 +18,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.android.providers.calendar.tests">
 
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <uses-permission android:name="android.permission.READ_SYNC_SETTINGS" />
+    <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS" />
+
     <application>
         <uses-library android:name="android.test.runner" />
     </application>
 
-    <uses-permission android:name="android.permission.READ_CALENDAR" />
-    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
-
+   
     <!--
     The test delcared in this instrumentation will be run along with tests declared by
     all other applications via the command: "adb shell itr".

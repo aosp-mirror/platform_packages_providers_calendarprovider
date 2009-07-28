@@ -104,10 +104,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             SubscribedFeeds.Feeds._SYNC_ACCOUNT + ", " + SubscribedFeeds.Feeds._SYNC_ACCOUNT_TYPE
                     + ", " + SubscribedFeeds.Feeds.FEED;
 
-    private static final String EXPECTED_PROJECTION = "/full";
-
-    private static final String DESIRED_PROJECTION = "/full-selfattendance";
-
+    private static final String PRIVATE_FULL = "/private/full";
     private static final String FEEDS_SUBSTRING = "/feeds/";
 
     public static class SyncInfo {
@@ -1517,12 +1514,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
         String url = entry.getAlternateLink();
 
-        // we only want to fetch the full-selfattendance calendar feeds
-        if (!TextUtils.isEmpty(url)) {
-            if (url.endsWith(EXPECTED_PROJECTION)) {
-                url = url.replace(EXPECTED_PROJECTION, DESIRED_PROJECTION);
-            }
-        } else {
+        if (TextUtils.isEmpty(url)) {
             // yuck.  the alternate link was not available.  we should
             // reconstruct from the id.
             url = entry.getId();
@@ -1599,7 +1591,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             if (end != -1) {
                 url = url.replace(url.substring(start, end + 1), "");
             }
-            url = url + "/private" + DESIRED_PROJECTION;
+            url = url + PRIVATE_FULL;
         }
         return url;
     }

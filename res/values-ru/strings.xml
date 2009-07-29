@@ -15,11 +15,13 @@
 -->
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <!-- no translation found for calendar_storage (5387668002987562770) -->
+    <skip />
     <string name="gadget_title">"Календарь"</string>
     <string name="no_title_label">"(Без темы)"</string>
   <plurals name="gadget_more_events">
-    <item quantity="one">"дополнительных событий: 1"</item>
-    <item quantity="other">"дополнительных событий: <xliff:g id="NUMBER">%d</xliff:g>"</item>
+    <item quantity="one">"Еще 1 мероприятие"</item>
+    <item quantity="other">"Еще мероприятий: <xliff:g id="NUMBER">%d</xliff:g>"</item>
   </plurals>
-    <string name="gadget_no_events">"В календаре нет приближающихся событий"</string>
+    <string name="gadget_no_events">"В календаре нет предстоящих мероприятий"</string>
 </resources>

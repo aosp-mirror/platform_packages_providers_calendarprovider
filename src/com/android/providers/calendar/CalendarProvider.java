@@ -3212,14 +3212,15 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     @Override
     public int updateInternal(Uri url, ContentValues values,
             String where, String[] selectionArgs) {
+        int match = sURLMatcher.match(url);
+
         // TODO: remove this restriction
-        if (!TextUtils.isEmpty(where)) {
+        if (!TextUtils.isEmpty(where) && match != CALENDAR_ALERTS) {
             throw new IllegalArgumentException(
                     "WHERE based updates not supported");
         }
         final SQLiteDatabase db = getDatabase();
 
-        int match = sURLMatcher.match(url);
         switch (match) {
             case CALENDARS_ID:
             {
@@ -3303,6 +3304,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             {
                 long id = ContentUris.parseId(url);
                 return db.update("CalendarAlerts", values, "_id="+id, null);
+            }
+            case CALENDAR_ALERTS:
+            {
+                return db.update("CalendarAlerts", values, where, null);
             }
             case REMINDERS_ID:
             {

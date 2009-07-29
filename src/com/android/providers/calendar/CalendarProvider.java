@@ -84,7 +84,7 @@ import java.util.TimeZone;
 
 public class CalendarProvider extends AbstractSyncableContentProvider {
     private static final boolean PROFILE = false;
-    private static final boolean MULTIPLE_ATTENDEES_PER_EVENT = false;
+    private static final boolean MULTIPLE_ATTENDEES_PER_EVENT = true;
     private static final String[] ACCOUNTS_PROJECTION =
             new String[] {Calendars._SYNC_ACCOUNT, Calendars._SYNC_ACCOUNT_TYPE};
 
@@ -2384,11 +2384,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         // Get the event id for this attendee
         long eventId = attendeeValues.getAsLong(Attendees.EVENT_ID);
 
-        // Currently, we only fetch the attendee for the owner of the calendar
-        // so all the following expensive code is just wasted overhead.
-        // When we actually support multiple attendees for an event, we will
-        // have to execute this code (and perhaps tune it to make it as
-        // efficient as possible).
         if (MULTIPLE_ATTENDEES_PER_EVENT) {
             // Get the calendar id for this event
             Cursor cursor = null;

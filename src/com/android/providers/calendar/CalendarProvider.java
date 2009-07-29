@@ -2228,16 +2228,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 rowID = mCalendarsInserter.insert(initialValues);
                 return Uri.parse("content://calendar/calendars/" + rowID);
             case ATTENDEES:
-                // currently, only sync may insert attendees.  we do not support
-                // inserting or removing attendees (which can only be yourself)
-                // from the app.
-                // TODO: remove this restriction when we deal with the full
-                // attendees feed.  we'll also need to put in some protection to
-                // prevent updates to the attendees that the server might reject.
-                if (!isTemporary()) {
-                    throw new IllegalArgumentException("Can only insert attendees into "
-                            + "the temporary provider.");
-                }
                 if (!initialValues.containsKey(Attendees.EVENT_ID)) {
                     throw new IllegalArgumentException("Attendees values must "
                             + "contain an event_id");

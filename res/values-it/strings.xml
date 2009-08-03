@@ -15,12 +15,12 @@
 -->
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-    <string name="calendar_storage">"Archiviazione calendario"</string>
-    <string name="gadget_title">"Calendario"</string>
-    <string name="no_title_label">"(Nessun oggetto)"</string>
+    <string name="calendar_storage" msgid="5387668002987562770">"Archiviazione calendario"</string>
+    <string name="gadget_title" msgid="3673051912300198724">"Calendario"</string>
+    <string name="no_title_label" msgid="1986566832415168907">"(Nessun oggetto)"</string>
   <plurals name="gadget_more_events">
-    <item quantity="one">"1 altro evento"</item>
-    <item quantity="other">"<xliff:g id="NUMBER">%d</xliff:g> altri eventi"</item>
+    <item quantity="one" msgid="4209472169696459059">"1 altro evento"</item>
+    <item quantity="other" msgid="2850138968496439596">"<xliff:g id="NUMBER">%d</xliff:g> altri eventi"</item>
   </plurals>
-    <string name="gadget_no_events">"Nessun nuovo evento nel calendario"</string>
+    <string name="gadget_no_events" msgid="5219179980474526479">"Nessun nuovo evento nel calendario"</string>
 </resources>

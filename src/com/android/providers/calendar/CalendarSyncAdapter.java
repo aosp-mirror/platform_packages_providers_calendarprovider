@@ -70,6 +70,7 @@ import com.google.wireless.gdata.parser.GDataParser;
 import com.google.wireless.gdata.parser.ParseException;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashSet;
@@ -78,6 +79,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.Vector;
+import java.net.URLDecoder;
 
 /**
  * SyncAdapter for Google Calendar.  Fetches the list of the user's calendars,
@@ -1531,6 +1533,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         url = rewriteUrlforAccount(account, url);
 
         map.put(Calendars.URL, url);
+        map.put(Calendars.OWNER_ACCOUNT, calendarEmailAddressFromFeedUrl(url));
         map.put(Calendars.NAME, entry.getTitle());
 
         // TODO:
@@ -1594,5 +1597,28 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             url = url + PRIVATE_FULL;
         }
         return url;
+    }
+
+    /**
+     * Extracts the calendar email from a calendar feed url.
+     * @param feed the calendar feed url
+     * @return the calendar email that is in the feed url or null if it can't
+     * find the email address.
+     */
+    public static String calendarEmailAddressFromFeedUrl(String feed) {
+        // Example feed url:
+        // https://www.google.com/calendar/feeds/foo%40gmail.com/private/full-noattendees
+        String[] pathComponents = feed.split("/");
+        if (pathComponents.length > 5 && "feeds".equals(pathComponents[4])) {
+            try {
+                return URLDecoder.decode(pathComponents[5], "UTF-8");
+            } catch (UnsupportedEncodingException e) {
+                Log.e(TAG, "unable to url decode the email address in calendar " + feed);
+                return null;
+            }
+        }
+
+        Log.e(TAG, "unable to find the email address in calendar " + feed);
+        return null;
     }
 }

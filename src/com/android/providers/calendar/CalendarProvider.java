@@ -73,6 +73,8 @@ import com.google.android.providers.AbstractGDataSyncAdapter.GDataSyncData;
 import com.google.wireless.gdata.calendar.client.CalendarClient;
 import com.google.wireless.gdata.calendar.parser.xml.XmlCalendarGDataParserFactory;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -230,7 +232,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 56;
+    private static final int DATABASE_VERSION = 55;
 
     // Make sure we load at least two months worth of data.
     // Client apps can load more data in a background thread.
@@ -576,45 +578,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     + Events._SYNC_ID + ");");
             oldVersion += 1;
         }
-        if (oldVersion == 55) {
-            db.execSQL("ALTER TABLE Calendars ADD COLUMN ownerAccount TEXT;");
-            db.execSQL("ALTER TABLE Events ADD COLUMN hasAttendeeData INTEGER;");
-            // Clear _sync_dirty to avoid a client-to-server sync that could blow away
-            // server attendees.
-            // Clear _sync_version to pull down the server's event (with attendees)
-            // Change the URLs from full-selfattendance to full
-            db.execSQL("UPDATE Events"
-                    + " SET _sync_dirty=0,"
-                    + " _sync_version=NULL,"
-                    + " _sync_id="
-                    + "REPLACE(_sync_id, '/private/full-selfattendance', '/private/full'),"
-                    + " commentsUri ="
-                    + "REPLACE(commentsUri, '/private/full-selfattendance', '/private/full');");
-            db.execSQL("UPDATE Calendars"
-                    + " SET url="
-                    + "REPLACE(url, '/private/full-selfattendance', '/private/full');");
-
-            // Delete sync state, so all records will be re-synced.
-            db.execSQL("DELETE FROM _sync_state;");
-
-            // "cursor" iterates over all the calendars
-            Cursor cursor = db.rawQuery("SELECT _sync_account,_sync_account_type,url "
-                    +  "FROM Calendars"
-                    , null /* selection args */);
-            if (cursor != null) {
-                try {
-                    while (cursor.moveToNext()) {
-                        String accountName = cursor.getString(0);
-                        String accountType = cursor.getString(1);
-                        final Account account = new Account(accountName, accountType);
-                        String calendarUrl = cursor.getString(2);
-                        scheduleSync(account, false /* two-way sync */, calendarUrl);
-                    }
-                } finally {
-                    cursor.close();
-                }            }
-            oldVersion += 1;
-        }
 
         return true; // this was lossless
     }
@@ -655,8 +618,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 "selected INTEGER NOT NULL DEFAULT 1," +
                 "sync_events INTEGER NOT NULL DEFAULT 0," +
                 "location TEXT," +
-                "timezone TEXT," +
-                "ownerAccount TEXT" +
+                "timezone TEXT" +
                 ");");
 
         // Trigger to remove a calendar's events when we delete the calendar
@@ -701,8 +663,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 "originalEvent TEXT," +  // _sync_id of recurring event
                 "originalInstanceTime INTEGER," +  // millis since epoch
                 "originalAllDay INTEGER," +
-                "lastDate INTEGER," +               // millis since epoch
-                "hasAttendeeData INTEGER NOT NULL DEFAULT 0" +
+                "lastDate INTEGER" +               // millis since epoch
                 ");");
 
         db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
@@ -965,8 +926,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             values.put(Calendars._SYNC_ACCOUNT, account.mName);
             values.put(Calendars._SYNC_ACCOUNT_TYPE, account.mType);
             values.put(Calendars.URL, feedUrl);
-            values.put(Calendars.OWNER_ACCOUNT,
-                    CalendarSyncAdapter.calendarEmailAddressFromFeedUrl(feedUrl));
             values.put(Calendars.DISPLAY_NAME,
                     getContext().getString(R.string.calendar_default_name));
             values.put(Calendars.SYNC_EVENTS, 1);
@@ -2328,7 +2287,28 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         }
     }
 
+    /**
+     * Extracts the calendar email from a calendar feed url.
+     * @param feed the calendar feed url
+     * @return the calendar email that is in the feed url or null if it can't
+     * find the email address.
+     */
+    private String calendarEmailAddressFromFeedUrl(String feed) {
+        // Example feed url:
+        // https://www.google.com/calendar/feeds/foo%40gmail.com/private/full-noattendees
+        String[] pathComponents = feed.split("/");
+        if (pathComponents.length > 5 && "feeds".equals(pathComponents[4])) {
+            try {
+                return URLDecoder.decode(pathComponents[5], "UTF-8");
+            } catch (UnsupportedEncodingException e) {
+                Log.e(TAG, "unable to url decode the email address in calendar " + feed);
+                return null;
+            }
+        }
 
+        Log.e(TAG, "unable to find the email address in calendar " + feed);
+        return null;
+    }
 
     /**
      * Creates an entry in the Attendees table that refers to the given event
@@ -2425,12 +2405,12 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 }
             }
 
-            // Get the owner email for this Calendar
-            String calendarEmail = null;
+            // Get the feed for this Calendar
+            String calendarUrl = null;
             cursor = null;
             try {
                 cursor = query(ContentUris.withAppendedId(Calendars.CONTENT_URI, calId),
-                        new String[] { Calendars.OWNER_ACCOUNT },
+                        new String[] { Calendars.URL },
                         null /* selection */,
                         null /* selectionArgs */,
                         null /* sort */);
@@ -2438,13 +2418,15 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     return;
                 }
                 cursor.moveToFirst();
-                calendarEmail = cursor.getString(0);
+                calendarUrl = cursor.getString(0);
             } finally {
                 if (cursor != null) {
                     cursor.close();
                 }
             }
 
+            // Get the email address from the calendar feed
+            String calendarEmail = calendarEmailAddressFromFeedUrl(calendarUrl);
             if (calendarEmail == null) {
                 return;
             }
@@ -3895,7 +3877,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         sEventsProjectionMap.put(Events.SELECTED, "selected");
         sEventsProjectionMap.put(Calendars.URL, "url");
         sEventsProjectionMap.put(Calendars.TIMEZONE, "timezone");
-        sEventsProjectionMap.put(Calendars.OWNER_ACCOUNT, "ownerAccount");
 
         // Put the shared items into the Instances projection map
         sInstancesProjectionMap = new HashMap<String, String>(sEventsProjectionMap);

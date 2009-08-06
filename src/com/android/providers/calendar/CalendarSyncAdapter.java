@@ -841,7 +841,8 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
     public void updateProvider(Feed feed,
             Long syncLocalId, Entry entry,
-            ContentProvider provider, Object info) throws ParseException {
+            ContentProvider provider, Object info,
+            GDataSyncData.FeedData feedSyncData) throws ParseException {
         SyncInfo syncInfo = (SyncInfo) info;
         EventEntry event = (EventEntry) entry;
 
@@ -1283,7 +1284,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
     }
 
     @Override
-    protected void updateQueryParameters(QueryParams params) {
+    protected void updateQueryParameters(QueryParams params, GDataSyncData.FeedData feedSyncData) {
         if (params.getUpdatedMin() == null) {
             // if this is the first sync, only bother syncing starting from
             // one month ago.

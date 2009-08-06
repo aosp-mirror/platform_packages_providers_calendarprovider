@@ -2882,6 +2882,11 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 int result = db.delete("Events", "_id=" + id, null);
                 return result;
             }
+            case ATTENDEES:
+            {
+                int result = db.delete("Attendees", where, whereArgs);
+                return result;
+            }
             case ATTENDEES_ID:
             {
                 // we currently don't support deletions to the attendees list.

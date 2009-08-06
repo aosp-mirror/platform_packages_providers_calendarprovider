@@ -108,6 +108,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
     private static final String PRIVATE_FULL = "/private/full";
     private static final String FEEDS_SUBSTRING = "/feeds/";
+    private static final String FULL_SELFATTENDANCE = "/full-selfattendance/";
 
     public static class SyncInfo {
         // public String feedUrl;
@@ -832,6 +833,9 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
         map.put(SyncConstValue._SYNC_ACCOUNT, account.mName);
         map.put(SyncConstValue._SYNC_ACCOUNT_TYPE, account.mType);
+
+        map.put(Events.HAS_ATTENDEE_DATA, !event.getId().contains(FULL_SELFATTENDANCE));
+
         return ENTRY_OK;
     }
 

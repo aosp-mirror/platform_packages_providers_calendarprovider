@@ -994,6 +994,9 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
         m.put(Calendars.COLOR, "0xff123456");
         m.put(Calendars.TIMEZONE, timezone);
         m.put(Calendars.SELECTED, 1);
+        m.put(Calendars.URL, "http://www.google.com/calendar/feeds/joe%40joe.com/private/full");
+        m.put(Calendars.OWNER_ACCOUNT, "joe@joe.com");
+
         Uri url = mResolver.insert(Uri.parse("content://calendar/calendars"), m);
         String id = url.getLastPathSegment();
         return Integer.parseInt(id);
@@ -1382,15 +1385,16 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
         extended.put(Calendar.ExtendedProperties.VALUE, "bar2");
         mResolver.insert(Calendar.ExtendedProperties.CONTENT_URI, extended);
 
-// Currently can't add attendees
-//        ContentValues attendee = new ContentValues();
-//        attendee.put(Calendar.Attendees.ATTENDEE_NAME, "Joe");
-//        attendee.put(Calendar.Attendees.ATTENDEE_EMAIL, "joe@joe.com");
-//        attendee.put(Calendar.Attendees.ATTENDEE_STATUS, Calendar.Attendees.ATTENDEE_STATUS_DECLINED);
-//        attendee.put(Calendar.Attendees.ATTENDEE_TYPE, Calendar.Attendees.TYPE_REQUIRED);
-//        attendee.put(Calendar.Attendees.ATTENDEE_RELATIONSHIP, Calendar.Attendees.RELATIONSHIP_PERFORMER);
-//        attendee.put(Calendar.Attendees.EVENT_ID, 3);
-//        mResolver.insert(Calendar.Attendees.CONTENT_URI, attendee);
+        ContentValues attendee = new ContentValues();
+        attendee.put(Calendar.Attendees.ATTENDEE_NAME, "Joe");
+        attendee.put(Calendar.Attendees.ATTENDEE_EMAIL, "joe@joe.com");
+        attendee.put(Calendar.Attendees.ATTENDEE_STATUS,
+                Calendar.Attendees.ATTENDEE_STATUS_DECLINED);
+        attendee.put(Calendar.Attendees.ATTENDEE_TYPE, Calendar.Attendees.TYPE_REQUIRED);
+        attendee.put(Calendar.Attendees.ATTENDEE_RELATIONSHIP,
+                Calendar.Attendees.RELATIONSHIP_PERFORMER);
+        attendee.put(Calendar.Attendees.EVENT_ID, 3);
+        mResolver.insert(Calendar.Attendees.CONTENT_URI, attendee);
 
         EntityIterator ei = mResolver.queryEntities(mEventsUri, null, null, null);
         int count = 0;
@@ -1400,10 +1404,13 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
             ArrayList<Entity.NamedContentValues> subvalues = entity.getSubValues();
             switch (values.getAsInteger("_id")) {
                 case 1:
-                    assertEquals(4, subvalues.size());
+                    assertEquals(4, subvalues.size()); // 2 x reminder, 2 x extended properties
                     break;
                 case 2:
-                    assertEquals(1, subvalues.size());
+                    assertEquals(1, subvalues.size()); // Extended properties
+                    break;
+                case 3:
+                    assertEquals(1, subvalues.size()); // Attendees
                     break;
                 default:
                     assertEquals(0, subvalues.size());
@@ -1420,6 +1427,67 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
             count += 1;
         }
         assertEquals(1, count);
+    }
+
+    /**
+     * Test attendee processing
+     * @throws Exception
+     */
+    public void testAttendees() throws Exception {
+        mCalendarId = insertCal("Calendar0", DEFAULT_TIMEZONE);
+
+        Uri eventUri = insertEvent(mCalendarId, findEvent("daily0"));
+        long eventId = ContentUris.parseId(eventUri);
+
+        ContentValues attendee = new ContentValues();
+        attendee.put(Calendar.Attendees.ATTENDEE_NAME, "Joe");
+        attendee.put(Calendar.Attendees.ATTENDEE_EMAIL, "joe@joe.com");
+        attendee.put(Calendar.Attendees.ATTENDEE_TYPE, Calendar.Attendees.TYPE_REQUIRED);
+        attendee.put(Calendar.Attendees.ATTENDEE_RELATIONSHIP,
+                Calendar.Attendees.RELATIONSHIP_ORGANIZER);
+        attendee.put(Calendar.Attendees.EVENT_ID, eventId);
+        Uri attendeesUri = mResolver.insert(Calendar.Attendees.CONTENT_URI, attendee);
+
+        Cursor cursor = mResolver.query(Calendar.Attendees.CONTENT_URI, null,
+                "event_id=" + eventId, null, null);
+        assertEquals(1, cursor.getCount());
+        cursor.close();
+
+        cursor = mResolver.query(eventUri, null, null, null, null);
+        int selfColumn = cursor.getColumnIndex(Calendar.Events.SELF_ATTENDEE_STATUS);
+        cursor.moveToNext();
+        long selfAttendeeStatus = cursor.getInt(selfColumn);
+        assertEquals(Calendar.Attendees.ATTENDEE_STATUS_ACCEPTED, selfAttendeeStatus);
+        cursor.close();
+
+        // Change status to declined
+        attendee.put(Calendar.Attendees.ATTENDEE_STATUS,
+                Calendar.Attendees.ATTENDEE_STATUS_DECLINED);
+        mResolver.update(attendeesUri, attendee, null, null);
+
+        cursor = mResolver.query(eventUri, null, null, null, null);
+        cursor.moveToNext();
+        selfAttendeeStatus = cursor.getInt(selfColumn);
+        assertEquals(Calendar.Attendees.ATTENDEE_STATUS_DECLINED, selfAttendeeStatus);
+        cursor.close();
+
+        // Add another attendee
+        attendee.put(Calendar.Attendees.ATTENDEE_NAME, "Dude");
+        attendee.put(Calendar.Attendees.ATTENDEE_EMAIL, "dude@dude.com");
+        attendee.put(Calendar.Attendees.ATTENDEE_STATUS,
+                Calendar.Attendees.ATTENDEE_STATUS_ACCEPTED);
+        mResolver.insert(Calendar.Attendees.CONTENT_URI, attendee);
+
+        cursor = mResolver.query(Calendar.Attendees.CONTENT_URI, null,
+                "event_id=" + mCalendarId, null, null);
+        assertEquals(2, cursor.getCount());
+        cursor.close();
+
+        cursor = mResolver.query(eventUri, null, null, null, null);
+        cursor.moveToNext();
+        selfAttendeeStatus = cursor.getInt(selfColumn);
+        assertEquals(Calendar.Attendees.ATTENDEE_STATUS_DECLINED, selfAttendeeStatus);
+        cursor.close();
     }
 
     /**

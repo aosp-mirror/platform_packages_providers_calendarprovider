@@ -2267,7 +2267,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     }
                 }
                 rowID = mCalendarsInserter.insert(initialValues);
-                return Uri.parse("content://calendar/calendars/" + rowID);
+                return ContentUris.withAppendedId(Calendars.CONTENT_URI, rowID);
             case ATTENDEES:
                 if (!initialValues.containsKey(Attendees.EVENT_ID)) {
                     throw new IllegalArgumentException("Attendees values must "
@@ -2278,7 +2278,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 // Copy the attendee status value to the Events table.
                 updateEventAttendeeStatus(db, initialValues);
 
-                return Uri.parse("content://calendars/attendees/" + rowID);
+                return ContentUris.withAppendedId(Calendar.Attendees.CONTENT_URI, rowID);
             case REMINDERS:
                 if (!initialValues.containsKey(Reminders.EVENT_ID)) {
                     throw new IllegalArgumentException("Reminders values must "
@@ -2293,7 +2293,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     }
                     scheduleNextAlarm(false /* do not remove alarms */);
                 }
-                return Uri.parse("content://calendars/reminders/" + rowID);
+                return ContentUris.withAppendedId(Calendar.Reminders.CONTENT_URI, rowID);
             case CALENDAR_ALERTS:
                 if (!initialValues.containsKey(CalendarAlerts.EVENT_ID)) {
                     throw new IllegalArgumentException("CalendarAlerts values must "
@@ -2309,11 +2309,11 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 }
                 rowID = mExtendedPropertiesInserter.insert(initialValues);
 
-                return Uri.parse("content://calendars/extendedproperties/" + rowID);
+                return ContentUris.withAppendedId(ExtendedProperties.CONTENT_URI, rowID);
             case DELETED_EVENTS:
                 if (isTemporary()) {
                     rowID = mDeletedEventsInserter.insert(initialValues);
-                    return Uri.parse("content://calendar/deleted_events/" + rowID);
+                    return ContentUris.withAppendedId(Calendar.Events.DELETED_CONTENT_URI, rowID);
                 }
                 // fallthrough
             case EVENTS_ID:
@@ -3537,11 +3537,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     }
 
     private static String sEventsTable = "Events";
-    private static Uri sEventsURL =
-            Uri.parse("content://calendar/events/");
     private static String sDeletedEventsTable = "DeletedEvents";
-    private static Uri sDeletedEventsURL =
-            Uri.parse("content://calendar/deleted_events/");
     private static String sAttendeesTable = "Attendees";
     private static String sRemindersTable = "Reminders";
     private static String sCalendarAlertsTable = "CalendarAlerts";
@@ -3551,7 +3547,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
         private ContentValues mValues = new ContentValues();
         EventMerger() {
-            super(getDatabase(), sEventsTable, sEventsURL, sDeletedEventsTable, sDeletedEventsURL);
+            super(getDatabase(), sEventsTable, Calendar.Events.CONTENT_URI,
+                    sDeletedEventsTable, Calendar.Events.DELETED_CONTENT_URI);
         }
 
         @Override

@@ -352,6 +352,9 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             addRecurrenceToEntry(component, event);
         }
 
+        // For now, always want to send event notifications
+        event.setSendEventNotifications(true);
+
         // if this is a new entry, return the feed url.  otherwise, return null; the edit url is
         // already in the entry.
         if (event.getEditUri() == null) {

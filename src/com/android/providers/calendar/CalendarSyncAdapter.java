@@ -1455,7 +1455,8 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             Account[] accounts = AccountManager.get(getContext())
                     .blockingGetAccountsWithTypeAndFeatures(
                             GoogleLoginServiceConstants.ACCOUNT_TYPE,
-                            new String[]{GoogleLoginServiceConstants.FEATURE_GOOGLE_OR_DASHER});
+                            new String[]{
+                                    GoogleLoginServiceConstants.FEATURE_LEGACY_HOSTED_OR_GOOGLE});
             if (accounts.length == 0) {
                 Log.w(TAG, "Unable to update calendars from server -- no users configured.");
                 return;

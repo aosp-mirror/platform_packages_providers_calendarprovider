@@ -89,7 +89,7 @@ import java.net.URLDecoder;
  */
 public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
-    /* package */ static final String USER_AGENT_APP_VERSION = "Android-GData-Calendar/1.1";
+    /* package */ static final String USER_AGENT_APP_VERSION = "Android-GData-Calendar/1.2";
 
     private static final String SELECT_BY_ACCOUNT =
             Calendars._SYNC_ACCOUNT + "=? AND " + Calendars._SYNC_ACCOUNT_TYPE + "=?";

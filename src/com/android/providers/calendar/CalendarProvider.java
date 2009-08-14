@@ -955,15 +955,15 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 }
                 continue;
             }
-            String feedUrl = mCalendarClient.getDefaultCalendarUrl(account.mName,
+            String feedUrl = mCalendarClient.getDefaultCalendarUrl(account.name,
                     CalendarClient.PROJECTION_PRIVATE_SELF_ATTENDANCE, null/* query params */);
             feedUrl = CalendarSyncAdapter.rewriteUrlforAccount(account, feedUrl);
             if (Config.LOGV) {
                 Log.v(TAG, "adding default calendar for account " + account);
             }
             ContentValues values = new ContentValues();
-            values.put(Calendars._SYNC_ACCOUNT, account.mName);
-            values.put(Calendars._SYNC_ACCOUNT_TYPE, account.mType);
+            values.put(Calendars._SYNC_ACCOUNT, account.name);
+            values.put(Calendars._SYNC_ACCOUNT_TYPE, account.type);
             values.put(Calendars.URL, feedUrl);
             values.put(Calendars.OWNER_ACCOUNT,
                     CalendarSyncAdapter.calendarEmailAddressFromFeedUrl(feedUrl));

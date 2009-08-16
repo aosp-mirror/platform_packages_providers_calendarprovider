@@ -559,7 +559,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                 Calendar.Calendars._SYNC_ACCOUNT + "=? AND "
                         + Calendar.Calendars._SYNC_ACCOUNT_TYPE + "=? AND "
                         + Calendar.Calendars.URL + "=?",
-                new String[]{account.mName, account.mType, feed});
+                new String[]{account.name, account.type, feed});
         return true;
     }
 
@@ -843,8 +843,8 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             return ENTRY_INVALID;
         }
 
-        map.put(SyncConstValue._SYNC_ACCOUNT, account.mName);
-        map.put(SyncConstValue._SYNC_ACCOUNT_TYPE, account.mType);
+        map.put(SyncConstValue._SYNC_ACCOUNT, account.name);
+        map.put(SyncConstValue._SYNC_ACCOUNT_TYPE, account.type);
 
         map.put(Events.HAS_ATTENDEE_DATA, !event.getId().contains(FULL_SELFATTENDANCE));
 
@@ -1163,7 +1163,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
         // select the set of calendars for this account.
         final Account account = getAccount();
-        final String[] accountSelectionArgs = new String[]{account.mName, account.mType};
+        final String[] accountSelectionArgs = new String[]{account.name, account.type};
         Cursor cursor = cr.query(Calendar.Calendars.CONTENT_URI,
                 CALENDARS_PROJECTION, SELECT_BY_ACCOUNT,
                 accountSelectionArgs, null /* sort order */);
@@ -1218,7 +1218,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         final Account account = getAccount();
         Cursor cursor = getContext().getContentResolver().query(Calendar.Calendars.CONTENT_URI,
                 CALENDARS_PROJECTION, SELECT_BY_ACCOUNT_AND_FEED,
-                new String[] { account.mName, account.mType, feed }, null /* sort order */);
+                new String[] { account.name, account.type, feed }, null /* sort order */);
 
         ContentValues map = new ContentValues();
         int maxResults = getMaxEntriesPerSync();
@@ -1283,7 +1283,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         Cursor c = getContext().getContentResolver().query(
                 Calendar.Calendars.CONTENT_URI,
                 CALENDARS_PROJECTION,
-                SELECT_BY_ACCOUNT, new String[]{account.mName, account.mType},
+                SELECT_BY_ACCOUNT, new String[]{account.name, account.type},
                 null /* sort order */);
         final int idIndex = c.getColumnIndexOrThrow(Calendars._ID);
         final int urlIndex = c.getColumnIndexOrThrow(Calendars.URL);
@@ -1452,10 +1452,10 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
         try {
             // TODO: allow caller to specify which account's feeds should be updated
-            Account[] accounts = AccountManager.get(getContext())
-                    .blockingGetAccountsWithTypeAndFeatures(
-                            GoogleLoginServiceConstants.ACCOUNT_TYPE,
-                            new String[]{GoogleLoginServiceConstants.FEATURE_GOOGLE_OR_DASHER});
+            String[] features = new String[]{
+                    GoogleLoginServiceConstants.FEATURE_LEGACY_HOSTED_OR_GOOGLE};
+            Account[] accounts = AccountManager.get(getContext()).getAccountsByTypeAndFeatures(
+                    GoogleLoginServiceConstants.ACCOUNT_TYPE, features, null, null).getResult();
             if (accounts.length == 0) {
                 Log.w(TAG, "Unable to update calendars from server -- no users configured.");
                 return;
@@ -1497,7 +1497,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         // get and process the calendars meta feed
         GDataParser parser = null;
         try {
-            String feedUrl = mCalendarClient.getUserCalendarsUrl(account.mName);
+            String feedUrl = mCalendarClient.getUserCalendarsUrl(account.name);
             feedUrl = CalendarSyncAdapter.rewriteUrlforAccount(account, feedUrl);
             parser = mCalendarClient.getParserForUserCalendars(feedUrl, authToken);
             // process the calendars
@@ -1612,8 +1612,8 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                 map.put(Calendars.SYNC_EVENTS, syncAndDisplay);
                 map.put(Calendars.SELECTED, syncAndDisplay);
                 map.put(Calendars.HIDDEN, 0);
-                map.put(Calendars._SYNC_ACCOUNT, account.mName);
-                map.put(Calendars._SYNC_ACCOUNT_TYPE, account.mType);
+                map.put(Calendars._SYNC_ACCOUNT, account.name);
+                map.put(Calendars._SYNC_ACCOUNT_TYPE, account.type);
                 if (Config.LOGV) Log.v(TAG, "Adding calendar " + map);
                 inserts.add(map);
             }

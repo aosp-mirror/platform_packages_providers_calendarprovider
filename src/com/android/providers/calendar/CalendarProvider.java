@@ -230,7 +230,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 56;
+    private static final int DATABASE_VERSION = 57;
 
     // Make sure we load at least two months worth of data.
     // Client apps can load more data in a background thread.
@@ -576,6 +576,28 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     + Events._SYNC_ID + ");");
             oldVersion += 1;
         }
+        if (oldVersion == 55 || oldVersion == 56) {  // Both require resync
+            // Delete sync state, so all records will be re-synced.
+            db.execSQL("DELETE FROM _sync_state;");
+
+            // "cursor" iterates over all the calendars
+            Cursor cursor = db.rawQuery("SELECT _sync_account,_sync_account_type,url "
+                    + "FROM Calendars",
+                    null /* selection args */);
+            if (cursor != null) {
+                try {
+                    while (cursor.moveToNext()) {
+                        String accountName = cursor.getString(0);
+                        String accountType = cursor.getString(1);
+                        final Account account = new Account(accountName, accountType);
+                        String calendarUrl = cursor.getString(2);
+                        scheduleSync(account, false /* two-way sync */, calendarUrl);
+                    }
+                } finally {
+                    cursor.close();
+                }
+            }
+        }
         if (oldVersion == 55) {
             db.execSQL("ALTER TABLE Calendars ADD COLUMN ownerAccount TEXT;");
             db.execSQL("ALTER TABLE Events ADD COLUMN hasAttendeeData INTEGER;");
@@ -594,25 +616,38 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     + " SET url="
                     + "REPLACE(url, '/private/full-selfattendance', '/private/full');");
 
-            // Delete sync state, so all records will be re-synced.
-            db.execSQL("DELETE FROM _sync_state;");
-
             // "cursor" iterates over all the calendars
-            Cursor cursor = db.rawQuery("SELECT _sync_account,_sync_account_type,url "
-                    +  "FROM Calendars"
-                    , null /* selection args */);
+            Cursor cursor = db.rawQuery("SELECT _id, url FROM Calendars",
+                    null /* selection args */);
+            // Add the owner column.
             if (cursor != null) {
                 try {
                     while (cursor.moveToNext()) {
-                        String accountName = cursor.getString(0);
-                        String accountType = cursor.getString(1);
-                        final Account account = new Account(accountName, accountType);
-                        String calendarUrl = cursor.getString(2);
-                        scheduleSync(account, false /* two-way sync */, calendarUrl);
+                        Long id = cursor.getLong(0);
+                        String url = cursor.getString(1);
+                        String owner = CalendarSyncAdapter.calendarEmailAddressFromFeedUrl(url);
+                        db.execSQL("UPDATE Calendars SET ownerAccount=? WHERE _id=?",
+                                new Object[] {owner, id});
                     }
                 } finally {
                     cursor.close();
-                }            }
+                }
+            }
+            oldVersion += 1;
+        }
+        if (oldVersion == 56) {
+            db.execSQL("ALTER TABLE Events ADD COLUMN guestsCanModify"
+                    + " INTEGER NOT NULL DEFAULT 0;");
+            db.execSQL("ALTER TABLE Events ADD COLUMN guestsCanInviteOthers"
+                    + " INTEGER NOT NULL DEFAULT 1;");
+            db.execSQL("ALTER TABLE Events ADD COLUMN guestsCanSeeGuests"
+                    + " INTEGER NOT NULL DEFAULT 1;");
+            db.execSQL("ALTER TABLE Events ADD COLUMN organizer STRING;");
+            db.execSQL("UPDATE Events SET organizer="
+                    + "(SELECT attendeeEmail FROM Attendees WHERE "
+                    + "Attendees.event_id = Events._id AND Attendees.attendeeRelationship=2);");
+
+
             oldVersion += 1;
         }
 
@@ -702,7 +737,11 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 "originalInstanceTime INTEGER," +  // millis since epoch
                 "originalAllDay INTEGER," +
                 "lastDate INTEGER," +               // millis since epoch
-                "hasAttendeeData INTEGER NOT NULL DEFAULT 0" +
+                "hasAttendeeData INTEGER NOT NULL DEFAULT 0," +
+                "guestsCanModify INTEGER NOT NULL DEFAULT 0," +
+                "guestsCanInviteOthers INTEGER NOT NULL DEFAULT 1," +
+                "guestsCanSeeGuests INTEGER NOT NULL DEFAULT 1," +
+                "organizer STRING" +
                 ");");
 
         db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
@@ -3815,6 +3854,12 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     values);
             DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.LAST_DATE, values);
             DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.CALENDAR_ID, values);
+            DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.GUESTS_CAN_INVITE_OTHERS,
+                    values);
+            DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.GUESTS_CAN_MODIFY, values);
+            DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.GUESTS_CAN_SEE_GUESTS,
+                    values);
+            DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.ORGANIZER, values);
         }
     }
 
@@ -3891,6 +3936,11 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         sEventsProjectionMap.put(Events.ORIGINAL_ALL_DAY, "originalAllDay");
         sEventsProjectionMap.put(Events.LAST_DATE, "lastDate");
         sEventsProjectionMap.put(Events.CALENDAR_ID, "calendar_id");
+        sEventsProjectionMap.put(Events.GUESTS_CAN_INVITE_OTHERS, "guestsCanInviteOthers");
+        sEventsProjectionMap.put(Events.GUESTS_CAN_MODIFY, "guestsCanModify");
+        sEventsProjectionMap.put(Events.GUESTS_CAN_SEE_GUESTS, "guestsCanSeeGuests");
+        sEventsProjectionMap.put(Events.ORGANIZER, "organizer");
+
         // Calendar columns
         sEventsProjectionMap.put(Events.COLOR, "color");
         sEventsProjectionMap.put(Events.ACCESS_LEVEL, "access_level");
@@ -3991,6 +4041,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 Calendar.Events.ORIGINAL_ALL_DAY,
                 Calendar.Events.LAST_DATE,
                 Calendar.Events.CALENDAR_ID,
+                Calendar.Events.GUESTS_CAN_INVITE_OTHERS,
+                Calendar.Events.GUESTS_CAN_MODIFY,
+                Calendar.Events.GUESTS_CAN_SEE_GUESTS,
+                Calendar.Events.ORGANIZER,
         };
         private static final int COLUMN_ID = 0;
         private static final int COLUMN_HTML_URI = 1;
@@ -4018,6 +4072,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         private static final int COLUMN_ORIGINAL_ALL_DAY = 23;
         private static final int COLUMN_LAST_DATE = 24;
         private static final int COLUMN_CALENDAR_ID = 25;
+        private static final int COLUMN_GUESTS_CAN_INVITE_OTHERS = 26;
+        private static final int COLUMN_GUESTS_CAN_MODIFY = 27;
+        private static final int COLUMN_GUESTS_CAN_SEE_GUESTS = 28;
+        private static final int COLUMN_ORGANIZER = 29;
 
         private static final String[] REMINDERS_PROJECTION = new String[] {
                 Calendar.Reminders.MINUTES,
@@ -4118,6 +4176,13 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     c.getLong(COLUMN_ORIGINAL_INSTANCE_TIME));
             entityValues.put(Calendar.Events.ORIGINAL_ALL_DAY, c.getInt(COLUMN_ORIGINAL_ALL_DAY));
             entityValues.put(Calendar.Events.LAST_DATE, c.getLong(COLUMN_LAST_DATE));
+            entityValues.put(Calendar.Events.GUESTS_CAN_INVITE_OTHERS,
+                    c.getLong(COLUMN_GUESTS_CAN_INVITE_OTHERS));
+            entityValues.put(Calendar.Events.GUESTS_CAN_MODIFY,
+                    c.getLong(COLUMN_GUESTS_CAN_MODIFY));
+            entityValues.put(Calendar.Events.GUESTS_CAN_SEE_GUESTS,
+                    c.getLong(COLUMN_GUESTS_CAN_SEE_GUESTS));
+            entityValues.put(Calendar.Events.ORGANIZER, c.getString(COLUMN_ORGANIZER));
 
             Entity entity = new Entity(entityValues);
             Cursor cursor = null;

@@ -357,6 +357,14 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         // For now, always want to send event notifications
         event.setSendEventNotifications(true);
 
+        event.setGuestsCanInviteOthers(
+                c.getInt(c.getColumnIndex(Events.GUESTS_CAN_INVITE_OTHERS)) != 0);
+        event.setGuestsCanModify(
+                c.getInt(c.getColumnIndex(Events.GUESTS_CAN_MODIFY)) != 0);
+        event.setGuestsCanSeeGuests(
+                c.getInt(c.getColumnIndex(Events.GUESTS_CAN_SEE_GUESTS)) != 0);
+        event.setOrganizer(c.getString(c.getColumnIndex(Events.ORGANIZER)));
+
         // if this is a new entry, return the feed url.  otherwise, return null; the edit url is
         // already in the entry.
         if (event.getEditUri() == null) {
@@ -854,6 +862,25 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         map.put(SyncConstValue._SYNC_ACCOUNT_TYPE, account.type);
 
         map.put(Events.HAS_ATTENDEE_DATA, !event.getId().contains(FULL_SELFATTENDANCE));
+
+        map.put(Events.GUESTS_CAN_INVITE_OTHERS, event.getGuestsCanInviteOthers() ? 1 : 0);
+        map.put(Events.GUESTS_CAN_MODIFY, event.getGuestsCanModify() ? 1 : 0);
+        map.put(Events.GUESTS_CAN_SEE_GUESTS, event.getGuestsCanSeeGuests() ? 1 : 0);
+
+        // Find the organizer for this event
+        String organizer = null;
+        Vector attendees = event.getAttendees();
+        Enumeration attendeesEnum = attendees.elements();
+        while (attendeesEnum.hasMoreElements()) {
+            Who who = (Who) attendeesEnum.nextElement();
+            if (who.getRelationship() == Who.RELATIONSHIP_ORGANIZER) {
+                organizer = who.getEmail();
+                break;
+            }
+        }
+        if (organizer != null) {
+            map.put(Events.ORGANIZER, organizer);
+        }
 
         return ENTRY_OK;
     }
@@ -1477,20 +1504,20 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             authToken = bundle.getString(Constants.AUTHTOKEN_KEY);
             if (authToken == null) {
                 Log.w(TAG, "Unable to update calendars from server -- could not "
-                      + "authenticate user " + account);
+                        + "authenticate user " + account);
                 return;
             }
         } catch (IOException e) {
             Log.w(TAG, "Unable to update calendars from server -- could not "
-                  + "authenticate user " + account, e);
+                    + "authenticate user " + account, e);
             return;
         } catch (AuthenticatorException e) {
             Log.w(TAG, "Unable to update calendars from server -- could not "
-                  + "authenticate user " + account, e);
+                    + "authenticate user " + account, e);
             return;
         } catch (OperationCanceledException e) {
             Log.w(TAG, "Unable to update calendars from server -- could not "
-                  + "authenticate user " + account, e);
+                    + "authenticate user " + account, e);
             return;
         }
 
@@ -1681,23 +1708,23 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
         int accesslevel;
         switch (entry.getAccessLevel()) {
-        case CalendarEntry.ACCESS_NONE:
-            accesslevel = Calendars.NO_ACCESS;
-            break;
-        case CalendarEntry.ACCESS_READ:
-            accesslevel = Calendars.READ_ACCESS;
-            break;
-        case CalendarEntry.ACCESS_FREEBUSY:
-            accesslevel = Calendars.FREEBUSY_ACCESS;
-            break;
-        case CalendarEntry.ACCESS_EDITOR:
-            accesslevel = Calendars.EDITOR_ACCESS;
-            break;
-        case CalendarEntry.ACCESS_OWNER:
-            accesslevel = Calendars.OWNER_ACCESS;
-            break;
-        default:
-            accesslevel = Calendars.NO_ACCESS;
+            case CalendarEntry.ACCESS_NONE:
+                accesslevel = Calendars.NO_ACCESS;
+                break;
+            case CalendarEntry.ACCESS_READ:
+                accesslevel = Calendars.READ_ACCESS;
+                break;
+            case CalendarEntry.ACCESS_FREEBUSY:
+                accesslevel = Calendars.FREEBUSY_ACCESS;
+                break;
+            case CalendarEntry.ACCESS_EDITOR:
+                accesslevel = Calendars.EDITOR_ACCESS;
+                break;
+            case CalendarEntry.ACCESS_OWNER:
+                accesslevel = Calendars.OWNER_ACCESS;
+                break;
+            default:
+                accesslevel = Calendars.NO_ACCESS;
         }
         map.put(Calendars.ACCESS_LEVEL, accesslevel);
         // TODO: use the update time, when calendar actually supports this.

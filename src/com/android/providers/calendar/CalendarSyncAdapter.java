@@ -572,6 +572,13 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         super.onSyncStarting(context, account, manualSync, result);
     }
 
+    public boolean getIsSyncable(Account account)
+            throws IOException, AuthenticatorException, OperationCanceledException {
+        Account[] accounts = AccountManager.get(getContext()).getAccountsByTypeAndFeatures(
+                "com.google.GAIA", new String[]{"legacy_hosted_or_google"}, null, null).getResult();
+        return accounts.length > 0 && accounts[0].equals(account) && super.getIsSyncable(account);
+    }
+
     private void deletedEntryToContentValues(Long syncLocalId, EventEntry event,
             ContentValues values) {
         // see #deletedCursorToEntry.  this deletion cannot be an exception to a recurrence (e.g.,
@@ -1138,7 +1145,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                     syncExtras.clear();
                     syncExtras.putBoolean("moveWindow", true);
                     syncExtras.putString("feed", feedUrl);
-                    mContentResolver.startSync(Calendar.CONTENT_URI, syncExtras);
+                    ContentResolver.requestSync(null /* account */, Calendar.AUTHORITY, syncExtras);
                 }
             }
             getServerDiffsForFeed(context, baseSyncData, tempProvider, feedUrl,

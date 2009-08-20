@@ -1169,21 +1169,40 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     /*
      * Fills the Instances table, if necessary, for the given range and then
      * queries the Instances table.
+     *
+     * @param qb The query
+     * @param rangeBegin start of range (Julian days or ms)
+     * @param rangeEnd end of range (Julian days or ms)
+     * @param projectionIn The projection
+     * @param selection The selection
+     * @param sort How to sort
+     * @param searchByDay if true, range is in Julian days, if false, range is in ms
+     * @return
      */
     private Cursor handleInstanceQuery(SQLiteQueryBuilder qb, long rangeBegin,
             long rangeEnd, String[] projectionIn,
             String selection, String sort, boolean searchByDay) {
         final SQLiteDatabase db = getDatabase();
-        // will lock the database.
-        acquireInstanceRange(rangeBegin, rangeEnd, true /* use minimum expansion window */);
+
         qb.setTables("Instances INNER JOIN Events ON (Instances.event_id=Events._id) " +
                 "INNER JOIN Calendars ON (Events.calendar_id = Calendars._id)");
         qb.setProjectionMap(sInstancesProjectionMap);
         if (searchByDay) {
+            // Convert the first and last Julian day range to a range that uses
+            // UTC milliseconds.
+            Time time = new Time();
+            long beginMs = time.setJulianDay((int) rangeBegin);
+            // We add one to lastDay because the time is set to 12am on the given
+            // Julian day and we want to include all the events on the last day.
+            long endMs = time.setJulianDay((int) rangeEnd + 1);
+            // will lock the database.
+            acquireInstanceRange(beginMs, endMs, true /* use minimum expansion window */);
             qb.appendWhere("startDay <= ");
             qb.appendWhere(String.valueOf(rangeEnd));
             qb.appendWhere(" AND endDay >= ");
         } else {
+            // will lock the database.
+            acquireInstanceRange(rangeBegin, rangeEnd, true /* use minimum expansion window */);
             qb.appendWhere("begin <= ");
             qb.appendWhere(String.valueOf(rangeEnd));
             qb.appendWhere(" AND end >= ");
@@ -1209,6 +1228,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     /**
      * Ensure that the date range given has all elements in the instance
      * table.  Acquires the database lock and calls {@link #acquireInstanceRangeLocked}.
+     *
+     * @param begin start of range (ms)
+     * @param end end of range (ms)
+     * @param useMinimumExpansionWindow expand by at least MINIMUM_EXPANSION_SPAN
      */
     private void acquireInstanceRange(final long begin,
             final long end,
@@ -1239,6 +1262,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     /**
      * Ensure that the date range given has all elements in the instance
      * table.  The database lock must be held when calling this method.
+     *
+     * @param begin start of range (ms)
+     * @param end end of range (ms)
+     * @param useMinimumExpansionWindow expand by at least MINIMUM_EXPANSION_SPAN
      */
     private void acquireInstanceRangeLocked(long begin, long end,
             boolean useMinimumExpansionWindow) {

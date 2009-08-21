@@ -4161,6 +4161,13 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             return !mEntityCursor.isAfterLast();
         }
 
+        public void reset() throws RemoteException {
+            if (mIsClosed) {
+                throw new IllegalStateException("calling next() when the iterator is closed");
+            }
+            mEntityCursor.moveToFirst();
+        }
+
         public Entity next() throws RemoteException {
             if (mIsClosed) {
                 throw new IllegalStateException("calling next() when the iterator is closed");

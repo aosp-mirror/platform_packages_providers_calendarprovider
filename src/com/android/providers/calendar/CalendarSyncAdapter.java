@@ -136,7 +136,8 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             Calendars.URL,            // 3
             Calendars.DISPLAY_NAME,   // 4
             Calendars.TIMEZONE,       // 5
-            Calendars.SYNC_EVENTS     // 6
+            Calendars.SYNC_EVENTS,    // 6
+            Calendars.OWNER_ACCOUNT   // 7
     };
 
     // Counters for sync event logging
@@ -1322,11 +1323,13 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         final int idIndex = c.getColumnIndexOrThrow(Calendars._ID);
         final int urlIndex = c.getColumnIndexOrThrow(Calendars.URL);
         final int timezoneIndex = c.getColumnIndexOrThrow(Calendars.TIMEZONE);
+        final int ownerAccountIndex = c.getColumnIndexOrThrow(Calendars.OWNER_ACCOUNT);
         while (c.moveToNext()) {
             map.clear();
             map.put(Calendars._ID, c.getLong(idIndex));
             map.put(Calendars.URL, c.getString(urlIndex));
             map.put(Calendars.TIMEZONE, c.getString(timezoneIndex));
+            map.put(Calendars.OWNER_ACCOUNT, c.getString(ownerAccountIndex));
             cp.insert(Calendar.Calendars.CONTENT_URI, map);
         }
         c.close();

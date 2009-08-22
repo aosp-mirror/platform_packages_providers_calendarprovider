@@ -1228,20 +1228,30 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
     /**
      * Gets end of the sliding sync window.
-     * Could make this accurately hit month boundaries if it matters.
      *
      * @return end of window in ms
      */
     private long getSyncWindowEnd() {
+        // How many days in the future the window extends (e.g. 1 year).  0 for no sliding window.
         long window = Settings.Gservices.getLong(getContext().getContentResolver(),
                 Settings.Gservices.GOOGLE_CALENDAR_SYNC_WINDOW_DAYS, 0);
         if (window > 0) {
-            long now = System.currentTimeMillis();
-            // truncate to day boundary
-            return ((now + window * DAY_IN_MS)/ DAY_IN_MS) * DAY_IN_MS;
-        } else {
-            return Long.MAX_VALUE;
+            // How often to advance the window (e.g. 30 days)
+            long advanceInterval = Settings.Gservices.getLong(getContext().getContentResolver(),
+                    Settings.Gservices.GOOGLE_CALENDAR_SYNC_WINDOW_UPDATE_DAYS, 30) * DAY_IN_MS;
+            if (advanceInterval > 0) {
+                // endOfWindow is the proposed end of the sliding window (e.g. 1 year out)
+                long endOfWindow = System.currentTimeMillis() + window * DAY_IN_MS;
+                // We don't want the end of the window to advance smoothly or else we would
+                // be constantly doing syncs to update the window.  We "snap" the window to
+                // a multiple of advanceInterval so the end of the window will only advance
+                // every e.g. 30 days.  By dividing and multiplying by advanceInterval, the
+                // window is truncated down to a multiple of advanceInterval.  This provides
+                // the "snap" action.
+                return (endOfWindow / advanceInterval) * advanceInterval;
+            }
         }
+        return Long.MAX_VALUE;
     }
 
     private void getServerDiffsForFeed(SyncContext context, SyncData baseSyncData,

@@ -995,7 +995,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 continue;
             }
             String feedUrl = mCalendarClient.getDefaultCalendarUrl(account.name,
-                    CalendarClient.PROJECTION_PRIVATE_SELF_ATTENDANCE, null/* query params */);
+                    CalendarClient.PROJECTION_PRIVATE_FULL, null/* query params */);
             feedUrl = CalendarSyncAdapter.rewriteUrlforAccount(account, feedUrl);
             if (Config.LOGV) {
                 Log.v(TAG, "adding default calendar for account " + account);

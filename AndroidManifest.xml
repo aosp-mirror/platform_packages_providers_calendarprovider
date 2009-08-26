@@ -40,7 +40,8 @@
              (android.test) library. -->
         <uses-library android:name="android.test.runner" />
         <provider android:name="CalendarProvider" android:authorities="calendar"
-                android:syncable="true" android:multiprocess="false"
+                android:label="@string/provider_label"
+                android:multiprocess="false"
                 android:readPermission="android.permission.READ_CALENDAR"
                 android:writePermission="android.permission.WRITE_CALENDAR" />
         <service android:name="CalendarSyncAdapterService" android:exported="true">

@@ -19,7 +19,8 @@
     android:layout_width="fill_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/appwidget_bg"
-    >
+    android:focusable="true"
+    android:clickable="true">
 
     <TextView
         android:id="@+id/no_events"

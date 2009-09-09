@@ -18,7 +18,9 @@
     android:id="@+id/agenda_appwidget"
     android:layout_width="@dimen/appwidget_width"
     android:layout_height="@dimen/appwidget_height"
-    android:background="@drawable/appwidget_bg">
+    android:background="@drawable/appwidget_bg"
+    android:focusable="true"
+    android:clickable="true">
 
     <TextView
         android:id="@+id/no_events"

@@ -3886,7 +3886,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.GUESTS_CAN_MODIFY, values);
             DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.GUESTS_CAN_SEE_GUESTS,
                     values);
-            DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.ORGANIZER, values);
+            DatabaseUtils.cursorStringToContentValues(diffsCursor, Events.ORGANIZER, values);
         }
     }
 

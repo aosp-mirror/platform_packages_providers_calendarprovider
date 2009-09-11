@@ -18,6 +18,11 @@
 package com.android.providers.calendar;
 
 import android.accounts.Account;
+import android.accounts.AccountManager;
+import android.accounts.AccountManagerCallback;
+import android.accounts.AccountManagerFuture;
+import android.accounts.OperationCanceledException;
+import android.accounts.AuthenticatorException;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.AbstractSyncableContentProvider;
@@ -70,6 +75,7 @@ import com.google.android.gdata.client.AndroidGDataClient;
 import com.google.android.gdata.client.AndroidXmlParserFactory;
 import com.google.android.providers.AbstractGDataSyncAdapter;
 import com.google.android.providers.AbstractGDataSyncAdapter.GDataSyncData;
+import com.google.android.googlelogin.GoogleLoginServiceConstants;
 import com.google.wireless.gdata.calendar.client.CalendarClient;
 import com.google.wireless.gdata.calendar.parser.xml.XmlCalendarGDataParserFactory;
 
@@ -79,6 +85,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.io.IOException;
 
 public class CalendarProvider extends AbstractSyncableContentProvider {
     private static final boolean PROFILE = false;
@@ -926,10 +933,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
      * syncable.
      */
     @Override
-    protected void onAccountsChanged(Account[] accountsArray) {
+    protected void onAccountsChanged(final Account[] accountsArray) {
         super.onAccountsChanged(accountsArray);
 
-        Map<Account, Boolean> accounts = Maps.newHashMap();
+        final Map<Account, Boolean> accounts = Maps.newHashMap();
         for (Account account : accountsArray) {
             accounts.put(account, false);
         }
@@ -950,76 +957,110 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         // If there are no calendars at all for a given account, add the
         // default calendar.
 
-        for (Map.Entry<Account, Boolean> entry : accounts.entrySet()) {
-            entry.setValue(false);
-            // TODO: remove this break when Calendar supports multiple accounts. Until then
-            // pretend that only the first account exists.
-            break;
-        }
-
-        Set<Account> handledAccounts = Sets.newHashSet();
-        if (Config.LOGV) Log.v(TAG, "querying calendars");
-        Cursor c = queryInternal(Calendars.CONTENT_URI, ACCOUNTS_PROJECTION, null, null, null);
-        try {
-            while (c.moveToNext()) {
-                final String accountName = c.getString(0);
-                final String accountType = c.getString(1);
-                final Account account = new Account(accountName, accountType);
-                if (handledAccounts.contains(account)) {
-                    continue;
+        // TODO: allow caller to specify which account's feeds should be updated
+        String[] features = new String[]{
+                GoogleLoginServiceConstants.FEATURE_LEGACY_HOSTED_OR_GOOGLE};
+        AccountManagerCallback<Account[]> callback = new AccountManagerCallback<Account[]>() {
+            public void run(AccountManagerFuture<Account[]> accountManagerFuture) {
+                Account[] currentAccounts = new Account[0];
+                try {
+                    currentAccounts = accountManagerFuture.getResult();
+                } catch (OperationCanceledException e) {
+                    Log.w(TAG, "onAccountsChanged", e);
+                    return;
+                } catch (IOException e) {
+                    Log.w(TAG, "onAccountsChanged", e);
+                    return;
+                } catch (AuthenticatorException e) {
+                    Log.w(TAG, "onAccountsChanged", e);
+                    return;
                 }
-                handledAccounts.add(account);
-                if (accounts.containsKey(account)) {
-                    if (Config.LOGV) {
-                        Log.v(TAG, "calendars for account " + account + " exist");
+                if (currentAccounts.length < 1) {
+                    Log.w(TAG, "getPrimaryAccount: no primary account configured.");
+                    return;
+                }
+                Account primaryAccount = currentAccounts[0];
+
+                for (Map.Entry<Account, Boolean> entry : accounts.entrySet()) {
+                    // TODO: change this when Calendar supports multiple accounts. Until then
+                    // pretend that only the primary exists.
+                    boolean ignore = primaryAccount == null ||
+                            !primaryAccount.equals(entry.getKey());
+                    entry.setValue(ignore);
+                }
+
+                Set<Account> handledAccounts = Sets.newHashSet();
+                if (Config.LOGV) Log.v(TAG, "querying calendars");
+                Cursor c = queryInternal(Calendars.CONTENT_URI, ACCOUNTS_PROJECTION, null, null,
+                        null);
+                try {
+                    while (c.moveToNext()) {
+                        final String accountName = c.getString(0);
+                        final String accountType = c.getString(1);
+                        final Account account = new Account(accountName, accountType);
+                        if (handledAccounts.contains(account)) {
+                            continue;
+                        }
+                        handledAccounts.add(account);
+                        if (accounts.containsKey(account)) {
+                            if (Config.LOGV) {
+                                Log.v(TAG, "calendars for account " + account + " exist");
+                            }
+                            accounts.put(account, true /* hasCalendar */);
+                        }
                     }
-                    accounts.put(account, true /* hasCalendar */);
+                } finally {
+                    c.close();
+                    c = null;
                 }
-            }
-        } finally {
-            c.close();
-            c = null;
-        }
 
-        if (Config.LOGV) {
-            Log.v(TAG, "scanning over " + accounts.size() + " account(s)");
-        }
-        for (Map.Entry<Account, Boolean> entry : accounts.entrySet()) {
-            final Account account = entry.getKey();
-            boolean hasCalendar = entry.getValue();
-            if (hasCalendar) {
                 if (Config.LOGV) {
-                    Log.v(TAG, "ignoring account " + account +
-                            " since it matched an existing calendar");
+                    Log.v(TAG, "scanning over " + accounts.size() + " account(s)");
                 }
-                continue;
-            }
-            String feedUrl = mCalendarClient.getDefaultCalendarUrl(account.name,
-                    CalendarClient.PROJECTION_PRIVATE_FULL, null/* query params */);
-            feedUrl = CalendarSyncAdapter.rewriteUrlforAccount(account, feedUrl);
-            if (Config.LOGV) {
-                Log.v(TAG, "adding default calendar for account " + account);
-            }
-            ContentValues values = new ContentValues();
-            values.put(Calendars._SYNC_ACCOUNT, account.name);
-            values.put(Calendars._SYNC_ACCOUNT_TYPE, account.type);
-            values.put(Calendars.URL, feedUrl);
-            values.put(Calendars.OWNER_ACCOUNT,
-                    CalendarSyncAdapter.calendarEmailAddressFromFeedUrl(feedUrl));
-            values.put(Calendars.DISPLAY_NAME,
-                    getContext().getString(R.string.calendar_default_name));
-            values.put(Calendars.SYNC_EVENTS, 1);
-            values.put(Calendars.SELECTED, 1);
-            values.put(Calendars.HIDDEN, 0);
-            values.put(Calendars.COLOR, -14069085 /* blue */);
-            // this is just our best guess.  the real value will get updated
-            // when the user does a sync.
-            values.put(Calendars.TIMEZONE, Time.getCurrentTimezone());
-            values.put(Calendars.ACCESS_LEVEL, Calendars.OWNER_ACCESS);
-            insertInternal(Calendars.CONTENT_URI, values);
+                for (Map.Entry<Account, Boolean> entry : accounts.entrySet()) {
+                    final Account account = entry.getKey();
+                    boolean hasCalendar = entry.getValue();
+                    if (hasCalendar) {
+                        if (Config.LOGV) {
+                            Log.v(TAG, "ignoring account " + account +
+                                    " since it matched an existing calendar");
+                        }
+                        continue;
+                    }
+                    String feedUrl = mCalendarClient.getDefaultCalendarUrl(account.name,
+                            CalendarClient.PROJECTION_PRIVATE_FULL, null/* query params */);
+                    feedUrl = CalendarSyncAdapter.rewriteUrlforAccount(account, feedUrl);
+                    if (Config.LOGV) {
+                        Log.v(TAG, "adding default calendar for account " + account);
+                    }
+                    ContentValues values = new ContentValues();
+                    values.put(Calendars._SYNC_ACCOUNT, account.name);
+                    values.put(Calendars._SYNC_ACCOUNT_TYPE, account.type);
+                    values.put(Calendars.URL, feedUrl);
+                    values.put(Calendars.OWNER_ACCOUNT,
+                            CalendarSyncAdapter.calendarEmailAddressFromFeedUrl(feedUrl));
+                    values.put(Calendars.DISPLAY_NAME,
+                            getContext().getString(R.string.calendar_default_name));
+                    values.put(Calendars.SYNC_EVENTS, 1);
+                    values.put(Calendars.SELECTED, 1);
+                    values.put(Calendars.HIDDEN, 0);
+                    values.put(Calendars.COLOR, -14069085 /* blue */);
+                    // this is just our best guess.  the real value will get updated
+                    // when the user does a sync.
+                    values.put(Calendars.TIMEZONE, Time.getCurrentTimezone());
+                    values.put(Calendars.ACCESS_LEVEL, Calendars.OWNER_ACCESS);
+                    insertInternal(Calendars.CONTENT_URI, values);
 
-            scheduleSync(account, false /* do a full sync */, null /* no url */);
-        }
+                    scheduleSync(account, false /* do a full sync */, null /* no url */);
+
+                }
+                // Call the CalendarSyncAdapter's onAccountsChanged
+                getTempProviderSyncAdapter().onAccountsChanged(accountsArray);
+            }
+        };
+
+        AccountManager.get(getContext()).getAccountsByTypeAndFeatures(
+                GoogleLoginServiceConstants.ACCOUNT_TYPE, features, callback, null);
     }
 
     @Override

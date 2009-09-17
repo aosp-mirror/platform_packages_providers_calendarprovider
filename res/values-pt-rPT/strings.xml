@@ -29,6 +29,5 @@
     <string name="calendar_info_no_calendars" msgid="4287534468186704433">"Sem calendários"</string>
     <string name="calendar_info_events" msgid="1805502308105103803">"Eventos: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
     <string name="calendar_info_events_dirty" msgid="8879392112564499515">"Eventos: <xliff:g id="EVENTS_0">%1$d</xliff:g>, Não guardados: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
-    <!-- no translation found for provider_label (2306513350843464739) -->
-    <skip />
+    <string name="provider_label" msgid="2306513350843464739">"Calendário"</string>
 </resources>

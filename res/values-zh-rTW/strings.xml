@@ -18,23 +18,16 @@
     <string name="calendar_storage" msgid="5387668002987562770">"日曆儲存空間"</string>
     <string name="gadget_title" msgid="3673051912300198724">"日曆"</string>
     <string name="no_title_label" msgid="1986566832415168907">"(無主題)"</string>
-    <!-- no translation found for calendar_default_name (6924293766625167275) -->
-    <skip />
+    <string name="calendar_default_name" msgid="6924293766625167275">"預設"</string>
   <plurals name="gadget_more_events">
     <item quantity="one" msgid="4209472169696459059">"還有一個活動"</item>
     <item quantity="other" msgid="2850138968496439596">"還有 <xliff:g id="NUMBER">%d</xliff:g> 個活動"</item>
   </plurals>
     <string name="gadget_no_events" msgid="5219179980474526479">"最近沒有任何活動"</string>
-    <!-- no translation found for calendar_info (6687678621418059281) -->
-    <skip />
-    <!-- no translation found for calendar_info_error (5575162446528419982) -->
-    <skip />
-    <!-- no translation found for calendar_info_no_calendars (4287534468186704433) -->
-    <skip />
-    <!-- no translation found for calendar_info_events (1805502308105103803) -->
-    <skip />
-    <!-- no translation found for calendar_info_events_dirty (8879392112564499515) -->
-    <skip />
-    <!-- no translation found for provider_label (2306513350843464739) -->
-    <skip />
+    <string name="calendar_info" msgid="6687678621418059281">"日曆資訊"</string>
+    <string name="calendar_info_error" msgid="5575162446528419982">"錯誤"</string>
+    <string name="calendar_info_no_calendars" msgid="4287534468186704433">"沒有日曆"</string>
+    <string name="calendar_info_events" msgid="1805502308105103803">"活動數：<xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="8879392112564499515">"活動數：<xliff:g id="EVENTS_0">%1$d</xliff:g>；未儲存活動數：<xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="2306513350843464739">"日曆"</string>
 </resources>

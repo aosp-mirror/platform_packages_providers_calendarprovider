@@ -963,6 +963,8 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
 
     @Override
     protected void tearDown() throws Exception {
+        mDb.close();
+        mDb = null;
         super.tearDown();
     }
 
@@ -1488,6 +1490,13 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProvider> {
         selfAttendeeStatus = cursor.getInt(selfColumn);
         assertEquals(Calendar.Attendees.ATTENDEE_STATUS_DECLINED, selfAttendeeStatus);
         cursor.close();
+
+        // This sleep is a big hack.  The problem is that CalendarProvider has a TimezoneChecker
+        // thread running in the background, and if the test finishes before TimezoneChecker
+        // finishes, the thread will try to access the closed database and mess it up.
+        // It appears that testAttendees completes fast enough to trigger this, but the other
+        // test cases don't.
+        Thread.sleep(1000);
     }
 
     /**

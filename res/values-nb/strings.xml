@@ -27,8 +27,7 @@
     <string name="calendar_info" msgid="6687678621418059281">"Kalenderinfo"</string>
     <string name="calendar_info_error" msgid="5575162446528419982">"Feil"</string>
     <string name="calendar_info_no_calendars" msgid="4287534468186704433">"Ingen kalendere"</string>
-    <string name="calendar_info_events" msgid="1805502308105103803">"Hendelser: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
-    <string name="calendar_info_events_dirty" msgid="8879392112564499515">"Hendelser: <xliff:g id="EVENTS_0">%1$d</xliff:g>, ikke lagret:<xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
-    <!-- no translation found for provider_label (2306513350843464739) -->
-    <skip />
+    <string name="calendar_info_events" msgid="1805502308105103803">"Aktiviteter: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="8879392112564499515">"Hendelser: <xliff:g id="EVENTS_0">%1$d</xliff:g>, ulagrede: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="2306513350843464739">"Kalender"</string>
 </resources>

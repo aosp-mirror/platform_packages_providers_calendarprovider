@@ -1736,6 +1736,9 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             case CalendarEntry.ACCESS_OWNER:
                 accesslevel = Calendars.OWNER_ACCESS;
                 break;
+            case CalendarEntry.ACCESS_ROOT:
+                accesslevel = Calendars.ROOT_ACCESS;
+                break;
             default:
                 accesslevel = Calendars.NO_ACCESS;
         }

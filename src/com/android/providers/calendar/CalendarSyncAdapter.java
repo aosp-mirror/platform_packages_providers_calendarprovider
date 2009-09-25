@@ -862,7 +862,8 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         map.put(SyncConstValue._SYNC_ACCOUNT, account.name);
         map.put(SyncConstValue._SYNC_ACCOUNT_TYPE, account.type);
 
-        map.put(Events.HAS_ATTENDEE_DATA, !event.getId().contains(FULL_SELFATTENDANCE));
+        // FULL_SELFATTENDANCE means no attendee data
+        map.put(Events.HAS_ATTENDEE_DATA, event.getId().contains(FULL_SELFATTENDANCE) ? 0 : 1);
 
         map.put(Events.GUESTS_CAN_INVITE_OTHERS, event.getGuestsCanInviteOthers() ? 1 : 0);
         map.put(Events.GUESTS_CAN_MODIFY, event.getGuestsCanModify() ? 1 : 0);

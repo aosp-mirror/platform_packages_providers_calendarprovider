@@ -78,6 +78,7 @@ import com.google.android.providers.AbstractGDataSyncAdapter.GDataSyncData;
 import com.google.android.googlelogin.GoogleLoginServiceConstants;
 import com.google.wireless.gdata.calendar.client.CalendarClient;
 import com.google.wireless.gdata.calendar.parser.xml.XmlCalendarGDataParserFactory;
+import com.google.wireless.gdata.calendar.data.Who;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -85,6 +86,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.Vector;
+import java.util.Enumeration;
 import java.io.IOException;
 
 public class CalendarProvider extends AbstractSyncableContentProvider {
@@ -2344,6 +2347,19 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     throw new RuntimeException("Could not insert event.");
                     // return null;
                 }
+                String owner = null;
+                if (updatedValues.containsKey(Events.CALENDAR_ID) &&
+                        !updatedValues.containsKey(Events.ORGANIZER)) {
+                    owner = getOwner(updatedValues.getAsLong(Events.CALENDAR_ID));
+                    // TODO: This isn't entirely correct.  If a guest is adding a recurrence
+                    // exception to an event, the organizer should stay the original organizer.
+                    // This value doesn't go to the server and it will get fixed on sync,
+                    // so it shouldn't really matter.
+                    if (owner != null) {
+                        updatedValues.put(Events.ORGANIZER, owner);
+                    }
+                }
+
                 long rowId = mEventsInserter.insert(updatedValues);
                 Uri uri = Uri.parse("content://" + url.getAuthority() + "/events/" + rowId);
                 if (!isTemporary() && rowId != -1) {
@@ -2355,7 +2371,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     // status, then we need to add an entry to the attendees table.
                     if (initialValues.containsKey(Events.SELF_ATTENDEE_STATUS)) {
                         int status = initialValues.getAsInteger(Events.SELF_ATTENDEE_STATUS);
-                        createAttendeeEntry(rowId, status);
+                        if (owner == null) {
+                            owner = getOwner(updatedValues.getAsLong(Events.CALENDAR_ID));
+                        }
+                        createAttendeeEntry(rowId, status, owner);
                     }
                     triggerAppWidgetUpdate(rowId);
                 }
@@ -2435,55 +2454,23 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         }
     }
 
-
-
     /**
-     * Creates an entry in the Attendees table that refers to the given event
-     * and that has the given response status.
-     *
-     * @param eventId the event id that the new entry in the Attendees table
-     * should refer to
-     * @param status the response status
+     * Gets the calendar's owner for an event.
+     * @param calId
+     * @return email of owner or null
      */
-    private void createAttendeeEntry(long eventId, int status) {
-        ContentValues values = new ContentValues();
-        values.put(Attendees.EVENT_ID, eventId);
-        values.put(Attendees.ATTENDEE_STATUS, status);
-        values.put(Attendees.ATTENDEE_TYPE, Attendees.TYPE_NONE);
-        values.put(Attendees.ATTENDEE_RELATIONSHIP,
-                Attendees.RELATIONSHIP_ATTENDEE);
-
-        // Get the calendar id for this event
-        Cursor cursor = null;
-        long calId;
-        try {
-            cursor = query(ContentUris.withAppendedId(Events.CONTENT_URI, eventId),
-                    new String[] { Events.CALENDAR_ID },
-                    null /* selection */,
-                    null /* selectionArgs */,
-                    null /* sort */);
-            if (cursor == null) {
-                return;
-            }
-            cursor.moveToFirst();
-            calId = cursor.getLong(0);
-        } finally {
-            if (cursor != null) {
-                cursor.close();
-            }
-        }
-
+    private String getOwner(long calId) {
         // Get the email address of this user from this Calendar
         String emailAddress = null;
-        cursor = null;
+        Cursor cursor = null;
         try {
             cursor = query(ContentUris.withAppendedId(Calendars.CONTENT_URI, calId),
-                    new String[] { "_sync_account" },
+                    new String[] { Calendars.OWNER_ACCOUNT },
                     null /* selection */,
                     null /* selectionArgs */,
                     null /* sort */);
             if (cursor == null) {
-                return;
+                return null;
             }
             cursor.moveToFirst();
             emailAddress = cursor.getString(0);
@@ -2492,6 +2479,27 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 cursor.close();
             }
         }
+        return emailAddress;
+    }
+
+    /**
+     * Creates an entry in the Attendees table that refers to the given event
+     * and that has the given response status.
+     *
+     * @param eventId the event id that the new entry in the Attendees table
+     * should refer to
+     * @param status the response status
+     * @param emailAddress the email of the attendee
+     */
+    private void createAttendeeEntry(long eventId, int status, String emailAddress) {
+        ContentValues values = new ContentValues();
+        values.put(Attendees.EVENT_ID, eventId);
+        values.put(Attendees.ATTENDEE_STATUS, status);
+        values.put(Attendees.ATTENDEE_TYPE, Attendees.TYPE_NONE);
+        // TODO: The relationship could actually be ORGANIZER, but it will get straightened out
+        // on sync.
+        values.put(Attendees.ATTENDEE_RELATIONSHIP,
+                Attendees.RELATIONSHIP_ATTENDEE);
         values.put(Attendees.ATTENDEE_EMAIL, emailAddress);
 
         // We don't know the ATTENDEE_NAME but that will be filled in by the

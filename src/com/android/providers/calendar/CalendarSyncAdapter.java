@@ -109,10 +109,13 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
     private static final String PRIVATE_FULL = "/private/full";
     private static final String FEEDS_SUBSTRING = "/feeds/";
-    private static final String FULL_SELFATTENDANCE = "/full-selfattendance/";
+    private static final String PRIVATE_FULL_SELFATTENDANCE = "/private/full-selfattendance/";
 
     /** System property to enable sliding window sync **/
     private static final String USE_SLIDING_WINDOW = "sync.slidingwindows";
+
+    private static final String HIDDEN_ATTENDEES_PROP =
+        "com.android.providers.calendar.CalendarSyncAdapter#guests";
 
     public static class SyncInfo {
         // public String feedUrl;
@@ -203,9 +206,18 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                     c.getString(c.getColumnIndex(Events.TIMEZONE));
         }
 
+        // has attendees data.  this is set to false if the proxy hid all of
+        // the guests (see #entryToContentValues).  in that case, we switch
+        // to the self attendance feed for updates.
+        boolean hasAttendees = c.getInt(c.getColumnIndex(Events.HAS_ATTENDEE_DATA)) != 0;
+
         // id
         event.setId(c.getString(c.getColumnIndex(Events._SYNC_ID)));
-        event.setEditUri(c.getString(c.getColumnIndex(Events._SYNC_VERSION)));
+        String editUri = c.getString(c.getColumnIndex(Events._SYNC_VERSION));
+        if (!hasAttendees) {
+            editUri = convertProjectionToSelfAttendance(editUri);
+        }
+        event.setEditUri(editUri);
 
         // status
         byte status;
@@ -369,10 +381,16 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         // if this is a new entry, return the feed url.  otherwise, return null; the edit url is
         // already in the entry.
         if (event.getEditUri() == null) {
+            // we won't ever rewrite this to self attendance because this is a new event
+            // (so if there are attendees, we need to use the full projection).
             return feedUrl;
         } else {
             return null;
         }
+    }
+
+    private String convertProjectionToSelfAttendance(String uri) {
+        return uri.replace(PRIVATE_FULL, PRIVATE_FULL_SELFATTENDANCE);
     }
 
     private void addAttendeesToEntry(long eventId, EventEntry event)
@@ -776,12 +794,22 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             map.put(Events.HAS_ALARM, 1);
         }
 
+        boolean hasAttendeeData = true;
         // see if there are any extended properties for this event
         if (event.getExtendedProperties() != null) {
+            // first, intercept the proxy's hint that it has stripped attendees
+            Hashtable props = event.getExtendedProperties();
+            if (props.containsKey(HIDDEN_ATTENDEES_PROP) &&
+                "hidden".equals(props.get(HIDDEN_ATTENDEES_PROP))) {
+                props.remove(HIDDEN_ATTENDEES_PROP);
+                hasAttendeeData = false;
+            }
             // just store that we have extended properties.  the caller will have
             // to update the extendedproperties table separately.
-            map.put(Events.HAS_EXTENDED_PROPERTIES, 1);
+            map.put(Events.HAS_EXTENDED_PROPERTIES, ((props.size() > 0) ? 1 : 0));
         }
+
+        map.put(Events.HAS_ATTENDEE_DATA, hasAttendeeData ? 1 : 0);
 
         // dtstart & dtend
         When when = event.getFirstWhen();
@@ -861,9 +889,6 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
         map.put(SyncConstValue._SYNC_ACCOUNT, account.name);
         map.put(SyncConstValue._SYNC_ACCOUNT_TYPE, account.type);
-
-        // FULL_SELFATTENDANCE means no attendee data
-        map.put(Events.HAS_ATTENDEE_DATA, event.getId().contains(FULL_SELFATTENDANCE) ? 0 : 1);
 
         map.put(Events.GUESTS_CAN_INVITE_OTHERS, event.getGuestsCanInviteOthers() ? 1 : 0);
         map.put(Events.GUESTS_CAN_MODIFY, event.getGuestsCanModify() ? 1 : 0);

@@ -3795,6 +3795,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                                 Calendar.ExtendedProperties.NAME, extendedPropertiesValues);
                         DatabaseUtils.cursorStringToContentValues(extendedPropertiesCursor,
                                 Calendar.ExtendedProperties.VALUE, extendedPropertiesValues);
+                        extendedPropertiesValues.put(ExtendedProperties.EVENT_ID, rowId);
                         mExtendedPropertiesInserter.insert(extendedPropertiesValues);
                     }
                 } finally {
@@ -3921,12 +3922,12 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events.ORIGINAL_ALL_DAY,
                     values);
             DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.LAST_DATE, values);
-            DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.HAS_ATTENDEE_DATA, values);
+            DatabaseUtils.cursorIntToContentValues(diffsCursor, Events.HAS_ATTENDEE_DATA, values);
             DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.CALENDAR_ID, values);
-            DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.GUESTS_CAN_INVITE_OTHERS,
+            DatabaseUtils.cursorIntToContentValues(diffsCursor, Events.GUESTS_CAN_INVITE_OTHERS,
                     values);
-            DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.GUESTS_CAN_MODIFY, values);
-            DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.GUESTS_CAN_SEE_GUESTS,
+            DatabaseUtils.cursorIntToContentValues(diffsCursor, Events.GUESTS_CAN_MODIFY, values);
+            DatabaseUtils.cursorIntToContentValues(diffsCursor, Events.GUESTS_CAN_SEE_GUESTS,
                     values);
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events.ORGANIZER, values);
         }
@@ -4256,13 +4257,13 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             entityValues.put(Calendar.Events.ORIGINAL_ALL_DAY, c.getInt(COLUMN_ORIGINAL_ALL_DAY));
             entityValues.put(Calendar.Events.LAST_DATE, c.getLong(COLUMN_LAST_DATE));
             entityValues.put(Calendar.Events.HAS_ATTENDEE_DATA,
-                             c.getLong(COLUMN_HAS_ATTENDEE_DATA));
+                             c.getInt(COLUMN_HAS_ATTENDEE_DATA));
             entityValues.put(Calendar.Events.GUESTS_CAN_INVITE_OTHERS,
-                    c.getLong(COLUMN_GUESTS_CAN_INVITE_OTHERS));
+                    c.getInt(COLUMN_GUESTS_CAN_INVITE_OTHERS));
             entityValues.put(Calendar.Events.GUESTS_CAN_MODIFY,
-                    c.getLong(COLUMN_GUESTS_CAN_MODIFY));
+                    c.getInt(COLUMN_GUESTS_CAN_MODIFY));
             entityValues.put(Calendar.Events.GUESTS_CAN_SEE_GUESTS,
-                    c.getLong(COLUMN_GUESTS_CAN_SEE_GUESTS));
+                    c.getInt(COLUMN_GUESTS_CAN_SEE_GUESTS));
             entityValues.put(Calendar.Events.ORGANIZER, c.getString(COLUMN_ORGANIZER));
 
             Entity entity = new Entity(entityValues);

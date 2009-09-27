@@ -3921,6 +3921,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events.ORIGINAL_ALL_DAY,
                     values);
             DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.LAST_DATE, values);
+            DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.HAS_ATTENDEE_DATA, values);
             DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.CALENDAR_ID, values);
             DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.GUESTS_CAN_INVITE_OTHERS,
                     values);
@@ -4003,6 +4004,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         sEventsProjectionMap.put(Events.ORIGINAL_INSTANCE_TIME, "originalInstanceTime");
         sEventsProjectionMap.put(Events.ORIGINAL_ALL_DAY, "originalAllDay");
         sEventsProjectionMap.put(Events.LAST_DATE, "lastDate");
+        sEventsProjectionMap.put(Events.HAS_ATTENDEE_DATA, "hasAttendeeData");
         sEventsProjectionMap.put(Events.CALENDAR_ID, "calendar_id");
         sEventsProjectionMap.put(Events.GUESTS_CAN_INVITE_OTHERS, "guestsCanInviteOthers");
         sEventsProjectionMap.put(Events.GUESTS_CAN_MODIFY, "guestsCanModify");
@@ -4108,6 +4110,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 Calendar.Events.ORIGINAL_INSTANCE_TIME,
                 Calendar.Events.ORIGINAL_ALL_DAY,
                 Calendar.Events.LAST_DATE,
+                Calendar.Events.HAS_ATTENDEE_DATA,
                 Calendar.Events.CALENDAR_ID,
                 Calendar.Events.GUESTS_CAN_INVITE_OTHERS,
                 Calendar.Events.GUESTS_CAN_MODIFY,
@@ -4139,11 +4142,12 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         private static final int COLUMN_ORIGINAL_INSTANCE_TIME = 22;
         private static final int COLUMN_ORIGINAL_ALL_DAY = 23;
         private static final int COLUMN_LAST_DATE = 24;
-        private static final int COLUMN_CALENDAR_ID = 25;
-        private static final int COLUMN_GUESTS_CAN_INVITE_OTHERS = 26;
-        private static final int COLUMN_GUESTS_CAN_MODIFY = 27;
-        private static final int COLUMN_GUESTS_CAN_SEE_GUESTS = 28;
-        private static final int COLUMN_ORGANIZER = 29;
+        private static final int COLUMN_HAS_ATTENDEE_DATA = 25;
+        private static final int COLUMN_CALENDAR_ID = 26;
+        private static final int COLUMN_GUESTS_CAN_INVITE_OTHERS = 27;
+        private static final int COLUMN_GUESTS_CAN_MODIFY = 28;
+        private static final int COLUMN_GUESTS_CAN_SEE_GUESTS = 29;
+        private static final int COLUMN_ORGANIZER = 30;
 
         private static final String[] REMINDERS_PROJECTION = new String[] {
                 Calendar.Reminders.MINUTES,
@@ -4251,6 +4255,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     c.getLong(COLUMN_ORIGINAL_INSTANCE_TIME));
             entityValues.put(Calendar.Events.ORIGINAL_ALL_DAY, c.getInt(COLUMN_ORIGINAL_ALL_DAY));
             entityValues.put(Calendar.Events.LAST_DATE, c.getLong(COLUMN_LAST_DATE));
+            entityValues.put(Calendar.Events.HAS_ATTENDEE_DATA,
+                             c.getLong(COLUMN_HAS_ATTENDEE_DATA));
             entityValues.put(Calendar.Events.GUESTS_CAN_INVITE_OTHERS,
                     c.getLong(COLUMN_GUESTS_CAN_INVITE_OTHERS));
             entityValues.put(Calendar.Events.GUESTS_CAN_MODIFY,

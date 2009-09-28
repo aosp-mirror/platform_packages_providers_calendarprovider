@@ -2275,10 +2275,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     null /* selection */,
                     null /* selectionArgs */,
                     null /* sort */);
-            if (cursor == null) {
+            if (cursor == null || !cursor.moveToFirst()) {
+                Log.d(TAG, "Couldn't find " + eventId + " in Events table");
                 return null;
             }
-            cursor.moveToFirst();
             range.begin = cursor.getLong(0);
             range.end = cursor.getLong(1);
             range.allDay = cursor.getInt(2) != 0;
@@ -2469,10 +2469,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     null /* selection */,
                     null /* selectionArgs */,
                     null /* sort */);
-            if (cursor == null) {
+            if (cursor == null || !cursor.moveToFirst()) {
+                Log.d(TAG, "Couldn't find " + calId + " in Calendars table");
                 return null;
             }
-            cursor.moveToFirst();
             emailAddress = cursor.getString(0);
         } finally {
             if (cursor != null) {
@@ -2529,10 +2529,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         null /* selection */,
                         null /* selectionArgs */,
                         null /* sort */);
-                if (cursor == null) {
+                if (cursor == null || !cursor.moveToFirst()) {
+                    Log.d(TAG, "Couldn't find " + eventId + " in Events table");
                     return;
                 }
-                cursor.moveToFirst();
                 calId = cursor.getLong(0);
             } finally {
                 if (cursor != null) {
@@ -2549,10 +2549,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         null /* selection */,
                         null /* selectionArgs */,
                         null /* sort */);
-                if (cursor == null) {
+                if (cursor == null || !cursor.moveToFirst()) {
+                    Log.d(TAG, "Couldn't find " + calId + " in Calendars table");
                     return;
                 }
-                cursor.moveToFirst();
                 calendarEmail = cursor.getString(0);
             } finally {
                 if (cursor != null) {
@@ -3240,9 +3240,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         Account account = null;
         String calendarUrl = null;
         boolean oldSyncEvents = false;
-        if (cursor != null) {
+        if (cursor != null && cursor.moveToFirst()) {
             try {
-                cursor.moveToFirst();
                 final String accountName = cursor.getString(0);
                 final String accountType = cursor.getString(1);
                 account = new Account(accountName, accountType);

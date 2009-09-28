@@ -109,7 +109,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
     private static final String PRIVATE_FULL = "/private/full";
     private static final String FEEDS_SUBSTRING = "/feeds/";
-    private static final String PRIVATE_FULL_SELFATTENDANCE = "/private/full-selfattendance/";
+    private static final String PRIVATE_FULL_SELFATTENDANCE = "/private/full-selfattendance";
 
     /** System property to enable sliding window sync **/
     private static final String USE_SLIDING_WINDOW = "sync.slidingwindows";
@@ -211,12 +211,16 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         // to the self attendance feed for updates.
         boolean hasAttendees = c.getInt(c.getColumnIndex(Events.HAS_ATTENDEE_DATA)) != 0;
 
-        // id
-        event.setId(c.getString(c.getColumnIndex(Events._SYNC_ID)));
+        // id, edit uri.
+        // these may need to get rewritten to a self attendance projection,
+        // if our proxy server has removed guests (if there were to many)
+        String id = c.getString(c.getColumnIndex(Events._SYNC_ID));
         String editUri = c.getString(c.getColumnIndex(Events._SYNC_VERSION));
         if (!hasAttendees) {
-            editUri = convertProjectionToSelfAttendance(editUri);
+            if (id != null) id = convertProjectionToSelfAttendance(id);
+            if (editUri != null) editUri = convertProjectionToSelfAttendance(editUri);
         }
+        event.setId(id);
         event.setEditUri(editUri);
 
         // status

@@ -15,8 +15,7 @@
 -->
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-    <!-- no translation found for calendar_storage (5387668002987562770) -->
-    <skip />
+    <string name="calendar_storage" msgid="5387668002987562770">"캘린더 저장"</string>
     <string name="gadget_title" msgid="3673051912300198724">"캘린더"</string>
     <string name="no_title_label" msgid="1986566832415168907">"(제목 없음)"</string>
   <plurals name="gadget_more_events">

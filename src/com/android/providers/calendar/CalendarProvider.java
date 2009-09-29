@@ -78,7 +78,6 @@ import com.google.android.providers.AbstractGDataSyncAdapter.GDataSyncData;
 import com.google.android.googlelogin.GoogleLoginServiceConstants;
 import com.google.wireless.gdata.calendar.client.CalendarClient;
 import com.google.wireless.gdata.calendar.parser.xml.XmlCalendarGDataParserFactory;
-import com.google.wireless.gdata.calendar.data.Who;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -86,8 +85,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
-import java.util.Vector;
-import java.util.Enumeration;
 import java.io.IOException;
 
 public class CalendarProvider extends AbstractSyncableContentProvider {
@@ -3288,6 +3285,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             // Note that we do not delete the matching entries
             // in the DeletedEvents table.  We will let those
             // deleted events propagate to the server.
+
+            // TODO: cancel any pending/ongoing syncs for this calendar.
 
             // TODO: there is a corner case to deal with here: namely, if
             // we edit or delete an event on the phone and then remove

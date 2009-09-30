@@ -606,7 +606,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
     public boolean getIsSyncable(Account account)
             throws IOException, AuthenticatorException, OperationCanceledException {
         Account[] accounts = AccountManager.get(getContext()).getAccountsByTypeAndFeatures(
-                "com.google.GAIA", new String[]{"legacy_hosted_or_google"}, null, null).getResult();
+                "com.google", new String[]{"legacy_hosted_or_google"}, null, null).getResult();
         return accounts.length > 0 && accounts[0].equals(account) && super.getIsSyncable(account);
     }
 

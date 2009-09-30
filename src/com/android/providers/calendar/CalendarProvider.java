@@ -568,13 +568,13 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             db.execSQL("ALTER TABLE Events ADD COLUMN _sync_account_type TEXT;");
             db.execSQL("ALTER TABLE DeletedEvents ADD COLUMN _sync_account_type TEXT;");
             db.execSQL("UPDATE Calendars"
-                    + " SET _sync_account_type='com.google.GAIA'"
+                    + " SET _sync_account_type='com.google'"
                     + " WHERE _sync_account IS NOT NULL");
             db.execSQL("UPDATE Events"
-                    + " SET _sync_account_type='com.google.GAIA'"
+                    + " SET _sync_account_type='com.google'"
                     + " WHERE _sync_account IS NOT NULL");
             db.execSQL("UPDATE DeletedEvents"
-                    + " SET _sync_account_type='com.google.GAIA'"
+                    + " SET _sync_account_type='com.google'"
                     + " WHERE _sync_account IS NOT NULL");
             Log.w(TAG, "re-creating eventSyncAccountAndIdIndex");
             db.execSQL("DROP INDEX eventSyncAccountAndIdIndex");

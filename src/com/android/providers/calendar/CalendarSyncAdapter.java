@@ -1380,7 +1380,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             return;
         }
 
-        // - Get a cursor (A) over all selected calendars over all accounts
+        // - Get a cursor (A) over all sync'd calendars over all accounts
         // - Get a cursor (B) over all subscribed feeds for calendar
         // - If an item is in A but not B then add a subscription
         // - If an item is in B but not A then remove the subscription
@@ -1390,7 +1390,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         Cursor cursorB = null;
         try {
             cursorA = Calendar.Calendars.query(cr, null /* projection */,
-                    Calendar.Calendars.SELECTED + "=1", CALENDAR_KEY_SORT_ORDER);
+                    Calendar.Calendars.SYNC_EVENTS + "=1", CALENDAR_KEY_SORT_ORDER);
             int urlIndexA = cursorA.getColumnIndexOrThrow(Calendar.Calendars.URL);
             int accountNameIndexA = cursorA.getColumnIndexOrThrow(Calendar.Calendars._SYNC_ACCOUNT);
             int accountTypeIndexA =

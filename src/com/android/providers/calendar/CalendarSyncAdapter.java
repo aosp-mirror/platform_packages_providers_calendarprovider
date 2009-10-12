@@ -20,7 +20,6 @@ package com.android.providers.calendar;
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.accounts.AuthenticatorException;
-import android.accounts.Constants;
 import android.accounts.OperationCanceledException;
 import android.content.ContentProvider;
 import android.content.ContentResolver;
@@ -1544,7 +1543,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                     account, mCalendarClient.getServiceName(),
                     true /* notifyAuthFailure */, null /* callback */, null /* handler */)
                     .getResult();
-            authToken = bundle.getString(Constants.AUTHTOKEN_KEY);
+            authToken = bundle.getString(AccountManager.KEY_AUTHTOKEN);
             if (authToken == null) {
                 Log.w(TAG, "Unable to update calendars from server -- could not "
                         + "authenticate user " + account);

@@ -15,13 +15,19 @@
 -->
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-    <!-- no translation found for calendar_storage (5387668002987562770) -->
-    <skip />
-    <string name="gadget_title">"Takvim"</string>
-    <string name="no_title_label">"(Konu yok)"</string>
+    <string name="calendar_storage" msgid="5387668002987562770">"Takvim Deposu"</string>
+    <string name="gadget_title" msgid="3673051912300198724">"Takvim"</string>
+    <string name="no_title_label" msgid="1986566832415168907">"(Konu yok)"</string>
+    <string name="calendar_default_name" msgid="6924293766625167275">"Varsayılan"</string>
   <plurals name="gadget_more_events">
-    <item quantity="one">"1 etkinlik daha"</item>
-    <item quantity="other">"<xliff:g id="NUMBER">%d</xliff:g> etkinlik daha"</item>
+    <item quantity="one" msgid="4209472169696459059">"1 etkinlik daha"</item>
+    <item quantity="other" msgid="2850138968496439596">"<xliff:g id="NUMBER">%d</xliff:g> etkinlik daha"</item>
   </plurals>
-    <string name="gadget_no_events">"Yakın takvim etkinliği yok"</string>
+    <string name="gadget_no_events" msgid="5219179980474526479">"Yakın takvim etkinliği yok"</string>
+    <string name="calendar_info" msgid="6687678621418059281">"Takvim bilgileri"</string>
+    <string name="calendar_info_error" msgid="5575162446528419982">"Hata"</string>
+    <string name="calendar_info_no_calendars" msgid="4287534468186704433">"Takvim yok"</string>
+    <string name="calendar_info_events" msgid="1805502308105103803">"Etkinlikler: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="8879392112564499515">"Etkinlikler: <xliff:g id="EVENTS_0">%1$d</xliff:g>, Kaydedilmemiş: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="2306513350843464739">"Takvim"</string>
 </resources>

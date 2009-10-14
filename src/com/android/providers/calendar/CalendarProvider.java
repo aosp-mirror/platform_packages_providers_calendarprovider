@@ -331,7 +331,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
      * the timezone dependent fields in the Instances table if the timezone
      * has changes.
      */
-    private void updateTimezoneDependentFields() {
+    protected void updateTimezoneDependentFields() {
         Thread thread = new TimezoneCheckerThread();
         thread.start();
     }

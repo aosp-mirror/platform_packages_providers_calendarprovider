@@ -1400,35 +1400,43 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProviderForT
 
         EntityIterator ei = mResolver.queryEntities(mEventsUri, null, null, null);
         int count = 0;
-        while (ei.hasNext()) {
-            Entity entity = ei.next();
-            ContentValues values = entity.getEntityValues();
-            ArrayList<Entity.NamedContentValues> subvalues = entity.getSubValues();
-            switch (values.getAsInteger("_id")) {
-                case 1:
-                    assertEquals(4, subvalues.size()); // 2 x reminder, 2 x extended properties
-                    break;
-                case 2:
-                    assertEquals(1, subvalues.size()); // Extended properties
-                    break;
-                case 3:
-                    assertEquals(1, subvalues.size()); // Attendees
-                    break;
-                default:
-                    assertEquals(0, subvalues.size());
-                    break;
+        try {
+            while (ei.hasNext()) {
+                Entity entity = ei.next();
+                ContentValues values = entity.getEntityValues();
+                ArrayList<Entity.NamedContentValues> subvalues = entity.getSubValues();
+                switch (values.getAsInteger("_id")) {
+                    case 1:
+                        assertEquals(4, subvalues.size()); // 2 x reminder, 2 x extended properties
+                        break;
+                    case 2:
+                        assertEquals(1, subvalues.size()); // Extended properties
+                        break;
+                    case 3:
+                        assertEquals(1, subvalues.size()); // Attendees
+                        break;
+                    default:
+                        assertEquals(0, subvalues.size());
+                        break;
+                }
+                count += 1;
             }
-            count += 1;
+            assertEquals(5, count);
+        } finally {
+            ei.close();
         }
-        assertEquals(5, count);
 
-        ei = mResolver.queryEntities(mEventsUri, "Events._id = 3", null, null);
-        count = 0;
-        while (ei.hasNext()) {
-            Entity entity = ei.next();
-            count += 1;
+        try {
+            ei = mResolver.queryEntities(mEventsUri, "Events._id = 3", null, null);
+            count = 0;
+            while (ei.hasNext()) {
+                Entity entity = ei.next();
+                count += 1;
+            }
+            assertEquals(1, count);
+        } finally {
+            ei.close();
         }
-        assertEquals(1, count);
     }
 
     /**

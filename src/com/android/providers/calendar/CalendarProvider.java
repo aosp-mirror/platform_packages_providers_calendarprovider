@@ -4123,6 +4123,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 Calendar.Events.GUESTS_CAN_MODIFY,
                 Calendar.Events.GUESTS_CAN_SEE_GUESTS,
                 Calendar.Events.ORGANIZER,
+                Calendar.Calendars.URL,
         };
         private static final int COLUMN_ID = 0;
         private static final int COLUMN_HTML_URI = 1;
@@ -4155,6 +4156,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         private static final int COLUMN_GUESTS_CAN_MODIFY = 28;
         private static final int COLUMN_GUESTS_CAN_SEE_GUESTS = 29;
         private static final int COLUMN_ORGANIZER = 30;
+        private static final int COLUMN_CALENDAR_URL = 31;
 
         private static final String[] REMINDERS_PROJECTION = new String[] {
                 Calendar.Reminders.MINUTES,
@@ -4187,9 +4189,11 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             mIsClosed = false;
             mDb = provider.mOpenHelper.getReadableDatabase();
             final SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
-            qb.setTables(sEventsTable);
+            qb.setTables("Events, Calendars");
+            qb.setProjectionMap(sEventsProjectionMap);
+            qb.appendWhere("Events.calendar_id=Calendars._id");
             if (eventIdString != null) {
-                qb.appendWhere(Calendar.Events._ID + "=" + eventIdString);
+                qb.appendWhere(" AND Events._id=" + eventIdString);
             }
             mEntityCursor = qb.query(mDb, EVENTS_PROJECTION, selection, selectionArgs,
                     null, null, sortOrder);
@@ -4271,6 +4275,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             entityValues.put(Calendar.Events.GUESTS_CAN_SEE_GUESTS,
                     c.getInt(COLUMN_GUESTS_CAN_SEE_GUESTS));
             entityValues.put(Calendar.Events.ORGANIZER, c.getString(COLUMN_ORGANIZER));
+            entityValues.put(Calendars.URL, c.getString(COLUMN_CALENDAR_URL));
 
             Entity entity = new Entity(entityValues);
             Cursor cursor = null;

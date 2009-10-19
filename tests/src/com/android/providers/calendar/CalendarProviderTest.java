@@ -58,7 +58,9 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProviderForT
     // We need a unique id to put in the _sync_id field so that we can create
     // recurrence exceptions that refer to recurring events.
     private int mGlobalSyncId = 1000;
-    
+    private static final String CALENDAR_URL =
+        "http://www.google.com/calendar/feeds/joe%40joe.com/private/full";
+
     /**
      * KeyValue is a simple class that stores a pair of strings representing
      * a (key, value) pair.  This is used for updating events.
@@ -996,7 +998,7 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProviderForT
         m.put(Calendars.COLOR, "0xff123456");
         m.put(Calendars.TIMEZONE, timezone);
         m.put(Calendars.SELECTED, 1);
-        m.put(Calendars.URL, "http://www.google.com/calendar/feeds/joe%40joe.com/private/full");
+        m.put(Calendars.URL, CALENDAR_URL);
         m.put(Calendars.OWNER_ACCOUNT, "joe@joe.com");
 
         Uri url = mResolver.insert(Uri.parse("content://calendar/calendars"), m);
@@ -1404,6 +1406,7 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProviderForT
             while (ei.hasNext()) {
                 Entity entity = ei.next();
                 ContentValues values = entity.getEntityValues();
+                assertEquals(CALENDAR_URL, values.getAsString(Calendars.URL));
                 ArrayList<Entity.NamedContentValues> subvalues = entity.getSubValues();
                 switch (values.getAsInteger("_id")) {
                     case 1:

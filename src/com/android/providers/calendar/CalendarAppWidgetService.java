@@ -346,10 +346,12 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         cursor.moveToPosition(events.primaryRow);
         
         // Color stripe
+        /*
         int colorFilter = cursor.getInt(INDEX_COLOR);
         views.setTextColor(R.id.when, colorFilter);
         views.setTextColor(R.id.title, colorFilter);
         views.setTextColor(R.id.where, colorFilter);
+        */
         
         // When
         long start = cursor.getLong(INDEX_BEGIN);

@@ -58,7 +58,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
     // recurrence exceptions that refer to recurring events.
     private int mGlobalSyncId = 1000;
     private static final String CALENDAR_URL =
-        "http://www.google.com/calendar/feeds/joe%40joe.com/private/full";
+            "http://www.google.com/calendar/feeds/joe%40joe.com/private/full";
 
     /**
      * KeyValue is a simple class that stores a pair of strings representing
@@ -688,9 +688,9 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
                     false),
             new EventInfo("7: 7pm - 8pm",      "2008-05-07T19:00:00", "2008-05-07T20:00:00", false),
             new EventInfo("7: 6:30pm - 7:30pm", "2008-05-07T18:30:00", "2008-05-07T19:30:00",
-                          false),
+                    false),
             new EventInfo("7: 11pm - midnight", "2008-05-07T23:00:00", "2008-05-08T00:00:00",
-                          false),
+                    false),
             new EventInfo("8: 1am - 2am",      "2008-05-08T01:00:00", "2008-05-08T02:00:00", false),
             new EventInfo("8: 3am - 4am",      "2008-05-08T03:00:00", "2008-05-08T04:00:00", false),
             new EventInfo("8: 5am - 6am",      "2008-05-08T05:00:00", "2008-05-08T06:00:00", false),
@@ -703,9 +703,9 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
             new EventInfo("8: 7pm - 8pm",      "2008-05-08T19:00:00", "2008-05-08T20:00:00", false),
             new EventInfo("8: 9pm - 10pm",     "2008-05-08T21:00:00", "2008-05-08T22:00:00", false),
             new EventInfo("8: 11pm - midnight", "2008-05-08T23:00:00", "2008-05-09T00:00:00",
-                          false),
+                    false),
             new EventInfo("10: 12am - midnight", "2008-05-10T00:00:00", "2008-05-11T00:00:00",
-                          false),
+                    false),
             new EventInfo("12: 1 day",         "2008-05-12T00:00:00", "2008-05-13T00:00:00", true),
             new EventInfo("14: 1 day",         "2008-05-14T00:00:00", "2008-05-15T00:00:00", true),
             new EventInfo("14: 2 days",        "2008-05-14T00:00:00", "2008-05-16T00:00:00", true),
@@ -713,7 +713,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
             new EventInfo("15: 1am - 2am",     "2008-05-15T01:00:00", "2008-05-15T02:00:00", false),
             new EventInfo("16: 10am - 11am",   "2008-05-16T10:00:00", "2008-05-16T11:00:00", false),
             new EventInfo("16: 11pm - midnight", "2008-05-16T23:00:00", "2008-05-17T00:00:00",
-                          false),
+                    false),
     };
 
     private EventInfo[] mBusyBitRepeatingEvents = {
@@ -861,7 +861,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
             new Insert("cancel0"),
             new Update("cancel0", new KeyValue[] {
                     new KeyValue(Calendar.EventsColumns.STATUS,
-                                 "" + Calendar.EventsColumns.STATUS_CANCELED),
+                            "" + Calendar.EventsColumns.STATUS_CANCELED),
             }),
             new VerifyAllInstances("2008-05-01T00:00:00", "2008-05-22T00:01:00",
                     new String[] {"2008-05-06T13:00:00",
@@ -894,7 +894,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
             // Verify 4 occurrences of the "daily0" repeating event
             new VerifyAllInstances("2008-05-01T00:00:00", "2008-05-04T00:01:00",
                     new String[] {"2008-05-01T00:00:00", "2008-05-02T00:00:00",
-                    "2008-05-03T00:00:00", "2008-05-04T00:00:00"}),
+                            "2008-05-03T00:00:00", "2008-05-04T00:00:00"}),
             new Insert("except1"),
             new QueryNumEvents(2),
 
@@ -902,7 +902,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
             // so that it now matches the recurrence exception.
             new VerifyAllInstances("2008-05-01T00:00:00", "2008-05-04T00:01:00",
                     new String[] {"2008-05-01T00:00:00", "2008-05-02T00:00:00",
-                    "2008-05-03T02:00:00", "2008-05-04T00:00:00"}),
+                            "2008-05-03T02:00:00", "2008-05-04T00:00:00"}),
 
             // Change the end time of "daily0" but it still includes the
             // recurrence exception.
@@ -913,7 +913,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
             // Verify that the recurrence exception is still there
             new VerifyAllInstances("2008-05-01T00:00:00", "2008-05-04T00:01:00",
                     new String[] {"2008-05-01T00:00:00", "2008-05-02T00:00:00",
-                    "2008-05-03T02:00:00", "2008-05-04T00:00:00"}),
+                            "2008-05-03T02:00:00", "2008-05-04T00:00:00"}),
             // This time change the end time of "daily0" so that it excludes
             // the recurrence exception.
             new Update("daily0", new KeyValue[] {
@@ -935,7 +935,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
      * is not present.
      */
     private Command[] mExceptionWithNoRecurrence = {
-                new Insert("except0"),
+            new Insert("except0"),
             new QueryNumEvents(1),
             new VerifyAllInstances("2008-05-01T00:00:00", "2008-05-03T00:01:00",
                     new String[] {"2008-05-01T02:00:00"}),
@@ -1439,8 +1439,9 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
             ei.close();
         }
 
+        ei = null;
         try {
-            ei = mResolver.queryEntities(mEventsUri, "Events._id = 3", null, null);
+            ei = mResolver.queryEntities(mEventsUri, "_id = 3", null, null);
             count = 0;
             while (ei.hasNext()) {
                 Entity entity = ei.next();
@@ -1448,7 +1449,9 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
             }
             assertEquals(1, count);
         } finally {
-            ei.close();
+            if (ei != null) {
+                ei.close();
+            }
         }
     }
 
@@ -1511,6 +1514,225 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         selfAttendeeStatus = cursor.getInt(selfColumn);
         assertEquals(Calendar.Attendees.ATTENDEE_STATUS_DECLINED, selfAttendeeStatus);
         cursor.close();
+    }
+
+    /**
+     * Test the event's _sync_dirty status and clear it.
+     * @param eventId event to fetch.
+     * @param wanted the wanted _sync_dirty status
+     */
+    private void testAndClearDirty(long eventId, int wanted) {
+        Cursor cursor = mResolver.query(
+                ContentUris.withAppendedId(Calendar.Events.CONTENT_URI, eventId),
+                null, null, null, null);
+        try {
+            assertEquals("Event count", 1, cursor.getCount());
+            cursor.moveToNext();
+            int dirty = cursor.getInt(cursor.getColumnIndex(Calendar.Events._SYNC_DIRTY));
+            assertEquals("dirty flag", wanted, dirty);
+            if (dirty == 1) {
+                // Have to access database directly since provider will set dirty again.
+                mDb.execSQL("UPDATE Events SET _sync_dirty=0 WHERE _id=" + eventId);
+            }
+        } finally {
+            cursor.close();
+        }
+    }
+
+    /**
+     * Test the count of results from a query.
+     * @param uri The URI to query
+     * @param where The where string or null.
+     * @param wanted The number of results wanted.  An assertion is thrown if it doesn't match.
+     */
+    private void testQueryCount(Uri uri, String where, int wanted) {
+        Cursor cursor = mResolver.query(uri, null/* projection */, where, null /* selectionArgs */,
+                null /* sortOrder */);
+        try {
+            assertEquals("query results", wanted, cursor.getCount());
+        } finally {
+            cursor.close();
+        }
+    }
+
+    /**
+     * Test dirty flag processing.
+     * @throws Exception
+     */
+    public void testDirty() throws Exception {
+        internalTestDirty(false);
+    }
+
+    /**
+     * Test dirty flag processing for updates from a sync adapter.
+     * @throws Exception
+     */
+    public void testDirtyWithSyncAdapter() throws Exception {
+        internalTestDirty(true);
+    }
+
+    /**
+     * Add CALLER_IS_SYNCADAPTER to URI if this is a sync adapter operation.
+     */
+    private Uri updatedUri(Uri uri, boolean syncAdapter) {
+        if (syncAdapter) {
+            return uri.buildUpon().appendQueryParameter(Calendar.CALLER_IS_SYNCADAPTER, "true")
+                    .build();
+        } else {
+            return uri;
+        }
+    }
+
+    /**
+     * Test dirty flag processing either for syncAdapter operations or client operations.
+     * The main difference is syncAdapter operations don't set the dirty bit.
+     */
+    private void internalTestDirty(boolean syncAdapter) throws Exception {
+        mCalendarId = insertCal("Calendar0", DEFAULT_TIMEZONE);
+
+        Uri eventUri = insertEvent(mCalendarId, findEvent("daily0"));
+
+        long eventId = ContentUris.parseId(eventUri);
+        testAndClearDirty(eventId, 1);
+
+        ContentValues attendee = new ContentValues();
+        attendee.put(Calendar.Attendees.ATTENDEE_NAME, "Joe");
+        attendee.put(Calendar.Attendees.ATTENDEE_EMAIL, "joe@joe.com");
+        attendee.put(Calendar.Attendees.ATTENDEE_TYPE, Calendar.Attendees.TYPE_REQUIRED);
+        attendee.put(Calendar.Attendees.ATTENDEE_RELATIONSHIP,
+                Calendar.Attendees.RELATIONSHIP_ORGANIZER);
+        attendee.put(Calendar.Attendees.EVENT_ID, eventId);
+
+        Uri attendeeUri = mResolver.insert(
+                updatedUri(Calendar.Attendees.CONTENT_URI, syncAdapter),
+                attendee);
+        testAndClearDirty(eventId, syncAdapter ? 0 : 1);
+        testQueryCount(Calendar.Attendees.CONTENT_URI, "event_id=" + eventId, 1);
+
+        ContentValues reminder = new ContentValues();
+        reminder.put(Calendar.Reminders.MINUTES, 10);
+        reminder.put(Calendar.Reminders.METHOD, Calendar.Reminders.METHOD_EMAIL);
+        reminder.put(Calendar.Attendees.EVENT_ID, eventId);
+
+        Uri reminderUri = mResolver.insert(
+                updatedUri(Calendar.Reminders.CONTENT_URI, syncAdapter), reminder);
+        testAndClearDirty(eventId, syncAdapter ? 0 : 1);
+        testQueryCount(Calendar.Reminders.CONTENT_URI, "event_id=" + eventId, 1);
+
+        ContentValues alert = new ContentValues();
+        alert.put(Calendar.CalendarAlerts.BEGIN, 10);
+        alert.put(Calendar.CalendarAlerts.END, 20);
+        alert.put(Calendar.CalendarAlerts.ALARM_TIME, 30);
+        alert.put(Calendar.CalendarAlerts.CREATION_TIME, 40);
+        alert.put(Calendar.CalendarAlerts.RECEIVED_TIME, 50);
+        alert.put(Calendar.CalendarAlerts.NOTIFY_TIME, 60);
+        alert.put(Calendar.CalendarAlerts.STATE, Calendar.CalendarAlerts.SCHEDULED);
+        alert.put(Calendar.CalendarAlerts.MINUTES, 30);
+        alert.put(Calendar.CalendarAlerts.EVENT_ID, eventId);
+
+        Uri alertUri = mResolver.insert(
+                updatedUri(Calendar.CalendarAlerts.CONTENT_URI, syncAdapter), alert);
+        // Alerts don't dirty the event
+        testAndClearDirty(eventId, 0);
+        testQueryCount(Calendar.CalendarAlerts.CONTENT_URI, "event_id=" + eventId, 1);
+
+        ContentValues extended = new ContentValues();
+        extended.put(Calendar.ExtendedProperties.NAME, "foo");
+        extended.put(Calendar.ExtendedProperties.VALUE, "bar");
+        extended.put(Calendar.ExtendedProperties.EVENT_ID, eventId);
+
+        Uri extendedUri = mResolver.insert(
+                updatedUri(Calendar.ExtendedProperties.CONTENT_URI, syncAdapter), extended);
+        testAndClearDirty(eventId, syncAdapter ? 0 : 1);
+        testQueryCount(Calendar.ExtendedProperties.CONTENT_URI, "event_id=" + eventId, 1);
+
+        // Now test updates
+
+        attendee = new ContentValues();
+        attendee.put(Calendar.Attendees.ATTENDEE_NAME, "Sam");
+        // Need to include EVENT_ID with attendee update.  Is that desired?
+        attendee.put(Calendar.Attendees.EVENT_ID, eventId);
+
+        assertEquals("update", 1, mResolver.update(updatedUri(attendeeUri, syncAdapter), attendee,
+                null /* where */, null /* selectionArgs */));
+        testAndClearDirty(eventId, syncAdapter ? 0 : 1);
+
+        testQueryCount(Calendar.Attendees.CONTENT_URI, "event_id=" + eventId, 1);
+
+        reminder = new ContentValues();
+        reminder.put(Calendar.Reminders.MINUTES, 20);
+
+        assertEquals("update", 1, mResolver.update(updatedUri(reminderUri, syncAdapter), reminder,
+                null /* where */, null /* selectionArgs */));
+        testAndClearDirty(eventId, syncAdapter ? 0 : 1);
+        testQueryCount(Calendar.Reminders.CONTENT_URI, "event_id=" + eventId, 1);
+
+        alert = new ContentValues();
+        alert.put(Calendar.CalendarAlerts.STATE, Calendar.CalendarAlerts.DISMISSED);
+
+        assertEquals("update", 1, mResolver.update(updatedUri(alertUri, syncAdapter), alert,
+                null /* where */, null /* selectionArgs */));
+        // Alerts don't dirty the event
+        testAndClearDirty(eventId, 0);
+        testQueryCount(Calendar.CalendarAlerts.CONTENT_URI, "event_id=" + eventId, 1);
+
+        extended = new ContentValues();
+        extended.put(Calendar.ExtendedProperties.VALUE, "baz");
+
+        assertEquals("update", 1, mResolver.update(updatedUri(extendedUri, syncAdapter), extended,
+                null /* where */, null /* selectionArgs */));
+        testAndClearDirty(eventId, syncAdapter ? 0 : 1);
+        testQueryCount(Calendar.ExtendedProperties.CONTENT_URI, "event_id=" + eventId, 1);
+
+        // Now test deletes
+
+        assertEquals("delete", 1, mResolver.delete(
+                updatedUri(attendeeUri, syncAdapter),
+                null, null /* selectionArgs */));
+        testAndClearDirty(eventId, syncAdapter ? 0 : 1);
+        testQueryCount(Calendar.Attendees.CONTENT_URI, "event_id=" + eventId, 0);
+
+        assertEquals("delete", 1, mResolver.delete(updatedUri(reminderUri, syncAdapter),
+                null /* where */, null /* selectionArgs */));
+
+        testAndClearDirty(eventId, syncAdapter ? 0 : 1);
+        testQueryCount(Calendar.Reminders.CONTENT_URI, "event_id=" + eventId, 0);
+
+        assertEquals("delete", 1, mResolver.delete(updatedUri(alertUri, syncAdapter),
+                null /* where */, null /* selectionArgs */));
+
+        // Alerts don't dirty the event
+        testAndClearDirty(eventId, 0);
+        testQueryCount(Calendar.CalendarAlerts.CONTENT_URI, "event_id=" + eventId, 0);
+
+        // Can't delete extended properties, interestingly enough, so don't try that.
+    }
+
+    /**
+     * Test calendar deletion
+     * @throws Exception
+     */
+    public void testCalendarDeletion() throws Exception {
+        mCalendarId = insertCal("Calendar0", DEFAULT_TIMEZONE);
+        Uri eventUri = insertEvent(mCalendarId, findEvent("daily0"));
+        long eventId = ContentUris.parseId(eventUri);
+        testAndClearDirty(eventId, 1);
+        Uri eventUri1 = insertEvent(mCalendarId, findEvent("daily1"));
+        long eventId1 = ContentUris.parseId(eventUri);
+        assertEquals("delete", 1, mResolver.delete(eventUri1, null, null));
+        // Calendar has one event and one deleted event
+        testQueryCount(Calendar.Events.CONTENT_URI, null, 1);
+        //testQueryCount(Calendar.Events.DELETED_CONTENT_URI, null, 1);
+
+        assertEquals("delete", 1, mResolver.delete(Calendar.Calendars.CONTENT_URI,
+                "_id=" + mCalendarId, null));
+        // Calendar should be deleted
+        testQueryCount(Calendar.Calendars.CONTENT_URI, null, 0);
+        // Event should be gone
+        testQueryCount(Calendar.Events.CONTENT_URI, null, 0);
+        // Can't query deleted table so don't check
+        // This test will be relevant with the new provider
+        // testQueryCount(Calendar.Events.DELETED_CONTENT_URI, null, 1);
     }
 
     /**

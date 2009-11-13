@@ -16,6 +16,8 @@
 
 package com.android.providers.calendar;
 
+import android.accounts.Account;
+import android.accounts.AccountManager;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
@@ -23,20 +25,21 @@ import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.SystemClock;
-import android.pim.DateUtils;
-import android.pim.Time;
 import android.provider.Calendar;
 import android.test.SyncBaseInstrumentation;
+import android.text.format.DateUtils;
+import android.text.format.Time;
 import android.util.Log;
+
 import com.google.android.collect.Maps;
-import com.google.android.googlelogin.GoogleLoginServiceBlockingHelper;
-import com.google.android.googlelogin.GoogleLoginServiceNotFoundException;
+import com.google.android.googlelogin.GoogleLoginServiceConstants;
 
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
 public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
+    protected AccountManager mAccountManager;
     protected Context mTargetContext;
     protected String mAccount;
     protected ContentResolver mResolver;
@@ -70,6 +73,8 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
     protected void setUp() throws Exception {
         super.setUp();
         mTargetContext = getInstrumentation().getTargetContext();
+
+        mAccountManager = AccountManager.get(mTargetContext);
         mAccount = getAccount();
         mResolver = mTargetContext.getContentResolver();
     }
@@ -144,7 +149,7 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
         if (event.mDescription != null) {
             values.put(Calendar.Events.DESCRIPTION, event.mDescription);
         }
-        
+
         Uri uri = ContentUris.withAppendedId(Calendar.Events.CONTENT_URI, eventId);
         mResolver.update(uri, values, null, null);
         syncCalendar();
@@ -195,7 +200,7 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
     protected int getEventsCount() {
         Cursor cursor;
         cursor = mResolver.query(mEventsUri, null, null, null, null);
-        return cursor.getCount();        
+        return cursor.getCount();
     }
 
     /**
@@ -206,7 +211,7 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
         Cursor calendarsCursor;
         calendarsCursor = mResolver.query(Calendar.Calendars.CONTENT_URI, null, null, null, null);
         calendarsCursor.moveToNext();
-        return calendarsCursor.getInt(calendarsCursor.getColumnIndex("_id"));         
+        return calendarsCursor.getInt(calendarsCursor.getColumnIndex("_id"));
     }
 
     /**
@@ -345,12 +350,14 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
      * @return
      */
     protected String getAccount() {
-        try {
-            return GoogleLoginServiceBlockingHelper.getAccount(mTargetContext, false);
-        } catch (GoogleLoginServiceNotFoundException e) {
-            Log.e("SyncCalendarTest", "Could not find Google login service", e);
-            return null;
-        }
+        Account[] accounts = mAccountManager.getAccountsByType(
+                GoogleLoginServiceConstants.ACCOUNT_TYPE);
+
+        assertTrue("Didn't find any Google accounts", accounts.length > 0);
+
+        Account account = accounts[accounts.length - 1];
+        Log.v(TAG, "Found " + accounts.length + " accounts; using the last one, " + account.name);
+        return account.name;
     }
 
     /**

@@ -18,7 +18,7 @@ package com.android.providers.calendar;
 
 import android.database.Cursor;
 import android.net.Uri;
-import android.pim.Time;
+import android.text.format.Time;
 
 /**
  * Calendar Sync instrumentation tests. Testing creation of new events, deleting events,
@@ -85,7 +85,7 @@ public class SyncCalendarTest extends CalendarSyncTestingBase {
         long eventId = cursor.getLong(cursor.getColumnIndex("_id"));
 
         editEvent(eventId, event);
-        cursor = mResolver.query(mEventsUri, null, null, null, null);        
+        cursor = mResolver.query(mEventsUri, null, null, null, null);
         assertTrue("Events count should remain same.", getEventsCount() == countBeforeNewEvent);
 
         while (cursor.moveToNext()) {
@@ -123,7 +123,7 @@ public class SyncCalendarTest extends CalendarSyncTestingBase {
         while (cursor.moveToNext()){
           if (cursor.getLong(cursor.getColumnIndex("_id")) == eventId) {
             assertEquals(cursor.getLong(cursor.getColumnIndex("dtstart")), newDtStart);
-            assertEquals(cursor.getLong(cursor.getColumnIndex("dtend")), newDtEnd);  
+            assertEquals(cursor.getLong(cursor.getColumnIndex("dtend")), newDtEnd);
             break;
           }
         }
@@ -159,3 +159,4 @@ public class SyncCalendarTest extends CalendarSyncTestingBase {
         cursor.close();
     }
 }
+

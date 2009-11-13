@@ -17,23 +17,10 @@
 
 package com.android.providers.calendar;
 
-import com.google.android.gdata.client.AndroidGDataClient;
-import com.google.android.gdata.client.AndroidXmlParserFactory;
-import com.google.android.providers.AbstractGDataSyncAdapter;
-import com.google.wireless.gdata.calendar.client.CalendarClient;
-import com.google.wireless.gdata.calendar.data.EventEntry;
-import com.google.wireless.gdata.calendar.data.EventsFeed;
-import com.google.wireless.gdata.calendar.data.Reminder;
-import com.google.wireless.gdata.calendar.data.When;
-import com.google.wireless.gdata.calendar.data.Who;
-import com.google.wireless.gdata.calendar.parser.xml.XmlCalendarGDataParserFactory;
-import com.google.wireless.gdata.client.GDataServiceClient;
-import com.google.wireless.gdata.client.QueryParams;
-import com.google.wireless.gdata.data.Entry;
-import com.google.wireless.gdata.data.Feed;
-import com.google.wireless.gdata.data.StringUtils;
-import com.google.wireless.gdata.parser.ParseException;
-
+import android.accounts.Account;
+import android.accounts.AccountManager;
+import android.accounts.AuthenticatorException;
+import android.accounts.OperationCanceledException;
 import android.content.ContentProvider;
 import android.content.ContentResolver;
 import android.content.ContentUris;
@@ -44,26 +31,55 @@ import android.content.SyncResult;
 import android.content.SyncableContentProvider;
 import android.database.Cursor;
 import android.database.CursorJoiner;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.SystemProperties;
 import android.pim.ICalendar;
 import android.pim.RecurrenceSet;
 import android.provider.Calendar;
-import android.provider.SubscribedFeeds;
-import android.provider.SyncConstValue;
 import android.provider.Calendar.Calendars;
 import android.provider.Calendar.Events;
+import android.provider.SubscribedFeeds;
+import android.provider.SyncConstValue;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.text.format.Time;
 import android.util.Config;
 import android.util.Log;
+import com.google.android.gdata.client.AndroidGDataClient;
+import com.google.android.gdata.client.AndroidXmlParserFactory;
+import com.google.android.googlelogin.GoogleLoginServiceConstants;
+import com.google.android.providers.AbstractGDataSyncAdapter;
+import com.google.wireless.gdata.calendar.client.CalendarClient;
+import com.google.wireless.gdata.calendar.data.CalendarEntry;
+import com.google.wireless.gdata.calendar.data.CalendarsFeed;
+import com.google.wireless.gdata.calendar.data.EventEntry;
+import com.google.wireless.gdata.calendar.data.EventsFeed;
+import com.google.wireless.gdata.calendar.data.Reminder;
+import com.google.wireless.gdata.calendar.data.When;
+import com.google.wireless.gdata.calendar.data.Who;
+import com.google.wireless.gdata.calendar.parser.xml.XmlCalendarGDataParserFactory;
+import com.google.wireless.gdata.client.GDataServiceClient;
+import com.google.wireless.gdata.client.HttpException;
+import com.google.wireless.gdata.client.QueryParams;
+import com.google.wireless.gdata.data.Entry;
+import com.google.wireless.gdata.data.Feed;
+import com.google.wireless.gdata.data.StringUtils;
+import com.google.wireless.gdata.parser.GDataParser;
+import com.google.wireless.gdata.parser.ParseException;
 
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.List;
+import java.util.Set;
 import java.util.TimeZone;
 import java.util.Vector;
+import java.net.URLDecoder;
 
 /**
  * SyncAdapter for Google Calendar.  Fetches the list of the user's calendars,
@@ -72,20 +88,33 @@ import java.util.Vector;
  */
 public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
-    /* package */ static final String USER_AGENT_APP_VERSION = "Android-GData-Calendar/1.1";
+    /* package */ static final String USER_AGENT_APP_VERSION = "Android-GData-Calendar/1.2";
 
-    private static final String SELECT_BY_ACCOUNT = Calendars._SYNC_ACCOUNT + "=?";
+    private static final String SELECT_BY_ACCOUNT =
+            Calendars._SYNC_ACCOUNT + "=? AND " + Calendars._SYNC_ACCOUNT_TYPE + "=?";
     private static final String SELECT_BY_ACCOUNT_AND_FEED =
             SELECT_BY_ACCOUNT + " AND " + Calendars.URL + "=?";
 
     private static final String[] CALENDAR_KEY_COLUMNS =
-            new String[]{Calendars._SYNC_ACCOUNT, Calendars.URL};
+            new String[]{Calendars._SYNC_ACCOUNT, Calendars._SYNC_ACCOUNT_TYPE, Calendars.URL};
     private static final String CALENDAR_KEY_SORT_ORDER =
-            Calendars._SYNC_ACCOUNT + "," + Calendars.URL;
+            Calendars._SYNC_ACCOUNT + "," + Calendars._SYNC_ACCOUNT_TYPE + "," + Calendars.URL;
     private static final String[] FEEDS_KEY_COLUMNS =
-            new String[]{SubscribedFeeds.Feeds._SYNC_ACCOUNT, SubscribedFeeds.Feeds.FEED};
+            new String[]{SubscribedFeeds.Feeds._SYNC_ACCOUNT,
+                    SubscribedFeeds.Feeds._SYNC_ACCOUNT_TYPE, SubscribedFeeds.Feeds.FEED};
     private static final String FEEDS_KEY_SORT_ORDER =
-            SubscribedFeeds.Feeds._SYNC_ACCOUNT + ", " + SubscribedFeeds.Feeds.FEED;
+            SubscribedFeeds.Feeds._SYNC_ACCOUNT + ", " + SubscribedFeeds.Feeds._SYNC_ACCOUNT_TYPE
+                    + ", " + SubscribedFeeds.Feeds.FEED;
+
+    private static final String PRIVATE_FULL = "/private/full";
+    private static final String FEEDS_SUBSTRING = "/feeds/";
+    private static final String PRIVATE_FULL_SELFATTENDANCE = "/private/full-selfattendance";
+
+    /** System property to enable sliding window sync **/
+    private static final String USE_SLIDING_WINDOW = "sync.slidingwindows";
+
+    private static final String HIDDEN_ATTENDEES_PROP =
+        "com.android.providers.calendar.CalendarSyncAdapter#guests";
 
     public static class SyncInfo {
         // public String feedUrl;
@@ -109,12 +138,18 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             Calendars.URL,            // 3
             Calendars.DISPLAY_NAME,   // 4
             Calendars.TIMEZONE,       // 5
-            Calendars.SYNC_EVENTS     // 6
+            Calendars.SYNC_EVENTS,    // 6
+            Calendars.OWNER_ACCOUNT   // 7
     };
 
     // Counters for sync event logging
     private static int mServerDiffs;
     private static int mRefresh;
+
+    /** These are temporary until a real policy is implemented. **/
+    private static final long DAY_IN_MS = 86400000;
+    private static final long MONTH_IN_MS = 2592000000L; // 30 days
+    private static final long YEAR_IN_MS = 31600000000L; // approximately
 
     protected CalendarSyncAdapter(Context context, SyncableContentProvider provider) {
         super(context, provider);
@@ -170,9 +205,22 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                     c.getString(c.getColumnIndex(Events.TIMEZONE));
         }
 
-        // id
-        event.setId(c.getString(c.getColumnIndex(Events._SYNC_ID)));
-        event.setEditUri(c.getString(c.getColumnIndex(Events._SYNC_VERSION)));
+        // has attendees data.  this is set to false if the proxy hid all of
+        // the guests (see #entryToContentValues).  in that case, we switch
+        // to the self attendance feed for updates.
+        boolean hasAttendees = c.getInt(c.getColumnIndex(Events.HAS_ATTENDEE_DATA)) != 0;
+
+        // id, edit uri.
+        // these may need to get rewritten to a self attendance projection,
+        // if our proxy server has removed guests (if there were to many)
+        String id = c.getString(c.getColumnIndex(Events._SYNC_ID));
+        String editUri = c.getString(c.getColumnIndex(Events._SYNC_VERSION));
+        if (!hasAttendees) {
+            if (id != null) id = convertProjectionToSelfAttendance(id);
+            if (editUri != null) editUri = convertProjectionToSelfAttendance(editUri);
+        }
+        event.setId(id);
+        event.setEditUri(editUri);
 
         // status
         byte status;
@@ -322,13 +370,30 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             addRecurrenceToEntry(component, event);
         }
 
+        // For now, always want to send event notifications
+        event.setSendEventNotifications(true);
+
+        event.setGuestsCanInviteOthers(
+                c.getInt(c.getColumnIndex(Events.GUESTS_CAN_INVITE_OTHERS)) != 0);
+        event.setGuestsCanModify(
+                c.getInt(c.getColumnIndex(Events.GUESTS_CAN_MODIFY)) != 0);
+        event.setGuestsCanSeeGuests(
+                c.getInt(c.getColumnIndex(Events.GUESTS_CAN_SEE_GUESTS)) != 0);
+        event.setOrganizer(c.getString(c.getColumnIndex(Events.ORGANIZER)));
+
         // if this is a new entry, return the feed url.  otherwise, return null; the edit url is
         // already in the entry.
         if (event.getEditUri() == null) {
+            // we won't ever rewrite this to self attendance because this is a new event
+            // (so if there are attendees, we need to use the full projection).
             return feedUrl;
         } else {
             return null;
         }
+    }
+
+    private String convertProjectionToSelfAttendance(String uri) {
+        return uri.replace(PRIVATE_FULL, PRIVATE_FULL_SELFATTENDANCE);
     }
 
     private void addAttendeesToEntry(long eventId, EventEntry event)
@@ -519,19 +584,29 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
 
     protected boolean handleAllDeletedUnavailable(GDataSyncData syncData, String feed) {
         syncData.feedData.remove(feed);
+        final Account account = getAccount();
         getContext().getContentResolver().delete(Calendar.Calendars.CONTENT_URI,
-                Calendar.Calendars._SYNC_ACCOUNT + "=? AND " + Calendar.Calendars.URL + "=?",
-                new String[]{getAccount(), feed});
+                Calendar.Calendars._SYNC_ACCOUNT + "=? AND "
+                        + Calendar.Calendars._SYNC_ACCOUNT_TYPE + "=? AND "
+                        + Calendar.Calendars.URL + "=?",
+                new String[]{account.name, account.type, feed});
         return true;
     }
 
     @Override
-    public void onSyncStarting(SyncContext context, String account, boolean forced,
+    public void onSyncStarting(SyncContext context, Account account, boolean manualSync,
             SyncResult result) {
         mContentResolver = getContext().getContentResolver();
         mServerDiffs = 0;
         mRefresh = 0;
-        super.onSyncStarting(context, account, forced, result);
+        super.onSyncStarting(context, account, manualSync, result);
+    }
+
+    public boolean getIsSyncable(Account account)
+            throws IOException, AuthenticatorException, OperationCanceledException {
+        Account[] accounts = AccountManager.get(getContext()).getAccountsByTypeAndFeatures(
+                "com.google", new String[]{"legacy_hosted_or_google"}, null, null).getResult();
+        return accounts.length > 0 && accounts[0].equals(account) && super.getIsSyncable(account);
     }
 
     private void deletedEntryToContentValues(Long syncLocalId, EventEntry event,
@@ -598,10 +673,11 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         // Base sync info
         map.put(Events._SYNC_ID, event.getId());
         String version = event.getEditUri();
+        final Account account = getAccount();
         if (!StringUtils.isEmpty(version)) {
             // Always rewrite the edit URL to https for dasher account to avoid
             // redirection.
-            map.put(Events._SYNC_VERSION, rewriteUrlforAccount(getAccount(), version));
+            map.put(Events._SYNC_VERSION, rewriteUrlforAccount(account, version));
         }
 
         // see if this is an exception to an existing event/recurrence.
@@ -721,12 +797,22 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             map.put(Events.HAS_ALARM, 1);
         }
 
+        boolean hasAttendeeData = true;
         // see if there are any extended properties for this event
         if (event.getExtendedProperties() != null) {
+            // first, intercept the proxy's hint that it has stripped attendees
+            Hashtable props = event.getExtendedProperties();
+            if (props.containsKey(HIDDEN_ATTENDEES_PROP) &&
+                "hidden".equals(props.get(HIDDEN_ATTENDEES_PROP))) {
+                props.remove(HIDDEN_ATTENDEES_PROP);
+                hasAttendeeData = false;
+            }
             // just store that we have extended properties.  the caller will have
             // to update the extendedproperties table separately.
-            map.put(Events.HAS_EXTENDED_PROPERTIES, 1);
+            map.put(Events.HAS_EXTENDED_PROPERTIES, ((props.size() > 0) ? 1 : 0));
         }
+
+        map.put(Events.HAS_ATTENDEE_DATA, hasAttendeeData ? 1 : 0);
 
         // dtstart & dtend
         When when = event.getFirstWhen();
@@ -804,13 +890,35 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             return ENTRY_INVALID;
         }
 
-        map.put(SyncConstValue._SYNC_ACCOUNT, getAccount());
+        map.put(SyncConstValue._SYNC_ACCOUNT, account.name);
+        map.put(SyncConstValue._SYNC_ACCOUNT_TYPE, account.type);
+
+        map.put(Events.GUESTS_CAN_INVITE_OTHERS, event.getGuestsCanInviteOthers() ? 1 : 0);
+        map.put(Events.GUESTS_CAN_MODIFY, event.getGuestsCanModify() ? 1 : 0);
+        map.put(Events.GUESTS_CAN_SEE_GUESTS, event.getGuestsCanSeeGuests() ? 1 : 0);
+
+        // Find the organizer for this event
+        String organizer = null;
+        Vector attendees = event.getAttendees();
+        Enumeration attendeesEnum = attendees.elements();
+        while (attendeesEnum.hasMoreElements()) {
+            Who who = (Who) attendeesEnum.nextElement();
+            if (who.getRelationship() == Who.RELATIONSHIP_ORGANIZER) {
+                organizer = who.getEmail();
+                break;
+            }
+        }
+        if (organizer != null) {
+            map.put(Events.ORGANIZER, organizer);
+        }
+
         return ENTRY_OK;
     }
 
     public void updateProvider(Feed feed,
             Long syncLocalId, Entry entry,
-            ContentProvider provider, Object info) throws ParseException {
+            ContentProvider provider, Object info,
+            GDataSyncData.FeedData feedSyncData) throws ParseException {
         SyncInfo syncInfo = (SyncInfo) info;
         EventEntry event = (EventEntry) entry;
 
@@ -833,6 +941,27 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         }
 
         int entryState = entryToContentValues(event, syncLocalId, map, syncInfo);
+
+        // See if event is inside the window
+        // feedSyncData will be null if the phone is creating the event
+        if (entryState == ENTRY_OK && (feedSyncData == null || feedSyncData.newWindowEnd == 0)) {
+            // A regular sync.  Accept the event if it is inside the sync window or
+            // it is a recurrence exception for something inside the sync window.
+
+            Long dtstart = map.getAsLong(Events.DTSTART);
+            if (dtstart != null && (feedSyncData == null || dtstart < feedSyncData.windowEnd)) {
+                //  dstart inside window, keeping event
+            } else {
+                Long originalInstanceTime = map.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
+                if (originalInstanceTime != null &&
+                        (feedSyncData == null || originalInstanceTime <= feedSyncData.windowEnd)) {
+                    // originalInstanceTime inside the window, keeping event
+                } else {
+                    // Rejecting event as outside window
+                    return;
+                }
+            }
+        }
 
         if (entryState == ENTRY_DELETED) {
             if (Config.LOGV) {
@@ -1023,6 +1152,15 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         }
     }
 
+    /**
+     * Converts an old non-sliding-windows database to sliding windows
+     * @param feedSyncData State of the sync.
+     */
+    private void upgradeToSlidingWindows(GDataSyncData.FeedData feedSyncData) {
+        feedSyncData.windowEnd = getSyncWindowEnd();
+        // TODO: Should prune old events
+    }
+
     @Override
     public void getServerDiffs(SyncContext context,
             SyncData baseSyncData, SyncableContentProvider tempProvider,
@@ -1030,21 +1168,71 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         final ContentResolver cr = getContext().getContentResolver();
         mServerDiffs++;
         final boolean syncingSingleFeed = (extras != null) && extras.containsKey("feed");
+        final boolean syncingMetafeedOnly = (extras != null) && extras.containsKey("metafeedonly");
+
         if (syncingSingleFeed) {
+            if (syncingMetafeedOnly) {
+                Log.d(TAG, "metafeedonly and feed both set.");
+                return;
+            }
+            StringBuilder sb = new StringBuilder();
+            extrasToStringBuilder(extras, sb);
             String feedUrl = extras.getString("feed");
+
+            GDataSyncData.FeedData feedSyncData = getFeedData(feedUrl, baseSyncData);
+            if (feedSyncData != null && feedSyncData.windowEnd == 0) {
+                upgradeToSlidingWindows(feedSyncData);
+            } else if (feedSyncData == null) {
+                feedSyncData = new GDataSyncData.FeedData(0, 0, false, "", 0);
+                feedSyncData.windowEnd = getSyncWindowEnd();
+                ((GDataSyncData) baseSyncData).feedData.put(feedUrl, feedSyncData);
+            }
+
+            if (extras.getBoolean("moveWindow", false)) {
+                // This is a move window sync.  Set the new end.
+                // Setting newWindowEnd makes this a sliding window expansion sync.
+                if (feedSyncData.newWindowEnd == 0) {
+                    feedSyncData.newWindowEnd = getSyncWindowEnd();
+                }
+            } else {
+                if (getSyncWindowEnd() > feedSyncData.windowEnd) {
+                    // Schedule a move-the-window sync
+
+                    Bundle syncExtras = new Bundle();
+                    syncExtras.clear();
+                    syncExtras.putBoolean("moveWindow", true);
+                    syncExtras.putString("feed", feedUrl);
+                    ContentResolver.requestSync(null /* account */, Calendar.AUTHORITY, syncExtras);
+                }
+            }
             getServerDiffsForFeed(context, baseSyncData, tempProvider, feedUrl,
                     baseSyncInfo, syncResult);
             return;
         }
 
+        // At this point, either metafeed sync or poll.
+        // For the poll (or metafeed sync), refresh the list of calendars.
+        // we can move away from this when we move to the new allcalendars feed, which is
+        // syncable.  until then, we'll rely on the daily poll to keep the list of calendars
+        // up to date.
+
+        mRefresh++;
+        context.setStatusText("Fetching list of calendars");
+        fetchCalendarsFromServer();
+
+        if (syncingMetafeedOnly) {
+            // If not polling, nothing more to do.
+            return;
+        }
+
         // select the set of calendars for this account.
+        final Account account = getAccount();
+        final String[] accountSelectionArgs = new String[]{account.name, account.type};
         Cursor cursor = cr.query(Calendar.Calendars.CONTENT_URI,
                 CALENDARS_PROJECTION, SELECT_BY_ACCOUNT,
-                new String[] { getAccount() }, null /* sort order */);
+                accountSelectionArgs, null /* sort order */);
 
         Bundle syncExtras = new Bundle();
-
-        boolean refreshCalendars = true;
 
         try {
             while (cursor.moveToNext()) {
@@ -1055,35 +1243,45 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                     continue;
                 }
 
-                // since this is a poll (no specific feed selected), refresh the list of calendars.
-                // we can move away from this when we move to the new allcalendars feed, which is
-                // syncable.  until then, we'll rely on the daily poll to keep the list of calendars
-                // up to date.
-                if (refreshCalendars) {
-                    mRefresh++;
-                    context.setStatusText("Fetching list of calendars");
-                    // get rid of the current cursor and fetch from the server.
-                    cursor.close();
-                    final String[] accountSelectionArgs = new String[]{getAccount()};
-                    cursor = cr.query(
-                        Calendar.Calendars.LIVE_CONTENT_URI, CALENDARS_PROJECTION,
-                        SELECT_BY_ACCOUNT, accountSelectionArgs, null /* sort order */);
-                    // start over with the loop
-                    refreshCalendars = false;
-                    continue;
-                }
-
                 // schedule syncs for each of these feeds.
                 syncExtras.clear();
                 syncExtras.putAll(extras);
                 syncExtras.putString("feed", feedUrl);
-                cr.startSync(Calendar.CONTENT_URI, syncExtras);
+                ContentResolver.requestSync(account,
+                        Calendar.Calendars.CONTENT_URI.getAuthority(), syncExtras);
             }
         } finally {
             cursor.close();
         }
     }
 
+    /**
+     * Gets end of the sliding sync window.
+     *
+     * @return end of window in ms
+     */
+    private long getSyncWindowEnd() {
+        // How many days in the future the window extends (e.g. 1 year).  0 for no sliding window.
+        long window = Settings.Gservices.getLong(getContext().getContentResolver(),
+                Settings.Gservices.GOOGLE_CALENDAR_SYNC_WINDOW_DAYS, 0);
+        if (window > 0) {
+            // How often to advance the window (e.g. 30 days)
+            long advanceInterval = Settings.Gservices.getLong(getContext().getContentResolver(),
+                    Settings.Gservices.GOOGLE_CALENDAR_SYNC_WINDOW_UPDATE_DAYS, 30) * DAY_IN_MS;
+            if (advanceInterval > 0) {
+                // endOfWindow is the proposed end of the sliding window (e.g. 1 year out)
+                long endOfWindow = System.currentTimeMillis() + window * DAY_IN_MS;
+                // We don't want the end of the window to advance smoothly or else we would
+                // be constantly doing syncs to update the window.  We "snap" the window to
+                // a multiple of advanceInterval so the end of the window will only advance
+                // every e.g. 30 days.  By dividing and multiplying by advanceInterval, the
+                // window is truncated down to a multiple of advanceInterval.  This provides
+                // the "snap" action.
+                return (endOfWindow / advanceInterval) * advanceInterval;
+            }
+        }
+        return Long.MAX_VALUE;
+    }
 
     private void getServerDiffsForFeed(SyncContext context, SyncData baseSyncData,
             SyncableContentProvider tempProvider,
@@ -1091,9 +1289,10 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         final SyncInfo syncInfo = (SyncInfo) baseSyncInfo;
         final GDataSyncData syncData = (GDataSyncData) baseSyncData;
 
+        final Account account = getAccount();
         Cursor cursor = getContext().getContentResolver().query(Calendar.Calendars.CONTENT_URI,
                 CALENDARS_PROJECTION, SELECT_BY_ACCOUNT_AND_FEED,
-                new String[] { getAccount(), feed }, null /* sort order */);
+                new String[] { account.name, account.type, feed }, null /* sort order */);
 
         ContentValues map = new ContentValues();
         int maxResults = getMaxEntriesPerSync();
@@ -1151,32 +1350,36 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
     protected void initTempProvider(SyncableContentProvider cp) {
         // TODO: don't use the real db's calendar id's.  create new ones locally and translate
         // during CalendarProvider's merge.
-        
+
         // populate temp provider with calendar ids, so joins work.
         ContentValues map = new ContentValues();
+        final Account account = getAccount();
         Cursor c = getContext().getContentResolver().query(
                 Calendar.Calendars.CONTENT_URI,
                 CALENDARS_PROJECTION,
-                SELECT_BY_ACCOUNT, new String[]{getAccount()}, null /* sort order */);
+                SELECT_BY_ACCOUNT, new String[]{account.name, account.type},
+                null /* sort order */);
         final int idIndex = c.getColumnIndexOrThrow(Calendars._ID);
         final int urlIndex = c.getColumnIndexOrThrow(Calendars.URL);
         final int timezoneIndex = c.getColumnIndexOrThrow(Calendars.TIMEZONE);
+        final int ownerAccountIndex = c.getColumnIndexOrThrow(Calendars.OWNER_ACCOUNT);
         while (c.moveToNext()) {
             map.clear();
             map.put(Calendars._ID, c.getLong(idIndex));
             map.put(Calendars.URL, c.getString(urlIndex));
             map.put(Calendars.TIMEZONE, c.getString(timezoneIndex));
+            map.put(Calendars.OWNER_ACCOUNT, c.getString(ownerAccountIndex));
             cp.insert(Calendar.Calendars.CONTENT_URI, map);
         }
         c.close();
     }
 
-    public void onAccountsChanged(String[] accountsArray) {
+    public void onAccountsChanged(Account[] accountsArray) {
         if (!"yes".equals(SystemProperties.get("ro.config.sync"))) {
             return;
         }
 
-        // - Get a cursor (A) over all selected calendars over all accounts
+        // - Get a cursor (A) over all sync'd calendars over all accounts
         // - Get a cursor (B) over all subscribed feeds for calendar
         // - If an item is in A but not B then add a subscription
         // - If an item is in B but not A then remove the subscription
@@ -1186,14 +1389,19 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         Cursor cursorB = null;
         try {
             cursorA = Calendar.Calendars.query(cr, null /* projection */,
-                    Calendar.Calendars.SELECTED + "=1", CALENDAR_KEY_SORT_ORDER);
+                    Calendar.Calendars.SYNC_EVENTS + "=1", CALENDAR_KEY_SORT_ORDER);
             int urlIndexA = cursorA.getColumnIndexOrThrow(Calendar.Calendars.URL);
-            int accountIndexA = cursorA.getColumnIndexOrThrow(Calendar.Calendars._SYNC_ACCOUNT);
+            int accountNameIndexA = cursorA.getColumnIndexOrThrow(Calendar.Calendars._SYNC_ACCOUNT);
+            int accountTypeIndexA =
+                    cursorA.getColumnIndexOrThrow(Calendar.Calendars._SYNC_ACCOUNT_TYPE);
             cursorB = SubscribedFeeds.Feeds.query(cr, FEEDS_KEY_COLUMNS,
                     SubscribedFeeds.Feeds.AUTHORITY + "=?", new String[]{Calendar.AUTHORITY},
                     FEEDS_KEY_SORT_ORDER);
             int urlIndexB = cursorB.getColumnIndexOrThrow(SubscribedFeeds.Feeds.FEED);
-            int accountIndexB = cursorB.getColumnIndexOrThrow(SubscribedFeeds.Feeds._SYNC_ACCOUNT);
+            int accountNameIndexB =
+                    cursorB.getColumnIndexOrThrow(SubscribedFeeds.Feeds._SYNC_ACCOUNT);
+            int accountTypeIndexB =
+                    cursorB.getColumnIndexOrThrow(SubscribedFeeds.Feeds._SYNC_ACCOUNT_TYPE);
             for (CursorJoiner.Result joinerResult :
                     new CursorJoiner(cursorA, CALENDAR_KEY_COLUMNS, cursorB, FEEDS_KEY_COLUMNS)) {
                 switch (joinerResult) {
@@ -1201,7 +1409,8 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                         SubscribedFeeds.addFeed(
                                 cr,
                                 cursorA.getString(urlIndexA),
-                                cursorA.getString(accountIndexA),
+                                new Account(cursorA.getString(accountNameIndexA),
+                                        cursorA.getString(accountTypeIndexA)),
                                 Calendar.AUTHORITY,
                                 CalendarClient.SERVICE);
                         break;
@@ -1209,7 +1418,8 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                         SubscribedFeeds.deleteFeed(
                                 cr,
                                 cursorB.getString(urlIndexB),
-                                cursorB.getString(accountIndexB),
+                                new Account(cursorB.getString(accountNameIndexB),
+                                        cursorB.getString(accountTypeIndexB)),
                                 Calendar.AUTHORITY);
                         break;
                     case BOTH:
@@ -1229,7 +1439,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
      * to/from the device, and thus is determined and passed around as a local variable, where
      * appropriate.
      */
-    protected String getFeedUrl(String account) {
+    protected String getFeedUrl(Account account) {
         throw new UnsupportedOperationException("getFeedUrl() should not get called.");
     }
 
@@ -1237,9 +1447,31 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         return EventEntry.class;
     }
 
+    // XXX temporary debugging
+    private static void extrasToStringBuilder(Bundle bundle, StringBuilder sb) {
+        sb.append("[");
+        for (String key : bundle.keySet()) {
+            sb.append(key).append("=").append(bundle.get(key)).append(" ");
+        }
+        sb.append("]");
+    }
+
+
     @Override
-    protected void updateQueryParameters(QueryParams params) {
-        if (params.getUpdatedMin() == null) {
+    protected void updateQueryParameters(QueryParams params, GDataSyncData.FeedData feedSyncData) {
+        if (feedSyncData != null && feedSyncData.newWindowEnd > 0) {
+            // Advancing the sliding window: set the parameters to the new part of the window
+            params.setUpdatedMin(null);
+            params.setParamValue("requirealldeleted", "false");
+            Time startMinTime = new Time(Time.TIMEZONE_UTC);
+            Time startMaxTime = new Time(Time.TIMEZONE_UTC);
+            startMinTime.set(feedSyncData.windowEnd);
+            startMaxTime.set(feedSyncData.newWindowEnd);
+            String startMin = startMinTime.format("%Y-%m-%dT%H:%M:%S.000Z");
+            String startMax = startMaxTime.format("%Y-%m-%dT%H:%M:%S.000Z");
+            params.setParamValue("start-min", startMin);
+            params.setParamValue("start-max", startMax);
+        } else if (params.getUpdatedMin() == null) {
             // if this is the first sync, only bother syncing starting from
             // one month ago.
             // TODO: remove this restriction -- we may want all of
@@ -1248,17 +1480,21 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
             lastMonth.setToNow();
             --lastMonth.month;
             lastMonth.normalize(true /* ignore isDst */);
-            String startMin = lastMonth.format("%Y-%m-%dT%H:%M:%S.000Z");
             // TODO: move start-min to CalendarClient?
             // or create CalendarQueryParams subclass (extra class)?
+            String startMin = lastMonth.format("%Y-%m-%dT%H:%M:%S.000Z");
             params.setParamValue("start-min", startMin);
-            // HACK: specify that we want to expand recurrences ijn the past,
-            // so the server does not expand any recurrences.  we do this to
-            // avoid a large number of gd:when elements that we do not need,
-            // since we process gd:recurrence elements instead.
-            params.setParamValue("recurrence-expansion-start", "1970-01-01");
-            params.setParamValue("recurrence-expansion-end", "1970-01-01");
+            // Note: start-max is not set for regular syncs.  The sync needs to pick up events
+            // outside the window in case an event inside the window got moved outside.
+            // The event will be discarded later.
         }
+
+        // HACK: specify that we want to expand recurrences in the past,
+        // so the server does not expand any recurrences.  we do this to
+        // avoid a large number of gd:when elements that we do not need,
+        // since we process gd:recurrence elements instead.
+        params.setParamValue("recurrence-expansion-start", "1970-01-01");
+        params.setParamValue("recurrence-expansion-end", "1970-01-01");
         // we want to get the events ordered by last modified, so we can
         // recover in case we cannot process the entire feed.
         params.setParamValue("orderby", "lastmodified");
@@ -1278,5 +1514,309 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         if (mServerDiffs > 0) {
             sb.append("s").append(mServerDiffs);
         }
+    }
+
+    private void fetchCalendarsFromServer() {
+        if (mCalendarClient == null) {
+            Log.w(TAG, "Cannot fetch calendars -- calendar url defined.");
+            return;
+        }
+
+        Account account = null;
+        String authToken = null;
+
+
+        try {
+            // TODO: allow caller to specify which account's feeds should be updated
+            String[] features = new String[]{
+                    GoogleLoginServiceConstants.FEATURE_LEGACY_HOSTED_OR_GOOGLE};
+            Account[] accounts = AccountManager.get(getContext()).getAccountsByTypeAndFeatures(
+                    GoogleLoginServiceConstants.ACCOUNT_TYPE, features, null, null).getResult();
+            if (accounts.length == 0) {
+                Log.w(TAG, "Unable to update calendars from server -- no users configured.");
+                return;
+            }
+
+            account = accounts[0];
+
+            Bundle bundle = AccountManager.get(getContext()).getAuthToken(
+                    account, mCalendarClient.getServiceName(),
+                    true /* notifyAuthFailure */, null /* callback */, null /* handler */)
+                    .getResult();
+            authToken = bundle.getString(AccountManager.KEY_AUTHTOKEN);
+            if (authToken == null) {
+                Log.w(TAG, "Unable to update calendars from server -- could not "
+                        + "authenticate user " + account);
+                return;
+            }
+        } catch (IOException e) {
+            Log.w(TAG, "Unable to update calendars from server -- could not "
+                    + "authenticate user " + account, e);
+            return;
+        } catch (AuthenticatorException e) {
+            Log.w(TAG, "Unable to update calendars from server -- could not "
+                    + "authenticate user " + account, e);
+            return;
+        } catch (OperationCanceledException e) {
+            Log.w(TAG, "Unable to update calendars from server -- could not "
+                    + "authenticate user " + account, e);
+            return;
+        }
+
+        // get the current set of calendars.  we'll need to pay attention to
+        // which calendars we get back from the server, so we can delete
+        // calendars that have been deleted from the server.
+        Set<Long> existingCalendarIds = new HashSet<Long>();
+
+        getCurrentCalendars(existingCalendarIds);
+
+        // get and process the calendars meta feed
+        GDataParser parser = null;
+        try {
+            String feedUrl = mCalendarClient.getUserCalendarsUrl(account.name);
+            feedUrl = CalendarSyncAdapter.rewriteUrlforAccount(account, feedUrl);
+            parser = mCalendarClient.getParserForUserCalendars(feedUrl, authToken);
+            // process the calendars
+            processCalendars(account, parser, existingCalendarIds);
+        } catch (ParseException pe) {
+            Log.w(TAG, "Unable to process calendars from server -- could not "
+                    + "parse calendar feed.", pe);
+            return;
+        } catch (IOException ioe) {
+            Log.w(TAG, "Unable to process calendars from server -- encountered "
+                    + "i/o error", ioe);
+            return;
+        } catch (HttpException e) {
+            switch (e.getStatusCode()) {
+                case HttpException.SC_UNAUTHORIZED:
+                    Log.w(TAG, "Unable to process calendars from server -- could not "
+                            + "authenticate user.", e);
+                    return;
+                case HttpException.SC_GONE:
+                    Log.w(TAG, "Unable to process calendars from server -- encountered "
+                            + "an AllDeletedUnavailableException, this should never happen", e);
+                    return;
+                default:
+                    Log.w(TAG, "Unable to process calendars from server -- error", e);
+                    return;
+            }
+        } finally {
+            if (parser != null) {
+                parser.close();
+            }
+        }
+
+        // delete calendars that are no longer sent from the server.
+        final Uri calendarContentUri = Calendars.CONTENT_URI;
+        final ContentResolver cr = getContext().getContentResolver();
+        for (long calId : existingCalendarIds) {
+            // NOTE: triggers delete all events, instances for this calendar.
+            cr.delete(ContentUris.withAppendedId(calendarContentUri, calId),
+                    null /* where */, null /* selectionArgs */);
+        }
+    }
+
+    private void getCurrentCalendars(Set<Long> calendarIds) {
+        final ContentResolver cr = getContext().getContentResolver();
+        Cursor cursor = cr.query(Calendars.CONTENT_URI,
+                new String[] { Calendars._ID },
+                null /* selection */,
+                null /* selectionArgs */,
+                null /* sort */);
+        if (cursor != null) {
+            try {
+                while (cursor.moveToNext()) {
+                    calendarIds.add(cursor.getLong(0));
+                }
+            } finally {
+                cursor.close();
+            }
+        }
+    }
+
+    private void processCalendars(Account account,
+            GDataParser parser,
+            Set<Long> existingCalendarIds)
+            throws ParseException, IOException {
+        final ContentResolver cr = getContext().getContentResolver();
+        CalendarsFeed feed = (CalendarsFeed) parser.init();
+        Entry entry = null;
+        final Uri calendarContentUri = Calendars.CONTENT_URI;
+        ArrayList<ContentValues> inserts = new ArrayList<ContentValues>();
+        while (parser.hasMoreData()) {
+            entry = parser.readNextEntry(entry);
+            if (Config.LOGV) Log.v(TAG, "Read entry: " + entry.toString());
+            CalendarEntry calendarEntry = (CalendarEntry) entry;
+            ContentValues map = new ContentValues();
+            String feedUrl = calendarEntryToContentValues(account, feed, calendarEntry, map);
+            if (TextUtils.isEmpty(feedUrl)) {
+                continue;
+            }
+            long calId = -1;
+
+            Cursor c = cr.query(calendarContentUri,
+                    new String[] { Calendars._ID },
+                    Calendars.URL + "='"
+                            + feedUrl + '\'' /* selection */,
+                    null /* selectionArgs */,
+                    null /* sort */);
+            if (c != null) {
+                try {
+                    if (c.moveToFirst()) {
+                        calId = c.getLong(0);
+                        existingCalendarIds.remove(calId);
+                    }
+                } finally {
+                    c.close();
+                }
+            }
+
+            if (calId != -1) {
+                if (Config.LOGV) Log.v(TAG, "Updating calendar " + map);
+                // don't override the existing "selected" or "hidden" settings.
+                map.remove(Calendars.SELECTED);
+                map.remove(Calendars.HIDDEN);
+                cr.update(ContentUris.withAppendedId(calendarContentUri, calId), map,
+                        null /* where */, null /* selectionArgs */);
+            } else {
+                // Select this calendar for syncing and display if it is
+                // selected and not hidden.
+                int syncAndDisplay = 0;
+                if (calendarEntry.isSelected() && !calendarEntry.isHidden()) {
+                    syncAndDisplay = 1;
+                }
+                map.put(Calendars.SYNC_EVENTS, syncAndDisplay);
+                map.put(Calendars.SELECTED, syncAndDisplay);
+                map.put(Calendars.HIDDEN, 0);
+                map.put(Calendars._SYNC_ACCOUNT, account.name);
+                map.put(Calendars._SYNC_ACCOUNT_TYPE, account.type);
+                if (Config.LOGV) Log.v(TAG, "Adding calendar " + map);
+                inserts.add(map);
+            }
+        }
+        if (!inserts.isEmpty()) {
+            if (Config.LOGV) Log.v(TAG, "Bulk updating calendar list.");
+            cr.bulkInsert(calendarContentUri, inserts.toArray(new ContentValues[inserts.size()]));
+        }
+    }
+
+    /**
+     * Convert the CalenderEntry to a Bundle that can be inserted/updated into the
+     * Calendars table.
+     */
+    private String calendarEntryToContentValues(Account account, CalendarsFeed feed,
+            CalendarEntry entry,
+            ContentValues map) {
+        map.clear();
+
+        String url = entry.getAlternateLink();
+
+        if (TextUtils.isEmpty(url)) {
+            // yuck.  the alternate link was not available.  we should
+            // reconstruct from the id.
+            url = entry.getId();
+            if (!TextUtils.isEmpty(url)) {
+                url = convertCalendarIdToFeedUrl(url);
+            } else {
+                if (Config.LOGV) {
+                    Log.v(TAG, "Cannot generate url for calendar feed.");
+                }
+                return null;
+            }
+        }
+
+        url = rewriteUrlforAccount(account, url);
+
+        map.put(Calendars.URL, url);
+        map.put(Calendars.OWNER_ACCOUNT, calendarEmailAddressFromFeedUrl(url));
+        map.put(Calendars.NAME, entry.getTitle());
+
+        // TODO:
+        map.put(Calendars.DISPLAY_NAME, entry.getTitle());
+
+        map.put(Calendars.TIMEZONE, entry.getTimezone());
+
+        String colorStr = entry.getColor();
+        if (!TextUtils.isEmpty(colorStr)) {
+            int color = Color.parseColor(colorStr);
+            // Ensure the alpha is set to max
+            color |= 0xff000000;
+            map.put(Calendars.COLOR, color);
+        }
+
+        map.put(Calendars.SELECTED, entry.isSelected() ? 1 : 0);
+
+        map.put(Calendars.HIDDEN, entry.isHidden() ? 1 : 0);
+
+        int accesslevel;
+        switch (entry.getAccessLevel()) {
+            case CalendarEntry.ACCESS_NONE:
+                accesslevel = Calendars.NO_ACCESS;
+                break;
+            case CalendarEntry.ACCESS_READ:
+                accesslevel = Calendars.READ_ACCESS;
+                break;
+            case CalendarEntry.ACCESS_FREEBUSY:
+                accesslevel = Calendars.FREEBUSY_ACCESS;
+                break;
+            case CalendarEntry.ACCESS_EDITOR:
+                accesslevel = Calendars.EDITOR_ACCESS;
+                break;
+            case CalendarEntry.ACCESS_OWNER:
+                accesslevel = Calendars.OWNER_ACCESS;
+                break;
+            case CalendarEntry.ACCESS_ROOT:
+                accesslevel = Calendars.ROOT_ACCESS;
+                break;
+            default:
+                accesslevel = Calendars.NO_ACCESS;
+        }
+        map.put(Calendars.ACCESS_LEVEL, accesslevel);
+        // TODO: use the update time, when calendar actually supports this.
+        // right now, calendar modifies the update time frequently.
+        map.put(Calendars._SYNC_TIME, System.currentTimeMillis());
+
+        return url;
+    }
+
+    // TODO: unit test.
+    protected static final String convertCalendarIdToFeedUrl(String url) {
+        // id: http://www.google.com/calendar/feeds/<username>/<cal id>
+        // desired feed:
+        //   http://www.google.com/calendar/feeds/<cal id>/<projection>
+        int start = url.indexOf(FEEDS_SUBSTRING);
+        if (start != -1) {
+            // strip out the */ in /feeds/*/
+            start += FEEDS_SUBSTRING.length();
+            int end = url.indexOf('/', start);
+            if (end != -1) {
+                url = url.replace(url.substring(start, end + 1), "");
+            }
+            url = url + PRIVATE_FULL;
+        }
+        return url;
+    }
+
+    /**
+     * Extracts the calendar email from a calendar feed url.
+     * @param feed the calendar feed url
+     * @return the calendar email that is in the feed url or null if it can't
+     * find the email address.
+     */
+    public static String calendarEmailAddressFromFeedUrl(String feed) {
+        // Example feed url:
+        // https://www.google.com/calendar/feeds/foo%40gmail.com/private/full-noattendees
+        String[] pathComponents = feed.split("/");
+        if (pathComponents.length > 5 && "feeds".equals(pathComponents[4])) {
+            try {
+                return URLDecoder.decode(pathComponents[5], "UTF-8");
+            } catch (UnsupportedEncodingException e) {
+                Log.e(TAG, "unable to url decode the email address in calendar " + feed);
+                return null;
+            }
+        }
+
+        Log.e(TAG, "unable to find the email address in calendar " + feed);
+        return null;
     }
 }

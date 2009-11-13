@@ -17,47 +17,42 @@
 
 package com.android.providers.calendar;
 
-import com.google.android.collect.Sets;
-import com.google.android.gdata.client.AndroidGDataClient;
-import com.google.android.gdata.client.AndroidXmlParserFactory;
-import com.google.android.googlelogin.GoogleLoginServiceBlockingHelper;
-import com.google.android.googlelogin.GoogleLoginServiceNotFoundException;
-import com.google.android.providers.AbstractGDataSyncAdapter;
-import com.google.android.providers.AbstractGDataSyncAdapter.GDataSyncData;
-import com.google.wireless.gdata.calendar.client.CalendarClient;
-import com.google.wireless.gdata.calendar.data.CalendarEntry;
-import com.google.wireless.gdata.calendar.data.CalendarsFeed;
-import com.google.wireless.gdata.calendar.parser.xml.XmlCalendarGDataParserFactory;
-import com.google.wireless.gdata.client.HttpException;
-import com.google.wireless.gdata.data.Entry;
-import com.google.wireless.gdata.parser.GDataParser;
-import com.google.wireless.gdata.parser.ParseException;
-
+import android.accounts.Account;
+import android.accounts.AccountManager;
+import android.accounts.AccountManagerCallback;
+import android.accounts.AccountManagerFuture;
+import android.accounts.OperationCanceledException;
+import android.accounts.AuthenticatorException;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.AbstractSyncableContentProvider;
 import android.content.AbstractTableMerger;
 import android.content.BroadcastReceiver;
 import android.content.ContentProvider;
+import android.content.ContentProviderOperation;
+import android.content.ContentProviderResult;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.Entity;
+import android.content.EntityIterator;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SyncAdapter;
+import android.content.OperationApplicationException;
 import android.content.SyncContext;
 import android.content.UriMatcher;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.SQLException;
+import android.database.sqlite.SQLiteCursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteQueryBuilder;
-import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Debug;
 import android.os.Process;
+import android.os.RemoteException;
 import android.pim.DateException;
 import android.pim.RecurrenceSet;
 import android.provider.Calendar;
@@ -69,46 +64,53 @@ import android.provider.Calendar.Events;
 import android.provider.Calendar.ExtendedProperties;
 import android.provider.Calendar.Instances;
 import android.provider.Calendar.Reminders;
-import android.provider.SyncConstValue;
 import android.text.TextUtils;
 import android.text.format.Time;
 import android.util.Config;
 import android.util.Log;
 import android.util.TimeFormatException;
+import com.google.android.collect.Maps;
+import com.google.android.collect.Sets;
+import com.google.android.gdata.client.AndroidGDataClient;
+import com.google.android.gdata.client.AndroidXmlParserFactory;
+import com.google.android.providers.AbstractGDataSyncAdapter;
+import com.google.android.providers.AbstractGDataSyncAdapter.GDataSyncData;
+import com.google.android.googlelogin.GoogleLoginServiceConstants;
+import com.google.wireless.gdata.calendar.client.CalendarClient;
+import com.google.wireless.gdata.calendar.parser.xml.XmlCalendarGDataParserFactory;
 
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.io.IOException;
 
 public class CalendarProvider extends AbstractSyncableContentProvider {
-
     private static final boolean PROFILE = false;
-    private static final boolean MULTIPLE_ATTENDEES_PER_EVENT = false;
-    private static final String[] ACCOUNTS_PROJECTION = new String[] { Calendars._SYNC_ACCOUNT};
+    private static final boolean MULTIPLE_ATTENDEES_PER_EVENT = true;
+    private static final String[] ACCOUNTS_PROJECTION =
+            new String[] {Calendars._SYNC_ACCOUNT, Calendars._SYNC_ACCOUNT_TYPE};
 
     private static final String[] EVENTS_PROJECTION = new String[] {
-        Events._SYNC_ID,
-        Events._SYNC_VERSION,
-        Events._SYNC_ACCOUNT,
-        Events.CALENDAR_ID,
-        Events.RRULE,
-        Events.RDATE,
-        Events.ORIGINAL_EVENT,
-        };
+            Events._SYNC_ID,
+            Events._SYNC_VERSION,
+            Events._SYNC_ACCOUNT,
+            Events._SYNC_ACCOUNT_TYPE,
+            Events.CALENDAR_ID,
+            Events.RRULE,
+            Events.RDATE,
+            Events.ORIGINAL_EVENT,
+    };
     private static final int EVENTS_SYNC_ID_INDEX = 0;
     private static final int EVENTS_SYNC_VERSION_INDEX = 1;
-    private static final int EVENTS_SYNC_ACCOUNT_INDEX = 2;
-    private static final int EVENTS_CALENDAR_ID_INDEX = 3;
-    private static final int EVENTS_RRULE_INDEX = 4;
-    private static final int EVENTS_RDATE_INDEX = 5;
-    private static final int EVENTS_ORIGINAL_EVENT_INDEX = 6;
+    private static final int EVENTS_SYNC_ACCOUNT_NAME_INDEX = 2;
+    private static final int EVENTS_SYNC_ACCOUNT_TYPE_INDEX = 3;
+    private static final int EVENTS_CALENDAR_ID_INDEX = 4;
+    private static final int EVENTS_RRULE_INDEX = 5;
+    private static final int EVENTS_RDATE_INDEX = 6;
+    private static final int EVENTS_ORIGINAL_EVENT_INDEX = 7;
 
     private DatabaseUtils.InsertHelper mCalendarsInserter;
     private DatabaseUtils.InsertHelper mEventsInserter;
@@ -134,15 +136,15 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     // For example, BIT_MASKS[4] gives 0xf (which has 4 bits set to 1).
     // We use this for computing the busy bits for events.
     private static final int[] BIT_MASKS = {
-        0,
-        0x00000001, 0x00000003, 0x00000007, 0x0000000f,
-        0x0000001f, 0x0000003f, 0x0000007f, 0x000000ff,
-        0x000001ff, 0x000003ff, 0x000007ff, 0x00000fff,
-        0x00001fff, 0x00003fff, 0x00007fff, 0x0000ffff,
-        0x0001ffff, 0x0003ffff, 0x0007ffff, 0x000fffff,
-        0x001fffff, 0x003fffff, 0x007fffff, 0x00ffffff,
-        0x01ffffff, 0x03ffffff, 0x07ffffff, 0x0fffffff,
-        0x1fffffff, 0x3fffffff, 0x7fffffff, 0xffffffff,
+            0,
+            0x00000001, 0x00000003, 0x00000007, 0x0000000f,
+            0x0000001f, 0x0000003f, 0x0000007f, 0x000000ff,
+            0x000001ff, 0x000003ff, 0x000007ff, 0x00000fff,
+            0x00001fff, 0x00003fff, 0x00007fff, 0x0000ffff,
+            0x0001ffff, 0x0003ffff, 0x0007ffff, 0x000fffff,
+            0x001fffff, 0x003fffff, 0x007fffff, 0x00ffffff,
+            0x01ffffff, 0x03ffffff, 0x07ffffff, 0x0fffffff,
+            0x1fffffff, 0x3fffffff, 0x7fffffff, 0xffffffff,
     };
 
     // To determine if a recurrence exception originally overlapped the
@@ -186,7 +188,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     // calendar event alarm.
     private class AlarmScheduler extends Thread {
         boolean mRemoveAlarms;
-        
+
         public AlarmScheduler(boolean removeAlarms) {
             mRemoveAlarms = removeAlarms;
         }
@@ -224,7 +226,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
      * set this to something greater than a day.
      */
     private static final long CLEAR_OLD_ALARM_THRESHOLD =
-        7 * android.text.format.DateUtils.DAY_IN_MILLIS + SCHEDULE_ALARM_SLACK;
+            7 * android.text.format.DateUtils.DAY_IN_MILLIS + SCHEDULE_ALARM_SLACK;
 
     // A lock for synchronizing access to fields that are shared
     // with the AlarmScheduler thread.
@@ -235,13 +237,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 54;
-
-    private static final String EXPECTED_PROJECTION = "/full";
-
-    private static final String DESIRED_PROJECTION = "/full-selfattendance";
-
-    private static final String FEEDS_SUBSTRING = "/feeds/";
+    private static final int DATABASE_VERSION = 57;
 
     // Make sure we load at least two months worth of data.
     // Client apps can load more data in a background thread.
@@ -255,8 +251,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     private static final String CALENDAR_ID_SELECTION = "calendar_id=?";
 
     private static final String[] sInstancesProjection =
-        new String[] { Instances.START_DAY, Instances.END_DAY,
-        Instances.START_MINUTE, Instances.END_MINUTE, Instances.ALL_DAY };
+            new String[] { Instances.START_DAY, Instances.END_DAY,
+                    Instances.START_MINUTE, Instances.END_MINUTE, Instances.ALL_DAY };
 
     private static final int INSTANCES_INDEX_START_DAY = 0;
     private static final int INSTANCES_INDEX_END_DAY = 1;
@@ -265,7 +261,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     private static final int INSTANCES_INDEX_ALL_DAY = 4;
 
     private static final String[] sBusyBitProjection = new String[] {
-        BusyBits.DAY, BusyBits.BUSYBITS, BusyBits.ALL_DAY_COUNT };
+            BusyBits.DAY, BusyBits.BUSYBITS, BusyBits.ALL_DAY_COUNT };
 
     private static final int BUSYBIT_INDEX_DAY = 0;
     private static final int BUSYBIT_INDEX_BUSYBITS= 1;
@@ -275,7 +271,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     private AlarmManager mAlarmManager;
 
-    private CalendarSyncAdapter mSyncAdapter;
     private CalendarAppWidgetProvider mAppWidgetProvider = CalendarAppWidgetProvider.getInstance();
 
     /**
@@ -308,6 +303,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     @Override
     public boolean onCreate() {
         super.onCreate();
+
+        setTempProviderSyncAdapter(new CalendarSyncAdapter(getContext(), this));
 
         // Register for Intent broadcasts
         IntentFilter filter = new IntentFilter();
@@ -388,7 +385,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         long end = begin + MINIMUM_EXPANSION_SPAN;
         SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
         handleInstanceQuery(qb, begin, end, new String[] { Instances._ID },
-                null /* selection */, null /* sort */);
+                null /* selection */, null /* sort */, false /* searchByDayInsteadOfMillis */);
 
         // Also pre-compute the BusyBits table for this month.
         int startDay = Time.getJulianDay(begin, time.gmtoff);
@@ -414,9 +411,9 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
         if (!isTemporary()) {
             mCalendarClient = new CalendarClient(
-                new AndroidGDataClient(getContext(), CalendarSyncAdapter.USER_AGENT_APP_VERSION),
-                new XmlCalendarGDataParserFactory(
-                new AndroidXmlParserFactory()));
+                    new AndroidGDataClient(getContext(), CalendarSyncAdapter.USER_AGENT_APP_VERSION),
+                    new XmlCalendarGDataParserFactory(
+                            new AndroidXmlParserFactory()));
         }
 
         mCalendarsInserter = new DatabaseUtils.InsertHelper(db, "Calendars");
@@ -428,13 +425,13 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         mRemindersInserter = new DatabaseUtils.InsertHelper(db, "Reminders");
         mCalendarAlertsInserter = new DatabaseUtils.InsertHelper(db, "CalendarAlerts");
         mExtendedPropertiesInserter =
-            new DatabaseUtils.InsertHelper(db, "ExtendedProperties");
+                new DatabaseUtils.InsertHelper(db, "ExtendedProperties");
     }
 
     @Override
     protected boolean upgradeDatabase(SQLiteDatabase db, int oldVersion, int newVersion) {
         Log.i(TAG, "Upgrading DB from version " + oldVersion
-                    + " to " + newVersion);
+                + " to " + newVersion);
         if (oldVersion < 46) {
             dropTables(db);
             bootstrapDatabase(db);
@@ -476,10 +473,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             // Trigger to remove a calendar's events when we delete the calendar
             db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
             db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON Calendars " +
-                        "BEGIN " +
-                            "DELETE FROM Events WHERE calendar_id = old._id;" +
-                            "DELETE FROM DeletedEvents WHERE calendar_id = old._id;" +
-                        "END");
+                    "BEGIN " +
+                    "DELETE FROM Events WHERE calendar_id = old._id;" +
+                    "DELETE FROM DeletedEvents WHERE calendar_id = old._id;" +
+                    "END");
             db.execSQL("DROP TRIGGER IF EXISTS event_to_deleted");
             oldVersion += 1;
         }
@@ -566,6 +563,101 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             oldVersion += 1;
         }
 
+        if (oldVersion == 54) {
+            db.execSQL("ALTER TABLE Calendars ADD COLUMN _sync_account_type TEXT;");
+            db.execSQL("ALTER TABLE Events ADD COLUMN _sync_account_type TEXT;");
+            db.execSQL("ALTER TABLE DeletedEvents ADD COLUMN _sync_account_type TEXT;");
+            db.execSQL("UPDATE Calendars"
+                    + " SET _sync_account_type='com.google'"
+                    + " WHERE _sync_account IS NOT NULL");
+            db.execSQL("UPDATE Events"
+                    + " SET _sync_account_type='com.google'"
+                    + " WHERE _sync_account IS NOT NULL");
+            db.execSQL("UPDATE DeletedEvents"
+                    + " SET _sync_account_type='com.google'"
+                    + " WHERE _sync_account IS NOT NULL");
+            Log.w(TAG, "re-creating eventSyncAccountAndIdIndex");
+            db.execSQL("DROP INDEX eventSyncAccountAndIdIndex");
+            db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
+                    + Events._SYNC_ACCOUNT_TYPE + ", " + Events._SYNC_ACCOUNT + ", "
+                    + Events._SYNC_ID + ");");
+            oldVersion += 1;
+        }
+        if (oldVersion == 55 || oldVersion == 56) {  // Both require resync
+            // Delete sync state, so all records will be re-synced.
+            db.execSQL("DELETE FROM _sync_state;");
+
+            // "cursor" iterates over all the calendars
+            Cursor cursor = db.rawQuery("SELECT _sync_account,_sync_account_type,url "
+                    + "FROM Calendars",
+                    null /* selection args */);
+            if (cursor != null) {
+                try {
+                    while (cursor.moveToNext()) {
+                        String accountName = cursor.getString(0);
+                        String accountType = cursor.getString(1);
+                        final Account account = new Account(accountName, accountType);
+                        String calendarUrl = cursor.getString(2);
+                        scheduleSync(account, false /* two-way sync */, calendarUrl);
+                    }
+                } finally {
+                    cursor.close();
+                }
+            }
+        }
+        if (oldVersion == 55) {
+            db.execSQL("ALTER TABLE Calendars ADD COLUMN ownerAccount TEXT;");
+            db.execSQL("ALTER TABLE Events ADD COLUMN hasAttendeeData INTEGER;");
+            // Clear _sync_dirty to avoid a client-to-server sync that could blow away
+            // server attendees.
+            // Clear _sync_version to pull down the server's event (with attendees)
+            // Change the URLs from full-selfattendance to full
+            db.execSQL("UPDATE Events"
+                    + " SET _sync_dirty=0,"
+                    + " _sync_version=NULL,"
+                    + " _sync_id="
+                    + "REPLACE(_sync_id, '/private/full-selfattendance', '/private/full'),"
+                    + " commentsUri ="
+                    + "REPLACE(commentsUri, '/private/full-selfattendance', '/private/full');");
+            db.execSQL("UPDATE Calendars"
+                    + " SET url="
+                    + "REPLACE(url, '/private/full-selfattendance', '/private/full');");
+
+            // "cursor" iterates over all the calendars
+            Cursor cursor = db.rawQuery("SELECT _id, url FROM Calendars",
+                    null /* selection args */);
+            // Add the owner column.
+            if (cursor != null) {
+                try {
+                    while (cursor.moveToNext()) {
+                        Long id = cursor.getLong(0);
+                        String url = cursor.getString(1);
+                        String owner = CalendarSyncAdapter.calendarEmailAddressFromFeedUrl(url);
+                        db.execSQL("UPDATE Calendars SET ownerAccount=? WHERE _id=?",
+                                new Object[] {owner, id});
+                    }
+                } finally {
+                    cursor.close();
+                }
+            }
+            oldVersion += 1;
+        }
+        if (oldVersion == 56) {
+            db.execSQL("ALTER TABLE Events ADD COLUMN guestsCanModify"
+                    + " INTEGER NOT NULL DEFAULT 0;");
+            db.execSQL("ALTER TABLE Events ADD COLUMN guestsCanInviteOthers"
+                    + " INTEGER NOT NULL DEFAULT 1;");
+            db.execSQL("ALTER TABLE Events ADD COLUMN guestsCanSeeGuests"
+                    + " INTEGER NOT NULL DEFAULT 1;");
+            db.execSQL("ALTER TABLE Events ADD COLUMN organizer STRING;");
+            db.execSQL("UPDATE Events SET organizer="
+                    + "(SELECT attendeeEmail FROM Attendees WHERE "
+                    + "Attendees.event_id = Events._id AND Attendees.attendeeRelationship=2);");
+
+
+            oldVersion += 1;
+        }
+
         return true; // this was lossless
     }
 
@@ -587,240 +679,250 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     protected void bootstrapDatabase(SQLiteDatabase db) {
         super.bootstrapDatabase(db);
         db.execSQL("CREATE TABLE Calendars (" +
-                        "_id INTEGER PRIMARY KEY," +
-                        "_sync_account TEXT," +
-                        "_sync_id TEXT," +
-                        "_sync_version TEXT," +
-                        "_sync_time TEXT," +            // UTC
-                        "_sync_local_id INTEGER," +
-                        "_sync_dirty INTEGER," +
-                        "_sync_mark INTEGER," + // Used to filter out new rows
-                        "url TEXT," +
-                        "name TEXT," +
-                        "displayName TEXT," +
-                        "hidden INTEGER NOT NULL DEFAULT 0," +
-                        "color INTEGER," +
-                        "access_level INTEGER," +
-                        "selected INTEGER NOT NULL DEFAULT 1," +
-                        "sync_events INTEGER NOT NULL DEFAULT 0," +
-                        "location TEXT," +
-                        "timezone TEXT" +
-                        ");");
+                "_id INTEGER PRIMARY KEY," +
+                "_sync_account TEXT," +
+                "_sync_account_type TEXT," +
+                "_sync_id TEXT," +
+                "_sync_version TEXT," +
+                "_sync_time TEXT," +            // UTC
+                "_sync_local_id INTEGER," +
+                "_sync_dirty INTEGER," +
+                "_sync_mark INTEGER," + // Used to filter out new rows
+                "url TEXT," +
+                "name TEXT," +
+                "displayName TEXT," +
+                "hidden INTEGER NOT NULL DEFAULT 0," +
+                "color INTEGER," +
+                "access_level INTEGER," +
+                "selected INTEGER NOT NULL DEFAULT 1," +
+                "sync_events INTEGER NOT NULL DEFAULT 0," +
+                "location TEXT," +
+                "timezone TEXT," +
+                "ownerAccount TEXT" +
+                ");");
 
         // Trigger to remove a calendar's events when we delete the calendar
         db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON Calendars " +
-                    "BEGIN " +
-                        "DELETE FROM Events WHERE calendar_id = old._id;" +
-                        "DELETE FROM DeletedEvents WHERE calendar_id = old._id;" +
-                    "END");
+                "BEGIN " +
+                "DELETE FROM Events WHERE calendar_id = old._id;" +
+                "DELETE FROM DeletedEvents WHERE calendar_id = old._id;" +
+                "END");
 
         // TODO: do we need both dtend and duration?
         db.execSQL("CREATE TABLE Events (" +
-                        "_id INTEGER PRIMARY KEY," +
-                        "_sync_account TEXT," +
-                        "_sync_id TEXT," +
-                        "_sync_version TEXT," +
-                        "_sync_time TEXT," +            // UTC
-                        "_sync_local_id INTEGER," +
-                        "_sync_dirty INTEGER," +
-                        "_sync_mark INTEGER," + // To filter out new rows
-                        "calendar_id INTEGER NOT NULL," +
-                        "htmlUri TEXT," +
-                        "title TEXT," +
-                        "eventLocation TEXT," +
-                        "description TEXT," +
-                        "eventStatus INTEGER," +
-                        "selfAttendeeStatus INTEGER NOT NULL DEFAULT 0," +
-                        "commentsUri TEXT," +
-                        "dtstart INTEGER," +               // millis since epoch
-                        "dtend INTEGER," +                 // millis since epoch
-                        "eventTimezone TEXT," +         // timezone for event
-                        "duration TEXT," +
-                        "allDay INTEGER NOT NULL DEFAULT 0," +
-                        "visibility INTEGER NOT NULL DEFAULT 0," +
-                        "transparency INTEGER NOT NULL DEFAULT 0," +
-                        "hasAlarm INTEGER NOT NULL DEFAULT 0," +
-                        "hasExtendedProperties INTEGER NOT NULL DEFAULT 0," +
-                        "rrule TEXT," +
-                        "rdate TEXT," +
-                        "exrule TEXT," +
-                        "exdate TEXT," +
-                        "originalEvent TEXT," +  // _sync_id of recurring event
-                        "originalInstanceTime INTEGER," +  // millis since epoch
-                        "originalAllDay INTEGER," +
-                        "lastDate INTEGER" +               // millis since epoch
-                    ");");
+                "_id INTEGER PRIMARY KEY," +
+                "_sync_account TEXT," +
+                "_sync_account_type TEXT," +
+                "_sync_id TEXT," +
+                "_sync_version TEXT," +
+                "_sync_time TEXT," +            // UTC
+                "_sync_local_id INTEGER," +
+                "_sync_dirty INTEGER," +
+                "_sync_mark INTEGER," + // To filter out new rows
+                "calendar_id INTEGER NOT NULL," +
+                "htmlUri TEXT," +
+                "title TEXT," +
+                "eventLocation TEXT," +
+                "description TEXT," +
+                "eventStatus INTEGER," +
+                "selfAttendeeStatus INTEGER NOT NULL DEFAULT 0," +
+                "commentsUri TEXT," +
+                "dtstart INTEGER," +               // millis since epoch
+                "dtend INTEGER," +                 // millis since epoch
+                "eventTimezone TEXT," +         // timezone for event
+                "duration TEXT," +
+                "allDay INTEGER NOT NULL DEFAULT 0," +
+                "visibility INTEGER NOT NULL DEFAULT 0," +
+                "transparency INTEGER NOT NULL DEFAULT 0," +
+                "hasAlarm INTEGER NOT NULL DEFAULT 0," +
+                "hasExtendedProperties INTEGER NOT NULL DEFAULT 0," +
+                "rrule TEXT," +
+                "rdate TEXT," +
+                "exrule TEXT," +
+                "exdate TEXT," +
+                "originalEvent TEXT," +  // _sync_id of recurring event
+                "originalInstanceTime INTEGER," +  // millis since epoch
+                "originalAllDay INTEGER," +
+                "lastDate INTEGER," +               // millis since epoch
+                "hasAttendeeData INTEGER NOT NULL DEFAULT 0," +
+                "guestsCanModify INTEGER NOT NULL DEFAULT 0," +
+                "guestsCanInviteOthers INTEGER NOT NULL DEFAULT 1," +
+                "guestsCanSeeGuests INTEGER NOT NULL DEFAULT 1," +
+                "organizer STRING" +
+                ");");
 
         db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
-                + Events._SYNC_ACCOUNT + ", " + Events._SYNC_ID + ");");
+                + Events._SYNC_ACCOUNT_TYPE + ", " + Events._SYNC_ACCOUNT + ", "
+                + Events._SYNC_ID + ");");
 
         db.execSQL("CREATE INDEX eventsCalendarIdIndex ON Events (" +
-                   Events.CALENDAR_ID +
-                   ");");
+                Events.CALENDAR_ID +
+                ");");
 
         db.execSQL("CREATE TABLE EventsRawTimes (" +
-                        "_id INTEGER PRIMARY KEY," +
-                        "event_id INTEGER NOT NULL," +
-                        "dtstart2445 TEXT," +
-                        "dtend2445 TEXT," +
-                        "originalInstanceTime2445 TEXT," +
-                        "lastDate2445 TEXT," +
-                        "UNIQUE (event_id)" +
-                    ");");
+                "_id INTEGER PRIMARY KEY," +
+                "event_id INTEGER NOT NULL," +
+                "dtstart2445 TEXT," +
+                "dtend2445 TEXT," +
+                "originalInstanceTime2445 TEXT," +
+                "lastDate2445 TEXT," +
+                "UNIQUE (event_id)" +
+                ");");
 
         // NOTE: we do not create a trigger to delete an event's instances upon update,
         // as all rows currently get updated during a merge.
 
         db.execSQL("CREATE TABLE DeletedEvents (" +
-                        "_sync_id TEXT," +
-                        "_sync_version TEXT," +
-                        "_sync_account TEXT," +
-                        (isTemporary() ? "_sync_local_id INTEGER," : "") + // Used while syncing,
-                        "_sync_mark INTEGER," + // To filter out new rows
-                        "calendar_id INTEGER" +
-                    ");");
+                "_sync_id TEXT," +
+                "_sync_version TEXT," +
+                "_sync_account TEXT," +
+                "_sync_account_type TEXT," +
+                (isTemporary() ? "_sync_local_id INTEGER," : "") + // Used while syncing,
+                "_sync_mark INTEGER," + // To filter out new rows
+                "calendar_id INTEGER" +
+                ");");
 
         db.execSQL("CREATE TABLE Instances (" +
-                        "_id INTEGER PRIMARY KEY," +
-                        "event_id INTEGER," +
-                        "begin INTEGER," +         // UTC millis
-                        "end INTEGER," +           // UTC millis
-                        "startDay INTEGER," +      // Julian start day
-                        "endDay INTEGER," +        // Julian end day
-                        "startMinute INTEGER," +   // minutes from midnight
-                        "endMinute INTEGER," +     // minutes from midnight
-                        "UNIQUE (event_id, begin, end)" +
-                    ");");
+                "_id INTEGER PRIMARY KEY," +
+                "event_id INTEGER," +
+                "begin INTEGER," +         // UTC millis
+                "end INTEGER," +           // UTC millis
+                "startDay INTEGER," +      // Julian start day
+                "endDay INTEGER," +        // Julian end day
+                "startMinute INTEGER," +   // minutes from midnight
+                "endMinute INTEGER," +     // minutes from midnight
+                "UNIQUE (event_id, begin, end)" +
+                ");");
 
         db.execSQL("CREATE INDEX instancesStartDayIndex ON Instances (" +
-                   Instances.START_DAY +
-                   ");");
+                Instances.START_DAY +
+                ");");
 
         db.execSQL("CREATE TABLE CalendarMetaData (" +
-                        "_id INTEGER PRIMARY KEY," +
-                        "localTimezone TEXT," +
-                        "minInstance INTEGER," +      // UTC millis
-                        "maxInstance INTEGER," +      // UTC millis
-                        "minBusyBits INTEGER," +      // UTC millis
-                        "maxBusyBits INTEGER" +       // UTC millis
-        ");");
+                "_id INTEGER PRIMARY KEY," +
+                "localTimezone TEXT," +
+                "minInstance INTEGER," +      // UTC millis
+                "maxInstance INTEGER," +      // UTC millis
+                "minBusyBits INTEGER," +      // UTC millis
+                "maxBusyBits INTEGER" +       // UTC millis
+                ");");
 
         db.execSQL("CREATE TABLE BusyBits(" +
-                        "day INTEGER PRIMARY KEY," +  // the Julian day
-                        "busyBits INTEGER," +         // 24 bits for 60-minute intervals
-                        "allDayCount INTEGER" +       // number of all-day events
-        ");");
+                "day INTEGER PRIMARY KEY," +  // the Julian day
+                "busyBits INTEGER," +         // 24 bits for 60-minute intervals
+                "allDayCount INTEGER" +       // number of all-day events
+                ");");
 
         db.execSQL("CREATE TABLE Attendees (" +
-                        "_id INTEGER PRIMARY KEY," +
-                        "event_id INTEGER," +
-                        "attendeeName TEXT," +
-                        "attendeeEmail TEXT," +
-                        "attendeeStatus INTEGER," +
-                        "attendeeRelationship INTEGER," +
-                        "attendeeType INTEGER" +
-                   ");");
+                "_id INTEGER PRIMARY KEY," +
+                "event_id INTEGER," +
+                "attendeeName TEXT," +
+                "attendeeEmail TEXT," +
+                "attendeeStatus INTEGER," +
+                "attendeeRelationship INTEGER," +
+                "attendeeType INTEGER" +
+                ");");
 
         db.execSQL("CREATE INDEX attendeesEventIdIndex ON Attendees (" +
-                   Attendees.EVENT_ID +
-                   ");");
+                Attendees.EVENT_ID +
+                ");");
 
         db.execSQL("CREATE TABLE Reminders (" +
-                        "_id INTEGER PRIMARY KEY," +
-                        "event_id INTEGER," +
-                        "minutes INTEGER," +
-                        "method INTEGER NOT NULL" +
-                        " DEFAULT " + Reminders.METHOD_DEFAULT +
-                   ");");
+                "_id INTEGER PRIMARY KEY," +
+                "event_id INTEGER," +
+                "minutes INTEGER," +
+                "method INTEGER NOT NULL" +
+                " DEFAULT " + Reminders.METHOD_DEFAULT +
+                ");");
 
         db.execSQL("CREATE INDEX remindersEventIdIndex ON Reminders (" +
-                   Reminders.EVENT_ID +
-                   ");");
+                Reminders.EVENT_ID +
+                ");");
 
         // This table stores the Calendar notifications that have gone off.
         db.execSQL("CREATE TABLE CalendarAlerts (" +
-                        "_id INTEGER PRIMARY KEY," +
-                        "event_id INTEGER," +
-                        "begin INTEGER NOT NULL," +         // UTC millis
-                        "end INTEGER NOT NULL," +           // UTC millis
-                        "alarmTime INTEGER NOT NULL," +     // UTC millis
-                        "creationTime INTEGER NOT NULL," +  // UTC millis
-                        "receivedTime INTEGER NOT NULL," +  // UTC millis
-                        "notifyTime INTEGER NOT NULL," +    // UTC millis
-                        "state INTEGER NOT NULL," +
-                        "minutes INTEGER," +
-                        "UNIQUE (alarmTime, begin, event_id)" +
-                   ");");
+                "_id INTEGER PRIMARY KEY," +
+                "event_id INTEGER," +
+                "begin INTEGER NOT NULL," +         // UTC millis
+                "end INTEGER NOT NULL," +           // UTC millis
+                "alarmTime INTEGER NOT NULL," +     // UTC millis
+                "creationTime INTEGER NOT NULL," +  // UTC millis
+                "receivedTime INTEGER NOT NULL," +  // UTC millis
+                "notifyTime INTEGER NOT NULL," +    // UTC millis
+                "state INTEGER NOT NULL," +
+                "minutes INTEGER," +
+                "UNIQUE (alarmTime, begin, event_id)" +
+                ");");
 
         db.execSQL("CREATE INDEX calendarAlertsEventIdIndex ON CalendarAlerts (" +
-                   CalendarAlerts.EVENT_ID +
-                   ");");
+                CalendarAlerts.EVENT_ID +
+                ");");
 
         db.execSQL("CREATE TABLE ExtendedProperties (" +
-                        "_id INTEGER PRIMARY KEY," +
-                        "event_id INTEGER," +
-                        "name TEXT," +
-                        "value TEXT" +
-                   ");");
+                "_id INTEGER PRIMARY KEY," +
+                "event_id INTEGER," +
+                "name TEXT," +
+                "value TEXT" +
+                ");");
 
         db.execSQL("CREATE INDEX extendedPropertiesEventIdIndex ON ExtendedProperties (" +
-                   ExtendedProperties.EVENT_ID +
-                   ");");
+                ExtendedProperties.EVENT_ID +
+                ");");
 
         // Trigger to remove data tied to an event when we delete that event.
         db.execSQL("CREATE TRIGGER events_cleanup_delete DELETE ON Events " +
-                    "BEGIN " +
-                        "DELETE FROM Instances WHERE event_id = old._id;" +
-                        "DELETE FROM EventsRawTimes WHERE event_id = old._id;" +
-                        "DELETE FROM Attendees WHERE event_id = old._id;" +
-                        "DELETE FROM Reminders WHERE event_id = old._id;" +
-                        "DELETE FROM CalendarAlerts WHERE event_id = old._id;" +
-                        "DELETE FROM ExtendedProperties WHERE event_id = old._id;" +
-                    "END");
+                "BEGIN " +
+                "DELETE FROM Instances WHERE event_id = old._id;" +
+                "DELETE FROM EventsRawTimes WHERE event_id = old._id;" +
+                "DELETE FROM Attendees WHERE event_id = old._id;" +
+                "DELETE FROM Reminders WHERE event_id = old._id;" +
+                "DELETE FROM CalendarAlerts WHERE event_id = old._id;" +
+                "DELETE FROM ExtendedProperties WHERE event_id = old._id;" +
+                "END");
 
         // Triggers to set the _sync_dirty flag when an attendee is changed,
         // inserted or deleted
         db.execSQL("CREATE TRIGGER attendees_update UPDATE ON Attendees " +
-                    "BEGIN " +
-                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
-                    "END");
+                "BEGIN " +
+                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
+                "END");
         db.execSQL("CREATE TRIGGER attendees_insert INSERT ON Attendees " +
-                    "BEGIN " +
-                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=new.event_id;" +
-                    "END");
+                "BEGIN " +
+                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=new.event_id;" +
+                "END");
         db.execSQL("CREATE TRIGGER attendees_delete DELETE ON Attendees " +
-                    "BEGIN " +
-                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
-                    "END");
+                "BEGIN " +
+                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
+                "END");
 
         // Triggers to set the _sync_dirty flag when a reminder is changed,
         // inserted or deleted
         db.execSQL("CREATE TRIGGER reminders_update UPDATE ON Reminders " +
-                    "BEGIN " +
-                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
-                    "END");
+                "BEGIN " +
+                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
+                "END");
         db.execSQL("CREATE TRIGGER reminders_insert INSERT ON Reminders " +
-                    "BEGIN " +
-                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=new.event_id;" +
-                    "END");
+                "BEGIN " +
+                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=new.event_id;" +
+                "END");
         db.execSQL("CREATE TRIGGER reminders_delete DELETE ON Reminders " +
-                    "BEGIN " +
-                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
-                    "END");
+                "BEGIN " +
+                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
+                "END");
         // Triggers to set the _sync_dirty flag when an extended property is changed,
         // inserted or deleted
         db.execSQL("CREATE TRIGGER extended_properties_update UPDATE ON ExtendedProperties " +
-                    "BEGIN " +
-                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
-                    "END");
+                "BEGIN " +
+                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
+                "END");
         db.execSQL("CREATE TRIGGER extended_properties_insert UPDATE ON ExtendedProperties " +
-                    "BEGIN " +
-                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=new.event_id;" +
-                    "END");
+                "BEGIN " +
+                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=new.event_id;" +
+                "END");
         db.execSQL("CREATE TRIGGER extended_properties_delete UPDATE ON ExtendedProperties " +
-                    "BEGIN " +
-                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
-                    "END");
+                "BEGIN " +
+                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
+                "END");
     }
 
     /**
@@ -831,18 +933,17 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
      * syncable.
      */
     @Override
-    protected void onAccountsChanged(String[] accountsArray) {
+    protected void onAccountsChanged(final Account[] accountsArray) {
         super.onAccountsChanged(accountsArray);
 
-        Map<String, Boolean> accounts = new HashMap<String, Boolean>();
-        for (String account : accountsArray) {
+        final Map<Account, Boolean> accounts = Maps.newHashMap();
+        for (Account account : accountsArray) {
             accounts.put(account, false);
         }
 
         mDb.beginTransaction();
         try {
-            deleteRowsForRemovedAccounts(accounts, "Calendars",
-                    SyncConstValue._SYNC_ACCOUNT);
+            deleteRowsForRemovedAccounts(accounts, "Calendars");
             mDb.setTransactionSuccessful();
         } finally {
             mDb.endTransaction();
@@ -856,72 +957,110 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         // If there are no calendars at all for a given account, add the
         // default calendar.
 
-        for (Map.Entry<String, Boolean> entry : accounts.entrySet()) {
-            entry.setValue(false);
-            // TODO: remove this break when Calendar supports multiple accounts. Until then
-            // pretend that only the first account exists.
-            break;
-        }
-
-        Set<String> handledAccounts = Sets.newHashSet();
-        ContentResolver cr = getContext().getContentResolver();
-        if (Config.LOGV) Log.v(TAG, "querying calendars");
-        Cursor c = cr.query(Calendars.CONTENT_URI, ACCOUNTS_PROJECTION, null, null, null);
-        try {
-            while (c.moveToNext()) {
-                String account = c.getString(0);
-                if (handledAccounts.contains(account)) {
-                    continue;
+        // TODO: allow caller to specify which account's feeds should be updated
+        String[] features = new String[]{
+                GoogleLoginServiceConstants.FEATURE_LEGACY_HOSTED_OR_GOOGLE};
+        AccountManagerCallback<Account[]> callback = new AccountManagerCallback<Account[]>() {
+            public void run(AccountManagerFuture<Account[]> accountManagerFuture) {
+                Account[] currentAccounts = new Account[0];
+                try {
+                    currentAccounts = accountManagerFuture.getResult();
+                } catch (OperationCanceledException e) {
+                    Log.w(TAG, "onAccountsChanged", e);
+                    return;
+                } catch (IOException e) {
+                    Log.w(TAG, "onAccountsChanged", e);
+                    return;
+                } catch (AuthenticatorException e) {
+                    Log.w(TAG, "onAccountsChanged", e);
+                    return;
                 }
-                handledAccounts.add(account);
-                if (accounts.containsKey(account)) {
-                    if (Config.LOGV) {
-                        Log.v(TAG, "calendars for account " + account
-                                + " exist");
+                if (currentAccounts.length < 1) {
+                    Log.w(TAG, "getPrimaryAccount: no primary account configured.");
+                    return;
+                }
+                Account primaryAccount = currentAccounts[0];
+
+                for (Map.Entry<Account, Boolean> entry : accounts.entrySet()) {
+                    // TODO: change this when Calendar supports multiple accounts. Until then
+                    // pretend that only the primary exists.
+                    boolean ignore = primaryAccount == null ||
+                            !primaryAccount.equals(entry.getKey());
+                    entry.setValue(ignore);
+                }
+
+                Set<Account> handledAccounts = Sets.newHashSet();
+                if (Config.LOGV) Log.v(TAG, "querying calendars");
+                Cursor c = queryInternal(Calendars.CONTENT_URI, ACCOUNTS_PROJECTION, null, null,
+                        null);
+                try {
+                    while (c.moveToNext()) {
+                        final String accountName = c.getString(0);
+                        final String accountType = c.getString(1);
+                        final Account account = new Account(accountName, accountType);
+                        if (handledAccounts.contains(account)) {
+                            continue;
+                        }
+                        handledAccounts.add(account);
+                        if (accounts.containsKey(account)) {
+                            if (Config.LOGV) {
+                                Log.v(TAG, "calendars for account " + account + " exist");
+                            }
+                            accounts.put(account, true /* hasCalendar */);
+                        }
                     }
-                    accounts.put(account, true /* hasCalendar */);
+                } finally {
+                    c.close();
+                    c = null;
                 }
-            }
-        } finally {
-            c.close();
-            c = null;
-        }
 
-        if (Config.LOGV) {
-            Log.v(TAG, "scanning over " + accounts.size() + " account(s)");
-        }
-        for (Map.Entry<String, Boolean> entry : accounts.entrySet()) {
-            String account = entry.getKey();
-            boolean hasCalendar = entry.getValue();
-            if (hasCalendar) {
                 if (Config.LOGV) {
-                    Log.v(TAG, "ignoring account " + account +
-                         " since it matched an existing calendar");
+                    Log.v(TAG, "scanning over " + accounts.size() + " account(s)");
                 }
-                continue;
-            }
-            String feedUrl = mCalendarClient.getDefaultCalendarUrl(account,
-                    CalendarClient.PROJECTION_PRIVATE_SELF_ATTENDANCE, null/* query params */);
-            feedUrl = CalendarSyncAdapter.rewriteUrlforAccount(account, feedUrl);
-            if (Config.LOGV) {
-                Log.v(TAG, "adding default calendar for account " + account);
-            }
-            ContentValues values = new ContentValues();
-            values.put(Calendars._SYNC_ACCOUNT, account);
-            values.put(Calendars.URL, feedUrl);
-            values.put(Calendars.DISPLAY_NAME, "Default");
-            values.put(Calendars.SYNC_EVENTS, 1);
-            values.put(Calendars.SELECTED, 1);
-            values.put(Calendars.HIDDEN, 0);
-            values.put(Calendars.COLOR, -14069085 /* blue */);
-            // this is just our best guess.  the real value will get updated
-            // when the user does a sync.
-            values.put(Calendars.TIMEZONE, Time.getCurrentTimezone());
-            values.put(Calendars.ACCESS_LEVEL, Calendars.OWNER_ACCESS);
-            cr.insert(Calendars.CONTENT_URI, values);
+                for (Map.Entry<Account, Boolean> entry : accounts.entrySet()) {
+                    final Account account = entry.getKey();
+                    boolean hasCalendar = entry.getValue();
+                    if (hasCalendar) {
+                        if (Config.LOGV) {
+                            Log.v(TAG, "ignoring account " + account +
+                                    " since it matched an existing calendar");
+                        }
+                        continue;
+                    }
+                    String feedUrl = mCalendarClient.getDefaultCalendarUrl(account.name,
+                            CalendarClient.PROJECTION_PRIVATE_FULL, null/* query params */);
+                    feedUrl = CalendarSyncAdapter.rewriteUrlforAccount(account, feedUrl);
+                    if (Config.LOGV) {
+                        Log.v(TAG, "adding default calendar for account " + account);
+                    }
+                    ContentValues values = new ContentValues();
+                    values.put(Calendars._SYNC_ACCOUNT, account.name);
+                    values.put(Calendars._SYNC_ACCOUNT_TYPE, account.type);
+                    values.put(Calendars.URL, feedUrl);
+                    values.put(Calendars.OWNER_ACCOUNT,
+                            CalendarSyncAdapter.calendarEmailAddressFromFeedUrl(feedUrl));
+                    values.put(Calendars.DISPLAY_NAME,
+                            getContext().getString(R.string.calendar_default_name));
+                    values.put(Calendars.SYNC_EVENTS, 1);
+                    values.put(Calendars.SELECTED, 1);
+                    values.put(Calendars.HIDDEN, 0);
+                    values.put(Calendars.COLOR, -14069085 /* blue */);
+                    // this is just our best guess.  the real value will get updated
+                    // when the user does a sync.
+                    values.put(Calendars.TIMEZONE, Time.getCurrentTimezone());
+                    values.put(Calendars.ACCESS_LEVEL, Calendars.OWNER_ACCESS);
+                    insertInternal(Calendars.CONTENT_URI, values);
 
-            scheduleSync(account, false /* do a full sync */, null /* no url */);
-        }
+                    scheduleSync(account, false /* do a full sync */, null /* no url */);
+
+                }
+                // Call the CalendarSyncAdapter's onAccountsChanged
+                getTempProviderSyncAdapter().onAccountsChanged(accountsArray);
+            }
+        };
+
+        AccountManager.get(getContext()).getAccountsByTypeAndFeatures(
+                GoogleLoginServiceConstants.ACCOUNT_TYPE, features, callback, null);
     }
 
     @Override
@@ -957,14 +1096,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 }
             case CALENDARS:
                 qb.setTables("Calendars");
-                // see if we want to update the list of calendars from the
-                // server.
-                String update = null;
-                update = url.getQueryParameter("update");
-                if ("1".equals(update)) {
-                    fetchCalendarsFromServer();
-                }
-
                 break;
             case CALENDARS_ID:
                 qb.setTables("Calendars");
@@ -972,6 +1103,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 qb.appendWhere(url.getPathSegments().get(1));
                 break;
             case INSTANCES:
+            case INSTANCES_BY_DAY:
                 long begin;
                 long end;
                 try {
@@ -987,7 +1119,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                             + url.getPathSegments().get(3));
                 }
                 return handleInstanceQuery(qb, begin, end, projectionIn,
-                                           selection, sort);
+                        selection, sort, match == INSTANCES_BY_DAY);
             case BUSYBITS:
                 int startDay;
                 int endDay;
@@ -1004,7 +1136,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                             + url.getPathSegments().get(3));
                 }
                 return handleBusyBitsQuery(qb, startDay, endDay, projectionIn,
-                                           selection, sort);
+                        selection, sort);
             case ATTENDEES:
                 qb.setTables("Attendees, Events, Calendars");
                 qb.setProjectionMap(sAttendeesProjectionMap);
@@ -1075,302 +1207,54 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         return ret;
     }
 
-    private void fetchCalendarsFromServer() {
-        if (mCalendarClient == null) {
-            Log.w(TAG, "Cannot fetch calendars -- calendar url defined.");
-            return;
-        }
-
-        GoogleLoginServiceBlockingHelper loginHelper = null;
-        String username = null;
-        String authToken = null;
-
-        try {
-            loginHelper = new GoogleLoginServiceBlockingHelper(getContext());
-
-            // TODO: allow caller to specify which account's feeds should be updated
-            username = loginHelper.getAccount(false);
-            if (TextUtils.isEmpty(username)) {
-                Log.w(TAG, "Unable to update calendars from server -- "
-                      + "no users configured.");
-                return;
-            }
-
-            try {
-                authToken = loginHelper.getAuthToken(username,
-                                                     mCalendarClient.getServiceName());
-            } catch (GoogleLoginServiceBlockingHelper.AuthenticationException e) {
-                Log.w(TAG, "Unable to update calendars from server -- could not "
-                      + "authenticate user " + username, e);
-                return;
-            }
-        } catch (GoogleLoginServiceNotFoundException e) {
-            Log.e(TAG, "Could not find Google login service", e);
-            return;
-        } finally {
-            if (loginHelper != null) {
-                loginHelper.close();
-            }
-        }
-
-        // get the current set of calendars.  we'll need to pay attention to
-        // which calendars we get back from the server, so we can delete
-        // calendars that have been deleted from the server.
-        Set<Long> existingCalendarIds = new HashSet<Long>();
-
-        final SQLiteDatabase db = getDatabase();
-        db.beginTransaction();
-        try {
-            getCurrentCalendars(existingCalendarIds);
-
-            // get and process the calendars meta feed
-            GDataParser parser = null;
-            try {
-                String feedUrl = mCalendarClient.getUserCalendarsUrl(username);
-                feedUrl = CalendarSyncAdapter.rewriteUrlforAccount(username, feedUrl);
-                parser = mCalendarClient.getParserForUserCalendars(feedUrl, authToken);
-                // process the calendars
-                processCalendars(username, parser, existingCalendarIds);
-            } catch (ParseException pe) {
-                Log.w(TAG, "Unable to process calendars from server -- could not "
-                        + "parse calendar feed.", pe);
-                return;
-            } catch (IOException ioe) {
-                Log.w(TAG, "Unable to process calendars from server -- encountered "
-                        + "i/o error", ioe);
-                return;
-            } catch (HttpException e) {
-                switch (e.getStatusCode()) {
-                    case HttpException.SC_UNAUTHORIZED:
-                        Log.w(TAG, "Unable to process calendars from server -- could not "
-                                + "authenticate user.", e);
-                        return;
-                    case HttpException.SC_GONE:
-                        Log.w(TAG, "Unable to process calendars from server -- encountered "
-                                + "an AllDeletedUnavailableException, this should never happen", e);
-                        return;
-                    default:
-                        Log.w(TAG, "Unable to process calendars from server -- error", e);
-                        return;
-                }
-            } finally {
-                if (parser != null) {
-                    parser.close();
-                }
-            }
-
-            // delete calendars that are no longer sent from the server.
-            final Uri calendarContentUri = Calendars.CONTENT_URI;
-            for (long calId : existingCalendarIds) {
-                // NOTE: triggers delete all events, instances for this calendar.
-                delete(ContentUris.withAppendedId(calendarContentUri, calId),
-                        null /* where */, null /* selectionArgs */);
-            }
-            db.setTransactionSuccessful();
-        } finally {
-            db.endTransaction();
-        }
-    }
-
-    private void getCurrentCalendars(Set<Long> calendarIds) {
-        Cursor cursor = query(Calendars.CONTENT_URI,
-                new String[] { Calendars._ID },
-                null /* selection */,
-                null /* selectionArgs */,
-                null /* sort */);
-        if (cursor != null) {
-            try {
-                while (cursor.moveToNext()) {
-                    calendarIds.add(cursor.getLong(0));
-                }
-            } finally {
-                cursor.close();
-            }
-        }
-    }
-
-    private void processCalendars(String username,
-                                  GDataParser parser,
-                                  Set<Long> existingCalendarIds)
-            throws ParseException, IOException {
-        CalendarsFeed feed = (CalendarsFeed) parser.init();
-        Entry entry = null;
-        ContentValues map = new ContentValues();
-        final Uri calendarContentUri = Calendars.CONTENT_URI;
-        while (parser.hasMoreData()) {
-            entry = parser.readNextEntry(entry);
-            if (Config.LOGV) Log.v(TAG, "Read entry: " + entry.toString());
-            CalendarEntry calendarEntry = (CalendarEntry) entry;
-            String feedUrl = calendarEntryToContentValues(username, feed, calendarEntry, map);
-            if (TextUtils.isEmpty(feedUrl)) {
-                continue;
-            }
-            long calId = -1;
-
-            Cursor c = query(calendarContentUri,
-                    new String[] { Calendars._ID },
-                    Calendars.URL + "='"
-                            + feedUrl + '\'' /* selection */,
-                    null /* selectionArgs */,
-                    null /* sort */);
-            if (c != null) {
-                try {
-                    if (c.moveToFirst()) {
-                        calId = c.getLong(0);
-                        existingCalendarIds.remove(calId);
-                    }
-                } finally {
-                    c.close();
-                }
-            }
-
-            if (calId != -1) {
-                if (Config.LOGV) Log.v(TAG, "Updating calendar " + map);
-                // don't override the existing "selected" or "hidden" settings.
-                map.remove(Calendars.SELECTED);
-                map.remove(Calendars.HIDDEN);
-                // write to db directly, so we don't send a notification.
-                updateInternal(ContentUris.withAppendedId(calendarContentUri, calId), map,
-                       null /* where */, null /* selectionArgs */);
-            } else {
-                // Select this calendar for syncing and display if it is
-                // selected and not hidden.
-                int syncAndDisplay = 0;
-                if (calendarEntry.isSelected() && !calendarEntry.isHidden()) {
-                    syncAndDisplay = 1;
-                }
-                map.put(Calendars.SYNC_EVENTS, syncAndDisplay);
-                map.put(Calendars.SELECTED, syncAndDisplay);
-                map.put(Calendars.HIDDEN, 0);
-                map.put(Calendars._SYNC_ACCOUNT, username);
-                if (Config.LOGV) Log.v(TAG, "Adding calendar " + map);
-                // write to db directly, so we don't send a notification.
-                Uri row = insertInternal(calendarContentUri, map);
-            }
-        }
-    }
-
-    // TODO: unit test.
-    protected static final String convertCalendarIdToFeedUrl(String url) {
-        // id: http://www.google.com/calendar/feeds/<username>/<cal id>
-        // desired feed:
-        //   http://www.google.com/calendar/feeds/<cal id>/<projection>
-        int start = url.indexOf(FEEDS_SUBSTRING);
-        if (start != -1) {
-            // strip out the */ in /feeds/*/
-            start += FEEDS_SUBSTRING.length();
-            int end = url.indexOf('/', start);
-            if (end != -1) {
-                url = url.replace(url.substring(start, end + 1), "");
-            }
-            url = url + "/private" + DESIRED_PROJECTION;
-        }
-        return url;
-    }
-
-    /**
-     * Convert the CalenderEntry to a Bundle that can be inserted/updated into the
-     * Calendars table.
-     */
-    private String calendarEntryToContentValues(String account, CalendarsFeed feed,
-            CalendarEntry entry,
-            ContentValues map) {
-        map.clear();
-
-        String url = entry.getAlternateLink();
-
-        // we only want to fetch the full-selfattendance calendar feeds
-        if (!TextUtils.isEmpty(url)) {
-            if (url.endsWith(EXPECTED_PROJECTION)) {
-                url = url.replace(EXPECTED_PROJECTION, DESIRED_PROJECTION);
-            }
-        } else {
-            // yuck.  the alternate link was not available.  we should
-            // reconstruct from the id.
-            url = entry.getId();
-            if (!TextUtils.isEmpty(url)) {
-                url = convertCalendarIdToFeedUrl(url);
-            } else {
-                if (Config.LOGV) {
-                    Log.v(TAG, "Cannot generate url for calendar feed.");
-                }
-                return null;
-            }
-        }
-
-        url = CalendarSyncAdapter.rewriteUrlforAccount(account, url);
-
-        map.put(Calendars.URL, url);
-        map.put(Calendars.NAME, entry.getTitle());
-
-        // TODO:
-        map.put(Calendars.DISPLAY_NAME, entry.getTitle());
-
-        map.put(Calendars.TIMEZONE, entry.getTimezone());
-
-        String colorStr = entry.getColor();
-        if (!TextUtils.isEmpty(colorStr)) {
-            int color = Color.parseColor(colorStr);
-            // Ensure the alpha is set to max
-            color |= 0xff000000;
-            map.put(Calendars.COLOR, color);
-        }
-
-        map.put(Calendars.SELECTED, entry.isSelected() ? 1 : 0);
-
-        map.put(Calendars.HIDDEN, entry.isHidden() ? 1 : 0);
-
-        int accesslevel;
-        switch (entry.getAccessLevel()) {
-        case CalendarEntry.ACCESS_NONE:
-            accesslevel = Calendars.NO_ACCESS;
-            break;
-        case CalendarEntry.ACCESS_READ:
-            accesslevel = Calendars.READ_ACCESS;
-            break;
-        case CalendarEntry.ACCESS_FREEBUSY:
-            accesslevel = Calendars.FREEBUSY_ACCESS;
-            break;
-        case CalendarEntry.ACCESS_EDITOR:
-            accesslevel = Calendars.EDITOR_ACCESS;
-            break;
-        case CalendarEntry.ACCESS_OWNER:
-            accesslevel = Calendars.OWNER_ACCESS;
-            break;
-        default:
-            accesslevel = Calendars.NO_ACCESS;
-        }
-        map.put(Calendars.ACCESS_LEVEL, accesslevel);
-        // TODO: use the update time, when calendar actually supports this.
-        // right now, calendar modifies the update time frequently.
-        map.put(Calendars._SYNC_TIME, System.currentTimeMillis());
-
-        return url;
-    }
-
     /*
      * Fills the Instances table, if necessary, for the given range and then
      * queries the Instances table.
+     *
+     * @param qb The query
+     * @param rangeBegin start of range (Julian days or ms)
+     * @param rangeEnd end of range (Julian days or ms)
+     * @param projectionIn The projection
+     * @param selection The selection
+     * @param sort How to sort
+     * @param searchByDay if true, range is in Julian days, if false, range is in ms
+     * @return
      */
     private Cursor handleInstanceQuery(SQLiteQueryBuilder qb, long rangeBegin,
-                                       long rangeEnd, String[] projectionIn,
-                                       String selection, String sort) {
+            long rangeEnd, String[] projectionIn,
+            String selection, String sort, boolean searchByDay) {
         final SQLiteDatabase db = getDatabase();
-        // will lock the database.
-        acquireInstanceRange(rangeBegin, rangeEnd, true /* use minimum expansion window */);
+
         qb.setTables("Instances INNER JOIN Events ON (Instances.event_id=Events._id) " +
-                     "INNER JOIN Calendars ON (Events.calendar_id = Calendars._id)");
+                "INNER JOIN Calendars ON (Events.calendar_id = Calendars._id)");
         qb.setProjectionMap(sInstancesProjectionMap);
-        qb.appendWhere("begin <= ");
-        qb.appendWhere(String.valueOf(rangeEnd));
-        qb.appendWhere(" AND end >= ");
+        if (searchByDay) {
+            // Convert the first and last Julian day range to a range that uses
+            // UTC milliseconds.
+            Time time = new Time();
+            long beginMs = time.setJulianDay((int) rangeBegin);
+            // We add one to lastDay because the time is set to 12am on the given
+            // Julian day and we want to include all the events on the last day.
+            long endMs = time.setJulianDay((int) rangeEnd + 1);
+            // will lock the database.
+            acquireInstanceRange(beginMs, endMs, true /* use minimum expansion window */);
+            qb.appendWhere("startDay <= ");
+            qb.appendWhere(String.valueOf(rangeEnd));
+            qb.appendWhere(" AND endDay >= ");
+        } else {
+            // will lock the database.
+            acquireInstanceRange(rangeBegin, rangeEnd, true /* use minimum expansion window */);
+            qb.appendWhere("begin <= ");
+            qb.appendWhere(String.valueOf(rangeEnd));
+            qb.appendWhere(" AND end >= ");
+        }
         qb.appendWhere(String.valueOf(rangeBegin));
         return qb.query(db, projectionIn, selection, null, null, null, sort);
     }
 
     private Cursor handleBusyBitsQuery(SQLiteQueryBuilder qb, int startDay,
-                                       int endDay, String[] projectionIn,
-                                       String selection, String sort) {
+            int endDay, String[] projectionIn,
+            String selection, String sort) {
         final SQLiteDatabase db = getDatabase();
         acquireBusyBitRange(startDay, endDay);
         qb.setTables("BusyBits");
@@ -1385,10 +1269,14 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     /**
      * Ensure that the date range given has all elements in the instance
      * table.  Acquires the database lock and calls {@link #acquireInstanceRangeLocked}.
+     *
+     * @param begin start of range (ms)
+     * @param end end of range (ms)
+     * @param useMinimumExpansionWindow expand by at least MINIMUM_EXPANSION_SPAN
      */
     private void acquireInstanceRange(final long begin,
-                                      final long end,
-                                      final boolean useMinimumExpansionWindow) {
+            final long end,
+            final boolean useMinimumExpansionWindow) {
         mDb.beginTransaction();
         try {
             acquireInstanceRangeLocked(begin, end, useMinimumExpansionWindow);
@@ -1415,9 +1303,13 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     /**
      * Ensure that the date range given has all elements in the instance
      * table.  The database lock must be held when calling this method.
+     *
+     * @param begin start of range (ms)
+     * @param end end of range (ms)
+     * @param useMinimumExpansionWindow expand by at least MINIMUM_EXPANSION_SPAN
      */
     private void acquireInstanceRangeLocked(long begin, long end,
-                                            boolean useMinimumExpansionWindow) {
+            boolean useMinimumExpansionWindow) {
         long expandBegin = begin;
         long expandEnd = end;
 
@@ -1613,21 +1505,21 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     }
 
     private static final String[] EXPAND_COLUMNS = new String[] {
-                    Events._ID,
-                    Events._SYNC_ID,
-                    Events.STATUS,
-                    Events.DTSTART,
-                    Events.DTEND,
-                    Events.EVENT_TIMEZONE,
-                    Events.RRULE,
-                    Events.RDATE,
-                    Events.EXRULE,
-                    Events.EXDATE,
-                    Events.DURATION,
-                    Events.ALL_DAY,
-                    Events.ORIGINAL_EVENT,
-                    Events.ORIGINAL_INSTANCE_TIME
-                };
+            Events._ID,
+            Events._SYNC_ID,
+            Events.STATUS,
+            Events.DTSTART,
+            Events.DTEND,
+            Events.EVENT_TIMEZONE,
+            Events.RRULE,
+            Events.RDATE,
+            Events.EXRULE,
+            Events.EXDATE,
+            Events.DURATION,
+            Events.ALL_DAY,
+            Events.ORIGINAL_EVENT,
+            Events.ORIGINAL_INSTANCE_TIME
+    };
 
     /**
      * Make instances for the given range.
@@ -2380,10 +2272,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     null /* selection */,
                     null /* selectionArgs */,
                     null /* sort */);
-            if (cursor == null) {
+            if (cursor == null || !cursor.moveToFirst()) {
+                Log.d(TAG, "Couldn't find " + eventId + " in Events table");
                 return null;
             }
-            cursor.moveToFirst();
             range.begin = cursor.getLong(0);
             range.end = cursor.getLong(1);
             range.allDay = cursor.getInt(2) != 0;
@@ -2399,26 +2291,27 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     public String getType(Uri url) {
         int match = sURLMatcher.match(url);
         switch (match) {
-        case EVENTS:
-            return "vnd.android.cursor.dir/event";
-        case EVENTS_ID:
-            return "vnd.android.cursor.item/event";
-        case REMINDERS:
-            return "vnd.android.cursor.dir/reminder";
-        case REMINDERS_ID:
-            return "vnd.android.cursor.item/reminder";
-        case CALENDAR_ALERTS:
-            return "vnd.android.cursor.dir/calendar-alert";
-        case CALENDAR_ALERTS_BY_INSTANCE:
-            return "vnd.android.cursor.dir/calendar-alert-by-instance";
-        case CALENDAR_ALERTS_ID:
-            return "vnd.android.cursor.item/calendar-alert";
-        case INSTANCES:
-            return "vnd.android.cursor.dir/event-instance";
-        case BUSYBITS:
-            return "vnd.android.cursor.dir/busybits";
-        default:
-            throw new IllegalArgumentException("Unknown URL " + url);
+            case EVENTS:
+                return "vnd.android.cursor.dir/event";
+            case EVENTS_ID:
+                return "vnd.android.cursor.item/event";
+            case REMINDERS:
+                return "vnd.android.cursor.dir/reminder";
+            case REMINDERS_ID:
+                return "vnd.android.cursor.item/reminder";
+            case CALENDAR_ALERTS:
+                return "vnd.android.cursor.dir/calendar-alert";
+            case CALENDAR_ALERTS_BY_INSTANCE:
+                return "vnd.android.cursor.dir/calendar-alert-by-instance";
+            case CALENDAR_ALERTS_ID:
+                return "vnd.android.cursor.item/calendar-alert";
+            case INSTANCES:
+            case INSTANCES_BY_DAY:
+                return "vnd.android.cursor.dir/event-instance";
+            case BUSYBITS:
+                return "vnd.android.cursor.dir/busybits";
+            default:
+                throw new IllegalArgumentException("Unknown URL " + url);
         }
     }
 
@@ -2451,18 +2344,34 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     throw new RuntimeException("Could not insert event.");
                     // return null;
                 }
+                String owner = null;
+                if (updatedValues.containsKey(Events.CALENDAR_ID) &&
+                        !updatedValues.containsKey(Events.ORGANIZER)) {
+                    owner = getOwner(updatedValues.getAsLong(Events.CALENDAR_ID));
+                    // TODO: This isn't entirely correct.  If a guest is adding a recurrence
+                    // exception to an event, the organizer should stay the original organizer.
+                    // This value doesn't go to the server and it will get fixed on sync,
+                    // so it shouldn't really matter.
+                    if (owner != null) {
+                        updatedValues.put(Events.ORGANIZER, owner);
+                    }
+                }
+
                 long rowId = mEventsInserter.insert(updatedValues);
                 Uri uri = Uri.parse("content://" + url.getAuthority() + "/events/" + rowId);
                 if (!isTemporary() && rowId != -1) {
                     updateEventRawTimesLocked(rowId, updatedValues);
                     updateInstancesLocked(updatedValues, rowId, true /* new event */, db);
                     insertBusyBitsLocked(rowId, updatedValues);
-                    
+
                     // If we inserted a new event that specified the self-attendee
                     // status, then we need to add an entry to the attendees table.
                     if (initialValues.containsKey(Events.SELF_ATTENDEE_STATUS)) {
                         int status = initialValues.getAsInteger(Events.SELF_ATTENDEE_STATUS);
-                        createAttendeeEntry(rowId, status);
+                        if (owner == null) {
+                            owner = getOwner(updatedValues.getAsLong(Events.CALENDAR_ID));
+                        }
+                        createAttendeeEntry(rowId, status, owner);
                     }
                     triggerAppWidgetUpdate(rowId);
                 }
@@ -2472,38 +2381,31 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 if (!isTemporary()) {
                     Integer syncEvents = initialValues.getAsInteger(Calendars.SYNC_EVENTS);
                     if (syncEvents != null && syncEvents == 1) {
-                        String account = initialValues.getAsString(Calendars._SYNC_ACCOUNT);
+                        String accountName = initialValues.getAsString(Calendars._SYNC_ACCOUNT);
+                        String accountType = initialValues.getAsString(
+                                Calendars._SYNC_ACCOUNT_TYPE);
+                        final Account account = new Account(accountName, accountType);
                         String calendarUrl = initialValues.getAsString(Calendars.URL);
                         scheduleSync(account, false /* two-way sync */, calendarUrl);
                     }
                 }
                 rowID = mCalendarsInserter.insert(initialValues);
-                return Uri.parse("content://calendar/calendars/" + rowID);
+                return ContentUris.withAppendedId(Calendars.CONTENT_URI, rowID);
             case ATTENDEES:
-                // currently, only sync may insert attendees.  we do not support
-                // inserting or removing attendees (which can only be yourself)
-                // from the app.
-                // TODO: remove this restriction when we deal with the full
-                // attendees feed.  we'll also need to put in some protection to
-                // prevent updates to the attendees that the server might reject.
-                if (!isTemporary()) {
-                    throw new IllegalArgumentException("Can only insert attendees into "
-                    + "the temporary provider.");
-                }
                 if (!initialValues.containsKey(Attendees.EVENT_ID)) {
                     throw new IllegalArgumentException("Attendees values must "
-                        + "contain an event_id");
+                            + "contain an event_id");
                 }
                 rowID = mAttendeesInserter.insert(initialValues);
 
                 // Copy the attendee status value to the Events table.
                 updateEventAttendeeStatus(db, initialValues);
 
-                return Uri.parse("content://calendars/attendees/" + rowID);
+                return ContentUris.withAppendedId(Calendar.Attendees.CONTENT_URI, rowID);
             case REMINDERS:
                 if (!initialValues.containsKey(Reminders.EVENT_ID)) {
                     throw new IllegalArgumentException("Reminders values must "
-                        + "contain an event_id");
+                            + "contain an event_id");
                 }
                 rowID = mRemindersInserter.insert(initialValues);
 
@@ -2514,11 +2416,11 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     }
                     scheduleNextAlarm(false /* do not remove alarms */);
                 }
-                return Uri.parse("content://calendars/reminders/" + rowID);
+                return ContentUris.withAppendedId(Calendar.Reminders.CONTENT_URI, rowID);
             case CALENDAR_ALERTS:
                 if (!initialValues.containsKey(CalendarAlerts.EVENT_ID)) {
                     throw new IllegalArgumentException("CalendarAlerts values must "
-                        + "contain an event_id");
+                            + "contain an event_id");
                 }
                 rowID = mCalendarAlertsInserter.insert(initialValues);
 
@@ -2526,15 +2428,15 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             case EXTENDED_PROPERTIES:
                 if (!initialValues.containsKey(Calendar.ExtendedProperties.EVENT_ID)) {
                     throw new IllegalArgumentException("ExtendedProperties values must "
-                        + "contain an event_id");
+                            + "contain an event_id");
                 }
                 rowID = mExtendedPropertiesInserter.insert(initialValues);
 
-                return Uri.parse("content://calendars/extendedproperties/" + rowID);
+                return ContentUris.withAppendedId(ExtendedProperties.CONTENT_URI, rowID);
             case DELETED_EVENTS:
                 if (isTemporary()) {
                     rowID = mDeletedEventsInserter.insert(initialValues);
-                    return Uri.parse("content://calendar/deleted_events/" + rowID);
+                    return ContentUris.withAppendedId(Calendar.Events.DELETED_CONTENT_URI, rowID);
                 }
                 // fallthrough
             case EVENTS_ID:
@@ -2542,6 +2444,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             case CALENDAR_ALERTS_ID:
             case EXTENDED_PROPERTIES_ID:
             case INSTANCES:
+            case INSTANCES_BY_DAY:
                 throw new UnsupportedOperationException("Cannot insert into that URL");
             default:
                 throw new IllegalArgumentException("Unknown URL " + url);
@@ -2549,85 +2452,53 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     }
 
     /**
-     * Extracts the calendar email from a calendar feed url.
-     * @param feed the calendar feed url
-     * @return the calendar email that is in the feed url or null if it can't
-     * find the email address.
+     * Gets the calendar's owner for an event.
+     * @param calId
+     * @return email of owner or null
      */
-    private String calendarEmailAddressFromFeedUrl(String feed) {
-        // Example feed url:
-        // https://www.google.com/calendar/feeds/foo%40gmail.com/private/full-noattendees
-        String[] pathComponents = feed.split("/");
-        if (pathComponents.length > 5 && "feeds".equals(pathComponents[4])) {
-            try {
-                return URLDecoder.decode(pathComponents[5], "UTF-8");
-            } catch (UnsupportedEncodingException e) {
-                Log.e(TAG, "unable to url decode the email address in calendar " + feed);
-                return null;
-            }
-        }
-
-        Log.e(TAG, "unable to find the email address in calendar " + feed);
-        return null;
-    }
-    
-    /**
-     * Creates an entry in the Attendees table that refers to the given event
-     * and that has the given response status.
-     * 
-     * @param eventId the event id that the new entry in the Attendees table
-     * should refer to
-     * @param status the response status
-     */
-    private void createAttendeeEntry(long eventId, int status) {
-        ContentValues values = new ContentValues();
-        values.put(Attendees.EVENT_ID, eventId);
-        values.put(Attendees.ATTENDEE_STATUS, status);
-        values.put(Attendees.ATTENDEE_TYPE, Attendees.TYPE_NONE);
-        values.put(Attendees.ATTENDEE_RELATIONSHIP,
-                Attendees.RELATIONSHIP_ATTENDEE);
-
-        // Get the calendar id for this event
-        Cursor cursor = null;
-        long calId;
-        try {
-            cursor = query(ContentUris.withAppendedId(Events.CONTENT_URI, eventId),
-                    new String[] { Events.CALENDAR_ID },
-                    null /* selection */,
-                    null /* selectionArgs */,
-                    null /* sort */);
-            if (cursor == null) {
-                return;
-            }
-            cursor.moveToFirst();
-            calId = cursor.getLong(0);
-        } finally {
-            if (cursor != null) {
-                cursor.close();
-            }
-        }
-
+    private String getOwner(long calId) {
         // Get the email address of this user from this Calendar
         String emailAddress = null;
-        cursor = null;
+        Cursor cursor = null;
         try {
             cursor = query(ContentUris.withAppendedId(Calendars.CONTENT_URI, calId),
-                    new String[] { "_sync_account" },
+                    new String[] { Calendars.OWNER_ACCOUNT },
                     null /* selection */,
                     null /* selectionArgs */,
                     null /* sort */);
-            if (cursor == null) {
-                return;
+            if (cursor == null || !cursor.moveToFirst()) {
+                Log.d(TAG, "Couldn't find " + calId + " in Calendars table");
+                return null;
             }
-            cursor.moveToFirst();
             emailAddress = cursor.getString(0);
         } finally {
             if (cursor != null) {
                 cursor.close();
             }
         }
+        return emailAddress;
+    }
+
+    /**
+     * Creates an entry in the Attendees table that refers to the given event
+     * and that has the given response status.
+     *
+     * @param eventId the event id that the new entry in the Attendees table
+     * should refer to
+     * @param status the response status
+     * @param emailAddress the email of the attendee
+     */
+    private void createAttendeeEntry(long eventId, int status, String emailAddress) {
+        ContentValues values = new ContentValues();
+        values.put(Attendees.EVENT_ID, eventId);
+        values.put(Attendees.ATTENDEE_STATUS, status);
+        values.put(Attendees.ATTENDEE_TYPE, Attendees.TYPE_NONE);
+        // TODO: The relationship could actually be ORGANIZER, but it will get straightened out
+        // on sync.
+        values.put(Attendees.ATTENDEE_RELATIONSHIP,
+                Attendees.RELATIONSHIP_ATTENDEE);
         values.put(Attendees.ATTENDEE_EMAIL, emailAddress);
-        
+
         // We don't know the ATTENDEE_NAME but that will be filled in by the
         // server and sent back to us.
         mAttendeesInserter.insert(values);
@@ -2645,11 +2516,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         // Get the event id for this attendee
         long eventId = attendeeValues.getAsLong(Attendees.EVENT_ID);
 
-        // Currently, we only fetch the attendee for the owner of the calendar
-        // so all the following expensive code is just wasted overhead.
-        // When we actually support multiple attendees for an event, we will
-        // have to execute this code (and perhaps tune it to make it as
-        // efficient as possible).
         if (MULTIPLE_ATTENDEES_PER_EVENT) {
             // Get the calendar id for this event
             Cursor cursor = null;
@@ -2660,10 +2526,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                         null /* selection */,
                         null /* selectionArgs */,
                         null /* sort */);
-                if (cursor == null) {
+                if (cursor == null || !cursor.moveToFirst()) {
+                    Log.d(TAG, "Couldn't find " + eventId + " in Events table");
                     return;
                 }
-                cursor.moveToFirst();
                 calId = cursor.getLong(0);
             } finally {
                 if (cursor != null) {
@@ -2671,28 +2537,26 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 }
             }
 
-            // Get the feed for this Calendar
-            String calendarUrl = null;
+            // Get the owner email for this Calendar
+            String calendarEmail = null;
             cursor = null;
             try {
                 cursor = query(ContentUris.withAppendedId(Calendars.CONTENT_URI, calId),
-                        new String[] { Calendars.URL },
+                        new String[] { Calendars.OWNER_ACCOUNT },
                         null /* selection */,
                         null /* selectionArgs */,
                         null /* sort */);
-                if (cursor == null) {
+                if (cursor == null || !cursor.moveToFirst()) {
+                    Log.d(TAG, "Couldn't find " + calId + " in Calendars table");
                     return;
                 }
-                cursor.moveToFirst();
-                calendarUrl = cursor.getString(0);
+                calendarEmail = cursor.getString(0);
             } finally {
                 if (cursor != null) {
                     cursor.close();
                 }
             }
 
-            // Get the email address from the calendar feed
-            String calendarEmail = calendarEmailAddressFromFeedUrl(calendarUrl);
             if (calendarEmail == null) {
                 return;
             }
@@ -2920,7 +2784,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     }
 
     long calculateLastDate(ContentValues values)
-                    throws DateException {
+            throws DateException {
         // Allow updates to some event fields like the title or hasAlarm
         // without requiring DTSTART.
         if (!values.containsKey(Events.DTSTART)) {
@@ -3083,13 +2947,17 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                             String syncId = cursor.getString(EVENTS_SYNC_ID_INDEX);
                             if (!TextUtils.isEmpty(syncId)) {
                                 String syncVersion = cursor.getString(EVENTS_SYNC_VERSION_INDEX);
-                                String syncAccount = cursor.getString(EVENTS_SYNC_ACCOUNT_INDEX);
+                                String syncAccountName =
+                                        cursor.getString(EVENTS_SYNC_ACCOUNT_NAME_INDEX);
+                                String syncAccountType =
+                                        cursor.getString(EVENTS_SYNC_ACCOUNT_TYPE_INDEX);
                                 Long calId = cursor.getLong(EVENTS_CALENDAR_ID_INDEX);
 
                                 ContentValues values = new ContentValues();
                                 values.put(Events._SYNC_ID, syncId);
                                 values.put(Events._SYNC_VERSION, syncVersion);
-                                values.put(Events._SYNC_ACCOUNT, syncAccount);
+                                values.put(Events._SYNC_ACCOUNT, syncAccountName);
+                                values.put(Events._SYNC_ACCOUNT_TYPE, syncAccountType);
                                 values.put(Events.CALENDAR_ID, calId);
                                 mDeletedEventsInserter.insert(values);
 
@@ -3126,16 +2994,21 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 int result = db.delete("Events", "_id=" + id, null);
                 return result;
             }
+            case ATTENDEES:
+            {
+                int result = db.delete("Attendees", where, whereArgs);
+                return result;
+            }
             case ATTENDEES_ID:
             {
-              // we currently don't support deletions to the attendees list.
-              // TODO: remove this restriction when we handle the full attendees
-              // feed.  we'll need to put in some logic to check that the
-              // modification will be allowed by the server.
-              throw new IllegalArgumentException("Cannot delete attendees.");
-              //                String id = url.getPathSegments().get(1);
-              //                int result = db.delete("Attendees", "_id="+id, null);
-              //                return result;
+                // we currently don't support deletions to the attendees list.
+                // TODO: remove this restriction when we handle the full attendees
+                // feed.  we'll need to put in some logic to check that the
+                // modification will be allowed by the server.
+                throw new IllegalArgumentException("Cannot delete attendees.");
+                //                String id = url.getPathSegments().get(1);
+                //                int result = db.delete("Attendees", "_id="+id, null);
+                //                return result;
             }
             case REMINDERS:
             {
@@ -3175,6 +3048,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             case CALENDARS:
                 return deleteMatchingCalendars(where);
             case INSTANCES:
+            case INSTANCES_BY_DAY:
                 throw new UnsupportedOperationException("Cannot delete that URL");
             default:
                 throw new IllegalArgumentException("Unknown URL " + url);
@@ -3340,46 +3214,45 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
      *   up local changes
      * @param url the url feed for the calendar to sync (may be null)
      */
-    private void scheduleSync(String account, boolean uploadChangesOnly, String url) {
+    private void scheduleSync(Account account, boolean uploadChangesOnly, String url) {
         Bundle extras = new Bundle();
-        extras.putString(ContentResolver.SYNC_EXTRAS_ACCOUNT, account);
         extras.putBoolean(ContentResolver.SYNC_EXTRAS_UPLOAD, uploadChangesOnly);
         if (url != null) {
             extras.putString("feed", url);
-            extras.putBoolean(ContentResolver.SYNC_EXTRAS_FORCE, true);
+            extras.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
         }
-        getContext().getContentResolver().startSync(android.provider.Calendar.CONTENT_URI, extras);
+        ContentResolver.requestSync(account, Calendars.CONTENT_URI.getAuthority(), extras);
     }
 
     private void modifyCalendarSubscription(long id, boolean syncEvents) {
         // get the account, url, and current selected state
         // for this calendar.
         Cursor cursor = query(ContentUris.withAppendedId(Calendars.CONTENT_URI, id),
-                new String[] { Calendars._SYNC_ACCOUNT,
-                               Calendars.URL,
-                               Calendars.SYNC_EVENTS},
+                new String[] {Calendars._SYNC_ACCOUNT, Calendars._SYNC_ACCOUNT_TYPE,
+                        Calendars.URL, Calendars.SYNC_EVENTS},
                 null /* selection */,
                 null /* selectionArgs */,
                 null /* sort */);
 
-        String account = null;
+        Account account = null;
         String calendarUrl = null;
         boolean oldSyncEvents = false;
-        if (cursor != null) {
+        if (cursor != null && cursor.moveToFirst()) {
             try {
-                cursor.moveToFirst();
-                account = cursor.getString(0);
-                calendarUrl = cursor.getString(1);
-                oldSyncEvents = (cursor.getInt(2) != 0);
+                final String accountName = cursor.getString(0);
+                final String accountType = cursor.getString(1);
+                account = new Account(accountName, accountType);
+                calendarUrl = cursor.getString(2);
+                oldSyncEvents = (cursor.getInt(3) != 0);
             } finally {
                 cursor.close();
             }
         }
 
-        if (TextUtils.isEmpty(account) || TextUtils.isEmpty(calendarUrl)) {
+        if (account == null || TextUtils.isEmpty(calendarUrl)) {
             // should not happen?
             Log.w(TAG, "Cannot update subscription because account "
-            + "or calendar url empty -- should not happen.");
+                    + "or calendar url empty -- should not happen.");
             return;
         }
 
@@ -3413,6 +3286,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             // in the DeletedEvents table.  We will let those
             // deleted events propagate to the server.
 
+            // TODO: cancel any pending/ongoing syncs for this calendar.
+
             // TODO: there is a corner case to deal with here: namely, if
             // we edit or delete an event on the phone and then remove
             // (that is, stop syncing) a calendar, and if we also make a
@@ -3424,14 +3299,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         // If the calendar is not selected for syncing, then don't download
         // events.
         scheduleSync(account, !syncEvents, calendarUrl);
-    }
-
-    @Override
-    public synchronized SyncAdapter getSyncAdapter() {
-        if (mSyncAdapter == null) {
-            mSyncAdapter = new CalendarSyncAdapter(getContext(), this);
-        }
-        return mSyncAdapter;
     }
 
     @Override
@@ -3448,10 +3315,10 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     protected Iterable<EventMerger> getMergers() {
         return Collections.singletonList(new EventMerger());
     }
-    
+
     /**
      * Update any existing widgets with the changed events.
-     * 
+     *
      * @param changedEventId Specific event known to be changed, otherwise -1.
      *            If present, we use it to decide if an update is necessary.
      */
@@ -3461,7 +3328,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             mAppWidgetProvider.providerUpdated(context, changedEventId);
         }
     }
-    
+
     void bootCompleted() {
         // Remove alarms from the CalendarAlerts table that have been marked
         // as "scheduled" but not fired yet.  We do this because the
@@ -3551,7 +3418,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
      * This method looks at the 24-hour window from now for any events that it
      * needs to schedule.  This method runs within a database transaction. It
      * also runs in a background thread.
-     * 
+     *
      * The CalendarProvider keeps track of which alarms it has already scheduled
      * to avoid scheduling them more than once and for debugging problems with
      * alarms.  It stores this knowledge in a database table called CalendarAlerts
@@ -3559,7 +3426,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
      * and disappears if the phone loses power.  To avoid missing an alarm, we
      * clear the entries in the CalendarAlerts table when we start up the
      * CalendarProvider.
-     * 
+     *
      * Scheduling an alarm multiple times is not tragic -- we filter out the
      * extra ones when we receive them. But we still need to keep track of the
      * scheduled alarms. The main reason is that we need to prevent multiple
@@ -3621,20 +3488,20 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         // "alarmTime" column in CalendarAlerts because otherwise the
         // query won't find multiple alarms for the same event.
         String query = "SELECT begin-(minutes*60000) AS myAlarmTime,"
-            + " Instances.event_id AS eventId, begin, end,"
-            + " title, allDay, method, minutes"
-            + " FROM Instances INNER JOIN Events"
-            + " ON (Events._id = Instances.event_id)"
-            + " INNER JOIN Reminders"
-            + " ON (Instances.event_id = Reminders.event_id)"
-            + " WHERE method=" + Reminders.METHOD_ALERT
-            + " AND myAlarmTime>=" + start
-            + " AND myAlarmTime<=" + nextAlarmTime
-            + " AND end>=" + currentMillis
-            + " AND 0=(SELECT count(*) from CalendarAlerts CA"
-            + " where CA.event_id=Instances.event_id AND CA.begin=Instances.begin"
-            + " AND CA.alarmTime=myAlarmTime)"
-            + " ORDER BY myAlarmTime,begin,title";
+                + " Instances.event_id AS eventId, begin, end,"
+                + " title, allDay, method, minutes"
+                + " FROM Instances INNER JOIN Events"
+                + " ON (Events._id = Instances.event_id)"
+                + " INNER JOIN Reminders"
+                + " ON (Instances.event_id = Reminders.event_id)"
+                + " WHERE method=" + Reminders.METHOD_ALERT
+                + " AND myAlarmTime>=" + start
+                + " AND myAlarmTime<=" + nextAlarmTime
+                + " AND end>=" + currentMillis
+                + " AND 0=(SELECT count(*) from CalendarAlerts CA"
+                + " where CA.event_id=Instances.event_id AND CA.begin=Instances.begin"
+                + " AND CA.alarmTime=myAlarmTime)"
+                + " ORDER BY myAlarmTime,begin,title";
 
         acquireInstanceRangeLocked(start, end, false /* don't use minimum expansion windows */);
         Cursor cursor = null;
@@ -3762,18 +3629,18 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             scheduleNextAlarmCheck(currentMillis + android.text.format.DateUtils.DAY_IN_MILLIS);
         }
     }
-    
+
     /**
      * Removes the entries in the CalendarAlerts table for alarms that we have
      * scheduled but that have not fired yet. We do this to ensure that we
      * don't miss an alarm.  The CalendarAlerts table keeps track of the
      * alarms that we have scheduled but the actual alarm list is in memory
      * and will be cleared if the phone reboots.
-     * 
+     *
      * We don't need to remove entries that have already fired, and in fact
      * we should not remove them because we need to display the notifications
      * until the user dismisses them.
-     * 
+     *
      * We could remove entries that have fired and been dismissed, but we leave
      * them around for a while because it makes it easier to debug problems.
      * Entries that are old enough will be cleaned up later when we schedule
@@ -3788,11 +3655,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     }
 
     private static String sEventsTable = "Events";
-    private static Uri sEventsURL =
-            Uri.parse("content://calendar/events/");
     private static String sDeletedEventsTable = "DeletedEvents";
-    private static Uri sDeletedEventsURL =
-            Uri.parse("content://calendar/deleted_events/");
     private static String sAttendeesTable = "Attendees";
     private static String sRemindersTable = "Reminders";
     private static String sCalendarAlertsTable = "CalendarAlerts";
@@ -3802,7 +3665,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
         private ContentValues mValues = new ContentValues();
         EventMerger() {
-            super(getDatabase(), sEventsTable, sEventsURL, sDeletedEventsTable, sDeletedEventsURL);
+            super(getDatabase(), sEventsTable, Calendar.Events.CONTENT_URI,
+                    sDeletedEventsTable, Calendar.Events.DELETED_CONTENT_URI);
         }
 
         @Override
@@ -3827,7 +3691,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             }
 
             long diffsRowId = diffsCursor.getLong(
-                diffsCursor.getColumnIndex(Events._ID));
+                    diffsCursor.getColumnIndex(Events._ID));
 
             insertAttendees(diffs, diffsRowId, rowId, db);
             insertRemindersIfNecessary(diffs, diffsRowId, rowId, db);
@@ -3887,9 +3751,9 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         }
 
         private void insertRemindersIfNecessary(ContentProvider diffs,
-                                                long diffsRowId,
-                                                long rowId,
-                                                SQLiteDatabase db) {
+                long diffsRowId,
+                long rowId,
+                SQLiteDatabase db) {
             // insert reminders, if necessary.
             Integer hasAlarm = mValues.getAsInteger(Events.HAS_ALARM);
             if (hasAlarm != null && hasAlarm.intValue() == 1) {
@@ -3919,9 +3783,9 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         }
 
         private void insertExtendedPropertiesIfNecessary(ContentProvider diffs,
-                                                         long diffsRowId,
-                                                         long rowId,
-                                                         SQLiteDatabase db) {
+                long diffsRowId,
+                long rowId,
+                SQLiteDatabase db) {
             // insert extended properties, if necessary.
             Integer hasExtendedProperties = mValues.getAsInteger(Events.HAS_EXTENDED_PROPERTIES);
             if (hasExtendedProperties != null && hasExtendedProperties.intValue() != 0) {
@@ -3937,6 +3801,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                                 Calendar.ExtendedProperties.NAME, extendedPropertiesValues);
                         DatabaseUtils.cursorStringToContentValues(extendedPropertiesCursor,
                                 Calendar.ExtendedProperties.VALUE, extendedPropertiesValues);
+                        extendedPropertiesValues.put(ExtendedProperties.EVENT_ID, rowId);
                         mExtendedPropertiesInserter.insert(extendedPropertiesValues);
                     }
                 } finally {
@@ -3949,7 +3814,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
         @Override
         public void updateRow(long localId, ContentProvider diffs,
-                                 Cursor diffsCursor) {
+                Cursor diffsCursor) {
             rowToContentValues(diffsCursor, mValues);
             final SQLiteDatabase db = getDatabase();
             updateBusyBitsLocked(localId, mValues);
@@ -3961,7 +3826,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             }
 
             long diffsRowId = diffsCursor.getLong(
-                diffsCursor.getColumnIndex(Events._ID));
+                    diffsCursor.getColumnIndex(Events._ID));
             // TODO: only update the attendees, reminders, and extended properties if they have
             // changed?
             // delete the existing attendees, reminders, and extended properties
@@ -3990,7 +3855,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
         @Override
         public void resolveRow(long localId, String syncId,
-                                  ContentProvider diffs, Cursor diffsCursor) {
+                ContentProvider diffs, Cursor diffsCursor) {
             // server wins
             updateRow(localId, diffs, diffsCursor);
         }
@@ -4036,6 +3901,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events._SYNC_VERSION, values);
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events._SYNC_DIRTY, values);
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events._SYNC_ACCOUNT, values);
+            DatabaseUtils.cursorStringToContentValues(diffsCursor,
+                    Events._SYNC_ACCOUNT_TYPE, values);
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events.HTML_URI, values);
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events.TITLE, values);
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events.EVENT_LOCATION, values);
@@ -4061,7 +3928,14 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             DatabaseUtils.cursorStringToContentValues(diffsCursor, Events.ORIGINAL_ALL_DAY,
                     values);
             DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.LAST_DATE, values);
+            DatabaseUtils.cursorIntToContentValues(diffsCursor, Events.HAS_ATTENDEE_DATA, values);
             DatabaseUtils.cursorLongToContentValues(diffsCursor, Events.CALENDAR_ID, values);
+            DatabaseUtils.cursorIntToContentValues(diffsCursor, Events.GUESTS_CAN_INVITE_OTHERS,
+                    values);
+            DatabaseUtils.cursorIntToContentValues(diffsCursor, Events.GUESTS_CAN_MODIFY, values);
+            DatabaseUtils.cursorIntToContentValues(diffsCursor, Events.GUESTS_CAN_SEE_GUESTS,
+                    values);
+            DatabaseUtils.cursorStringToContentValues(diffsCursor, Events.ORGANIZER, values);
         }
     }
 
@@ -4081,6 +3955,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     private static final int CALENDAR_ALERTS_ID = 14;
     private static final int CALENDAR_ALERTS_BY_INSTANCE = 15;
     private static final int BUSYBITS = 16;
+    private static final int INSTANCES_BY_DAY = 17;
 
     private static final UriMatcher sURLMatcher = new UriMatcher(UriMatcher.NO_MATCH);
     private static final HashMap<String, String> sInstancesProjectionMap;
@@ -4092,6 +3967,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     static {
         sURLMatcher.addURI("calendar", "instances/when/*/*", INSTANCES);
+        sURLMatcher.addURI("calendar", "instances/whenbyday/*/*", INSTANCES_BY_DAY);
         sURLMatcher.addURI("calendar", "events", EVENTS);
         sURLMatcher.addURI("calendar", "events/#", EVENTS_ID);
         sURLMatcher.addURI("calendar", "calendars", CALENDARS);
@@ -4135,13 +4011,20 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         sEventsProjectionMap.put(Events.ORIGINAL_INSTANCE_TIME, "originalInstanceTime");
         sEventsProjectionMap.put(Events.ORIGINAL_ALL_DAY, "originalAllDay");
         sEventsProjectionMap.put(Events.LAST_DATE, "lastDate");
+        sEventsProjectionMap.put(Events.HAS_ATTENDEE_DATA, "hasAttendeeData");
         sEventsProjectionMap.put(Events.CALENDAR_ID, "calendar_id");
+        sEventsProjectionMap.put(Events.GUESTS_CAN_INVITE_OTHERS, "guestsCanInviteOthers");
+        sEventsProjectionMap.put(Events.GUESTS_CAN_MODIFY, "guestsCanModify");
+        sEventsProjectionMap.put(Events.GUESTS_CAN_SEE_GUESTS, "guestsCanSeeGuests");
+        sEventsProjectionMap.put(Events.ORGANIZER, "organizer");
+
         // Calendar columns
         sEventsProjectionMap.put(Events.COLOR, "color");
         sEventsProjectionMap.put(Events.ACCESS_LEVEL, "access_level");
         sEventsProjectionMap.put(Events.SELECTED, "selected");
         sEventsProjectionMap.put(Calendars.URL, "url");
         sEventsProjectionMap.put(Calendars.TIMEZONE, "timezone");
+        sEventsProjectionMap.put(Calendars.OWNER_ACCOUNT, "ownerAccount");
 
         // Put the shared items into the Instances projection map
         sInstancesProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
@@ -4156,6 +4039,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         sEventsProjectionMap.put(Events._SYNC_LOCAL_ID, "Events._sync_local_id AS _sync_local_id");
         sEventsProjectionMap.put(Events._SYNC_DIRTY, "Events._sync_dirty AS _sync_dirty");
         sEventsProjectionMap.put(Events._SYNC_ACCOUNT, "Events._sync_account AS _sync_account");
+        sEventsProjectionMap.put(Events._SYNC_ACCOUNT_TYPE,
+                "Events._sync_account_type AS _sync_account_type");
 
         // Instances columns
         sInstancesProjectionMap.put(Instances.BEGIN, "begin");
@@ -4196,5 +4081,292 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         sCalendarAlertsProjectionMap.put(CalendarAlerts.ALARM_TIME, "alarmTime");
         sCalendarAlertsProjectionMap.put(CalendarAlerts.STATE, "state");
         sCalendarAlertsProjectionMap.put(CalendarAlerts.MINUTES, "minutes");
+    }
+
+    /**
+     * An implementation of EntityIterator that builds the Entity for a calendar event.
+     */
+    private static class CalendarEntityIterator implements EntityIterator {
+        private final Cursor mEntityCursor;
+        private volatile boolean mIsClosed;
+        private final SQLiteDatabase mDb;
+
+        private static final String[] EVENTS_PROJECTION = new String[]{
+                Calendar.Events._ID,
+                Calendar.Events.HTML_URI,
+                Calendar.Events.TITLE,
+                Calendar.Events.DESCRIPTION,
+                Calendar.Events.EVENT_LOCATION,
+                Calendar.Events.STATUS,
+                Calendar.Events.SELF_ATTENDEE_STATUS,
+                Calendar.Events.COMMENTS_URI,
+                Calendar.Events.DTSTART,
+                Calendar.Events.DTEND,
+                Calendar.Events.DURATION,
+                Calendar.Events.EVENT_TIMEZONE,
+                Calendar.Events.ALL_DAY,
+                Calendar.Events.VISIBILITY,
+                Calendar.Events.TRANSPARENCY,
+                Calendar.Events.HAS_ALARM,
+                Calendar.Events.HAS_EXTENDED_PROPERTIES,
+                Calendar.Events.RRULE,
+                Calendar.Events.RDATE,
+                Calendar.Events.EXRULE,
+                Calendar.Events.EXDATE,
+                Calendar.Events.ORIGINAL_EVENT,
+                Calendar.Events.ORIGINAL_INSTANCE_TIME,
+                Calendar.Events.ORIGINAL_ALL_DAY,
+                Calendar.Events.LAST_DATE,
+                Calendar.Events.HAS_ATTENDEE_DATA,
+                Calendar.Events.CALENDAR_ID,
+                Calendar.Events.GUESTS_CAN_INVITE_OTHERS,
+                Calendar.Events.GUESTS_CAN_MODIFY,
+                Calendar.Events.GUESTS_CAN_SEE_GUESTS,
+                Calendar.Events.ORGANIZER,
+        };
+        private static final int COLUMN_ID = 0;
+        private static final int COLUMN_HTML_URI = 1;
+        private static final int COLUMN_TITLE = 2;
+        private static final int COLUMN_DESCRIPTION = 3;
+        private static final int COLUMN_EVENT_LOCATION = 4;
+        private static final int COLUMN_STATUS = 5;
+        private static final int COLUMN_SELF_ATTENDEE_STATUS = 6;
+        private static final int COLUMN_COMMENTS_URI = 7;
+        private static final int COLUMN_DTSTART = 8;
+        private static final int COLUMN_DTEND = 9;
+        private static final int COLUMN_DURATION = 10;
+        private static final int COLUMN_EVENT_TIMEZONE = 11;
+        private static final int COLUMN_ALL_DAY = 12;
+        private static final int COLUMN_VISIBILITY = 13;
+        private static final int COLUMN_TRANSPARENCY = 14;
+        private static final int COLUMN_HAS_ALARM = 15;
+        private static final int COLUMN_HAS_EXTENDED_PROPERTIES = 16;
+        private static final int COLUMN_RRULE = 17;
+        private static final int COLUMN_RDATE = 18;
+        private static final int COLUMN_EXRULE = 19;
+        private static final int COLUMN_EXDATE = 20;
+        private static final int COLUMN_ORIGINAL_EVENT = 21;
+        private static final int COLUMN_ORIGINAL_INSTANCE_TIME = 22;
+        private static final int COLUMN_ORIGINAL_ALL_DAY = 23;
+        private static final int COLUMN_LAST_DATE = 24;
+        private static final int COLUMN_HAS_ATTENDEE_DATA = 25;
+        private static final int COLUMN_CALENDAR_ID = 26;
+        private static final int COLUMN_GUESTS_CAN_INVITE_OTHERS = 27;
+        private static final int COLUMN_GUESTS_CAN_MODIFY = 28;
+        private static final int COLUMN_GUESTS_CAN_SEE_GUESTS = 29;
+        private static final int COLUMN_ORGANIZER = 30;
+
+        private static final String[] REMINDERS_PROJECTION = new String[] {
+                Calendar.Reminders.MINUTES,
+                Calendar.Reminders.METHOD,
+        };
+        private static final int COLUMN_MINUTES = 0;
+        private static final int COLUMN_METHOD = 1;
+
+        private static final String[] ATTENDEES_PROJECTION = new String[] {
+                Calendar.Attendees.ATTENDEE_NAME,
+                Calendar.Attendees.ATTENDEE_EMAIL,
+                Calendar.Attendees.ATTENDEE_RELATIONSHIP,
+                Calendar.Attendees.ATTENDEE_TYPE,
+                Calendar.Attendees.ATTENDEE_STATUS,
+        };
+        private static final int COLUMN_ATTENDEE_NAME = 0;
+        private static final int COLUMN_ATTENDEE_EMAIL = 1;
+        private static final int COLUMN_ATTENDEE_RELATIONSHIP = 2;
+        private static final int COLUMN_ATTENDEE_TYPE = 3;
+        private static final int COLUMN_ATTENDEE_STATUS = 4;
+        private static final String[] EXTENDED_PROJECTION = new String[] {
+                Calendar.ExtendedProperties.NAME,
+                Calendar.ExtendedProperties.VALUE,
+        };
+        private static final int COLUMN_NAME = 0;
+        private static final int COLUMN_VALUE = 1;
+
+        public CalendarEntityIterator(CalendarProvider provider, String eventIdString, Uri uri,
+                String selection, String[] selectionArgs, String sortOrder) {
+            mIsClosed = false;
+            mDb = provider.mOpenHelper.getReadableDatabase();
+            final SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
+            qb.setTables(sEventsTable);
+            if (eventIdString != null) {
+                qb.appendWhere(Calendar.Events._ID + "=" + eventIdString);
+            }
+            mEntityCursor = qb.query(mDb, EVENTS_PROJECTION, selection, selectionArgs,
+                    null, null, sortOrder);
+            mEntityCursor.moveToFirst();
+        }
+
+        public void close() {
+            if (mIsClosed) {
+                throw new IllegalStateException("closing when already closed");
+            }
+            mIsClosed = true;
+            mEntityCursor.close();
+        }
+
+        public boolean hasNext() throws RemoteException {
+
+            if (mIsClosed) {
+                throw new IllegalStateException("calling hasNext() when the iterator is closed");
+            }
+
+            return !mEntityCursor.isAfterLast();
+        }
+
+        public void reset() throws RemoteException {
+            if (mIsClosed) {
+                throw new IllegalStateException("calling next() when the iterator is closed");
+            }
+            mEntityCursor.moveToFirst();
+        }
+
+        public Entity next() throws RemoteException {
+            if (mIsClosed) {
+                throw new IllegalStateException("calling next() when the iterator is closed");
+            }
+            if (!hasNext()) {
+                throw new IllegalStateException("you may only call next() if hasNext() is true");
+            }
+
+            final SQLiteCursor c = (SQLiteCursor) mEntityCursor;
+            final long eventId = c.getLong(COLUMN_ID);
+
+            // we expect the cursor is already at the row we need to read from
+            ContentValues entityValues = new ContentValues();
+            entityValues.put(Calendar.Events._ID, eventId);
+            entityValues.put(Calendar.Events.CALENDAR_ID, c.getInt(COLUMN_CALENDAR_ID));
+            entityValues.put(Calendar.Events.HTML_URI, c.getString(COLUMN_HTML_URI));
+            entityValues.put(Calendar.Events.TITLE, c.getString(COLUMN_TITLE));
+            entityValues.put(Calendar.Events.DESCRIPTION, c.getString(COLUMN_DESCRIPTION));
+            entityValues.put(Calendar.Events.EVENT_LOCATION, c.getString(COLUMN_EVENT_LOCATION));
+            entityValues.put(Calendar.Events.STATUS, c.getInt(COLUMN_STATUS));
+            entityValues.put(Calendar.Events.SELF_ATTENDEE_STATUS,
+                    c.getInt(COLUMN_SELF_ATTENDEE_STATUS));
+            entityValues.put(Calendar.Events.COMMENTS_URI, c.getString(COLUMN_COMMENTS_URI));
+            entityValues.put(Calendar.Events.DTSTART, c.getLong(COLUMN_DTSTART));
+            entityValues.put(Calendar.Events.DTEND, c.getLong(COLUMN_DTEND));
+            entityValues.put(Calendar.Events.DURATION, c.getString(COLUMN_DURATION));
+            entityValues.put(Calendar.Events.EVENT_TIMEZONE, c.getString(COLUMN_EVENT_TIMEZONE));
+            entityValues.put(Calendar.Events.ALL_DAY, c.getString(COLUMN_ALL_DAY));
+            entityValues.put(Calendar.Events.VISIBILITY, c.getInt(COLUMN_VISIBILITY));
+            entityValues.put(Calendar.Events.TRANSPARENCY, c.getInt(COLUMN_TRANSPARENCY));
+            entityValues.put(Calendar.Events.HAS_ALARM, c.getString(COLUMN_HAS_ALARM));
+            entityValues.put(Calendar.Events.HAS_EXTENDED_PROPERTIES,
+                    c.getString(COLUMN_HAS_EXTENDED_PROPERTIES));
+            entityValues.put(Calendar.Events.RRULE, c.getString(COLUMN_RRULE));
+            entityValues.put(Calendar.Events.RDATE, c.getString(COLUMN_RDATE));
+            entityValues.put(Calendar.Events.EXRULE, c.getString(COLUMN_EXRULE));
+            entityValues.put(Calendar.Events.EXDATE, c.getString(COLUMN_EXDATE));
+            entityValues.put(Calendar.Events.ORIGINAL_EVENT, c.getString(COLUMN_ORIGINAL_EVENT));
+            entityValues.put(Calendar.Events.ORIGINAL_INSTANCE_TIME,
+                    c.getLong(COLUMN_ORIGINAL_INSTANCE_TIME));
+            entityValues.put(Calendar.Events.ORIGINAL_ALL_DAY, c.getInt(COLUMN_ORIGINAL_ALL_DAY));
+            entityValues.put(Calendar.Events.LAST_DATE, c.getLong(COLUMN_LAST_DATE));
+            entityValues.put(Calendar.Events.HAS_ATTENDEE_DATA,
+                             c.getInt(COLUMN_HAS_ATTENDEE_DATA));
+            entityValues.put(Calendar.Events.GUESTS_CAN_INVITE_OTHERS,
+                    c.getInt(COLUMN_GUESTS_CAN_INVITE_OTHERS));
+            entityValues.put(Calendar.Events.GUESTS_CAN_MODIFY,
+                    c.getInt(COLUMN_GUESTS_CAN_MODIFY));
+            entityValues.put(Calendar.Events.GUESTS_CAN_SEE_GUESTS,
+                    c.getInt(COLUMN_GUESTS_CAN_SEE_GUESTS));
+            entityValues.put(Calendar.Events.ORGANIZER, c.getString(COLUMN_ORGANIZER));
+
+            Entity entity = new Entity(entityValues);
+            Cursor cursor = null;
+            try {
+                cursor = mDb.query(sRemindersTable, REMINDERS_PROJECTION, "event_id=" + eventId,
+                        null, null, null, null);
+                while (cursor.moveToNext()) {
+                    ContentValues reminderValues = new ContentValues();
+                    reminderValues.put(Calendar.Reminders.MINUTES, cursor.getInt(COLUMN_MINUTES));
+                    reminderValues.put(Calendar.Reminders.METHOD, cursor.getInt(COLUMN_METHOD));
+                    entity.addSubValue(Calendar.Reminders.CONTENT_URI, reminderValues);
+                }
+            } finally {
+                if (cursor != null) {
+                    cursor.close();
+                }
+            }
+
+            cursor = null;
+            try {
+                cursor = mDb.query(sAttendeesTable, ATTENDEES_PROJECTION, "event_id=" + eventId,
+                        null, null, null, null);
+                while (cursor.moveToNext()) {
+                    ContentValues attendeeValues = new ContentValues();
+                    attendeeValues.put(Calendar.Attendees.ATTENDEE_NAME,
+                            cursor.getString(COLUMN_ATTENDEE_NAME));
+                    attendeeValues.put(Calendar.Attendees.ATTENDEE_EMAIL,
+                            cursor.getString(COLUMN_ATTENDEE_EMAIL));
+                    attendeeValues.put(Calendar.Attendees.ATTENDEE_RELATIONSHIP,
+                            cursor.getInt(COLUMN_ATTENDEE_RELATIONSHIP));
+                    attendeeValues.put(Calendar.Attendees.ATTENDEE_TYPE,
+                            cursor.getInt(COLUMN_ATTENDEE_TYPE));
+                    attendeeValues.put(Calendar.Attendees.ATTENDEE_STATUS,
+                            cursor.getInt(COLUMN_ATTENDEE_STATUS));
+                    entity.addSubValue(Calendar.Attendees.CONTENT_URI, attendeeValues);
+                }
+            } finally {
+                if (cursor != null) {
+                    cursor.close();
+                }
+            }
+
+            cursor = null;
+            try {
+                cursor = mDb.query(sExtendedPropertiesTable, EXTENDED_PROJECTION,
+                        "event_id=" + eventId, null, null, null, null);
+                while (cursor.moveToNext()) {
+                    ContentValues extendedValues = new ContentValues();
+                    extendedValues.put(Calendar.ExtendedProperties.NAME, c.getString(COLUMN_NAME));
+                    extendedValues.put(Calendar.ExtendedProperties.VALUE,
+                            c.getString(COLUMN_VALUE));
+                    entity.addSubValue(Calendar.ExtendedProperties.CONTENT_URI, extendedValues);
+                }
+            } finally {
+                if (cursor != null) {
+                    cursor.close();
+                }
+            }
+
+            mEntityCursor.moveToNext();
+            // add the data to the contact
+            return entity;
+        }
+    }
+
+    @Override
+    public EntityIterator queryEntities(Uri uri, String selection, String[] selectionArgs,
+            String sortOrder) {
+        final int match = sURLMatcher.match(uri);
+        switch (match) {
+            case EVENTS:
+            case EVENTS_ID:
+                String calendarId = null;
+                if (match == EVENTS_ID) {
+                    calendarId = uri.getPathSegments().get(1);
+                }
+
+                return new CalendarEntityIterator(this, calendarId,
+                        uri, selection, selectionArgs, sortOrder);
+            default:
+                throw new UnsupportedOperationException("Unknown uri: " + uri);
+        }
+    }
+
+    @Override
+    public ContentProviderResult[] applyBatch(ArrayList<ContentProviderOperation> operations)
+            throws OperationApplicationException {
+
+        final SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            ContentProviderResult[] results = super.applyBatch(operations);
+            db.setTransactionSuccessful();
+            return results;
+        } finally {
+            db.endTransaction();
+        }
     }
 }

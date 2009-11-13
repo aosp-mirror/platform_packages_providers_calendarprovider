@@ -24,12 +24,14 @@
     <uses-permission android:name="com.google.android.googleapps.permission.GOOGLE_AUTH" />
     <uses-permission android:name="com.google.android.googleapps.permission.GOOGLE_AUTH.cl" />
     <uses-permission android:name="android.permission.GET_ACCOUNTS" />
+    <uses-permission android:name="android.permission.USE_CREDENTIALS" />
+    <uses-permission android:name="android.permission.MANAGE_ACCOUNTS" />
     <uses-permission android:name="android.permission.READ_SYNC_STATS" />
+    <uses-permission android:name="android.permission.READ_SYNC_SETTINGS" />
+    <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.SUBSCRIBED_FEEDS_READ" />
     <uses-permission android:name="android.permission.SUBSCRIBED_FEEDS_WRITE" />
-    <uses-permission android:name="android.permission.READ_SYNC_SETTINGS" />
-    <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS" />
 
     <application android:process="com.android.calendar"
                  android:label="@string/calendar_storage"
@@ -38,9 +40,17 @@
              (android.test) library. -->
         <uses-library android:name="android.test.runner" />
         <provider android:name="CalendarProvider" android:authorities="calendar"
-                android:syncable="true" android:multiprocess="false"
+                android:label="@string/provider_label"
+                android:multiprocess="false"
                 android:readPermission="android.permission.READ_CALENDAR"
                 android:writePermission="android.permission.WRITE_CALENDAR" />
+        <service android:name="CalendarSyncAdapterService" android:exported="true">
+            <intent-filter>
+                <action android:name="android.content.SyncAdapter" />
+            </intent-filter>
+            <meta-data android:name="android.content.SyncAdapter"
+                       android:resource="@xml/syncadapter" />
+        </service>
         <activity android:name="CalendarContentProviderTests" android:label="Calendar Content Provider">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -67,5 +77,19 @@
             </intent-filter>
         </receiver>
         <service android:name=".CalendarAppWidgetService" />
+        <activity android:name="CalendarDebug" android:label="@string/calendar_info">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <receiver android:name="CalendarDebugReceiver">
+            <intent-filter>
+                 <action android:name="android.provider.Telephony.SECRET_CODE" />
+                 <data android:scheme="android_secret_code" android:host="225" />
+            </intent-filter>
+       </receiver>
+
+
     </application>
 </manifest>

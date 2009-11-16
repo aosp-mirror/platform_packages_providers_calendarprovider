@@ -915,11 +915,11 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 "BEGIN " +
                 "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
                 "END");
-        db.execSQL("CREATE TRIGGER extended_properties_insert UPDATE ON ExtendedProperties " +
+        db.execSQL("CREATE TRIGGER extended_properties_insert INSERT ON ExtendedProperties " +
                 "BEGIN " +
                 "UPDATE Events SET _sync_dirty=1 WHERE Events._id=new.event_id;" +
                 "END");
-        db.execSQL("CREATE TRIGGER extended_properties_delete UPDATE ON ExtendedProperties " +
+        db.execSQL("CREATE TRIGGER extended_properties_delete DELETE ON ExtendedProperties " +
                 "BEGIN " +
                 "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
                 "END");

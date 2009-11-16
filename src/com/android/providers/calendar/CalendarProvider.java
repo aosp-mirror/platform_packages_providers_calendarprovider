@@ -237,7 +237,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 57;
+    private static final int DATABASE_VERSION = 58;
 
     // Make sure we load at least two months worth of data.
     // Client apps can load more data in a background thread.
@@ -655,6 +655,19 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     + "Attendees.event_id = Events._id AND Attendees.attendeeRelationship=2);");
 
 
+            oldVersion += 1;
+        }
+        if (oldVersion == 57) {
+            db.execSQL("DROP TRIGGER IF EXISTS extended_properties_insert");
+            db.execSQL("DROP TRIGGER IF EXISTS extended_properties_delete");
+            db.execSQL("CREATE TRIGGER extended_properties_insert INSERT ON ExtendedProperties " +
+                    "BEGIN " +
+                    "UPDATE Events SET _sync_dirty=1 WHERE Events._id=new.event_id;" +
+                    "END");
+            db.execSQL("CREATE TRIGGER extended_properties_delete DELETE ON ExtendedProperties " +
+                    "BEGIN " +
+                    "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
+                    "END");
             oldVersion += 1;
         }
 

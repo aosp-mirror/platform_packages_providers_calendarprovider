@@ -40,7 +40,8 @@ import android.pim.RecurrenceSet;
 import android.provider.Calendar;
 import android.provider.Calendar.Calendars;
 import android.provider.Calendar.Events;
-import android.provider.SubscribedFeeds;
+import com.google.android.gsf.SubscribedFeeds;
+
 import android.provider.SyncConstValue;
 import android.provider.Settings;
 import android.text.TextUtils;

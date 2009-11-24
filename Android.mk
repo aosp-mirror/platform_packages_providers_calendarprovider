@@ -24,6 +24,7 @@ LOCAL_SRC_FILES := $(call all-java-files-under,src)
 # being included by google-framework
 LOCAL_STATIC_JAVA_LIBRARIES := google-framework
 LOCAL_STATIC_JAVA_LIBRARIES += gsf-client     # Google apps only: GSF client libraries
+LOCAL_STATIC_JAVA_LIBRARIES += google-common  # Google apps only: shared Google code
 
 LOCAL_PACKAGE_NAME := CalendarProvider
 

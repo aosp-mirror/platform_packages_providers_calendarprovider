@@ -41,6 +41,7 @@ import android.provider.Calendar;
 import android.provider.Calendar.Calendars;
 import android.provider.Calendar.Events;
 import com.google.android.gsf.SubscribedFeeds;
+import com.google.android.gsf.AbstractGDataSyncAdapter;
 
 import android.provider.SyncConstValue;
 import android.provider.Settings;
@@ -51,7 +52,6 @@ import android.util.Log;
 import com.google.android.gdata.client.AndroidGDataClient;
 import com.google.android.gdata.client.AndroidXmlParserFactory;
 import com.google.android.googlelogin.GoogleLoginServiceConstants;
-import com.google.android.providers.AbstractGDataSyncAdapter;
 import com.google.wireless.gdata.calendar.client.CalendarClient;
 import com.google.wireless.gdata.calendar.data.CalendarEntry;
 import com.google.wireless.gdata.calendar.data.CalendarsFeed;

@@ -73,9 +73,9 @@ import com.google.android.collect.Maps;
 import com.google.android.collect.Sets;
 import com.google.android.gdata.client.AndroidGDataClient;
 import com.google.android.gdata.client.AndroidXmlParserFactory;
-import com.google.android.providers.AbstractGDataSyncAdapter;
-import com.google.android.providers.AbstractGDataSyncAdapter.GDataSyncData;
 import com.google.android.googlelogin.GoogleLoginServiceConstants;
+import com.google.android.gsf.AbstractGDataSyncAdapter;
+import com.google.android.gsf.AbstractGDataSyncAdapter.GDataSyncData;
 import com.google.wireless.gdata.calendar.client.CalendarClient;
 import com.google.wireless.gdata.calendar.parser.xml.XmlCalendarGDataParserFactory;
 

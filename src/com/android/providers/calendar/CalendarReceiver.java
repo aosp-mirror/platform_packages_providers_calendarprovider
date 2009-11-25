@@ -31,21 +31,32 @@ import android.content.Intent;
  * yet.
  */
 public class CalendarReceiver extends BroadcastReceiver {
-    
+
     static final String SCHEDULE = "com.android.providers.calendar.SCHEDULE_ALARM";
 
     @Override
     public void onReceive(Context context, Intent intent) {
         String action = intent.getAction();
         ContentResolver cr = context.getContentResolver();
-        CalendarProvider provider;
         IContentProvider icp = cr.acquireProvider("calendar");
-        provider = (CalendarProvider) ContentProvider.
+        ContentProvider contentProvider = ContentProvider.
                 coerceToLocalContentProvider(icp);
-        if (action.equals(SCHEDULE)) {
-            provider.scheduleNextAlarm(false /* do not remove alarms */);
-        } else if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
-            provider.bootCompleted();
+        // Temporarily handle either CalendarProvider or CalendarProvider2 implementation
+        // TODO: remove this code when CalendarProvider is removed
+        if (contentProvider instanceof CalendarProvider) {
+            CalendarProvider provider = (CalendarProvider) contentProvider;
+            if (action.equals(SCHEDULE)) {
+                provider.scheduleNextAlarm(false /* do not remove alarms */);
+            } else if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
+                provider.bootCompleted();
+            }
+        } else {
+            CalendarProvider2 provider = (CalendarProvider2) contentProvider;
+            if (action.equals(SCHEDULE)) {
+                provider.scheduleNextAlarm(false /* do not remove alarms */);
+            } else if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
+                provider.bootCompleted();
+            }
         }
         cr.releaseProvider(icp);
     }

@@ -56,7 +56,6 @@ import com.android.internal.content.SyncStateContentProviderHelper;
     private DatabaseUtils.InsertHelper mCalendarsInserter;
     private DatabaseUtils.InsertHelper mEventsInserter;
     private DatabaseUtils.InsertHelper mEventsRawTimesInserter;
-    private DatabaseUtils.InsertHelper mDeletedEventsInserter;
     private DatabaseUtils.InsertHelper mInstancesInserter;
     private DatabaseUtils.InsertHelper mAttendeesInserter;
     private DatabaseUtils.InsertHelper mRemindersInserter;
@@ -77,10 +76,6 @@ import com.android.internal.content.SyncStateContentProviderHelper;
 
     public long eventsRawTimesReplace(ContentValues values) {
         return mEventsRawTimesInserter.replace(values);
-    }
-
-    public long deletedEventsInsert(ContentValues values) {
-        return mDeletedEventsInserter.insert(values);
     }
 
     public long instancesInsert(ContentValues values) {
@@ -114,7 +109,7 @@ import com.android.internal.content.SyncStateContentProviderHelper;
      * Private constructor, callers except unit tests should obtain an instance through
      * {@link #getInstance(android.content.Context)} instead.
      */
-    CalendarDatabaseHelper(Context context) {
+    /* package */ CalendarDatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
         if (false) Log.i(TAG, "Creating OpenHelper");
         Resources resources = context.getResources();
@@ -126,12 +121,10 @@ import com.android.internal.content.SyncStateContentProviderHelper;
     @Override
     public void onOpen(SQLiteDatabase db) {
         mSyncState.onDatabaseOpened(db);
-        db.markTableSyncable("Events", "DeletedEvents");
 
         mCalendarsInserter = new DatabaseUtils.InsertHelper(db, "Calendars");
         mEventsInserter = new DatabaseUtils.InsertHelper(db, "Events");
         mEventsRawTimesInserter = new DatabaseUtils.InsertHelper(db, "EventsRawTimes");
-        mDeletedEventsInserter = new DatabaseUtils.InsertHelper(db, "DeletedEvents");
         mInstancesInserter = new DatabaseUtils.InsertHelper(db, "Instances");
         mAttendeesInserter = new DatabaseUtils.InsertHelper(db, "Attendees");
         mRemindersInserter = new DatabaseUtils.InsertHelper(db, "Reminders");
@@ -173,7 +166,6 @@ import com.android.internal.content.SyncStateContentProviderHelper;
         db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON Calendars " +
                 "BEGIN " +
                 "DELETE FROM Events WHERE calendar_id = old._id;" +
-                "DELETE FROM DeletedEvents WHERE calendar_id = old._id;" +
                 "END");
 
         // TODO: do we need both dtend and duration?
@@ -216,7 +208,8 @@ import com.android.internal.content.SyncStateContentProviderHelper;
                 "guestsCanModify INTEGER NOT NULL DEFAULT 0," +
                 "guestsCanInviteOthers INTEGER NOT NULL DEFAULT 1," +
                 "guestsCanSeeGuests INTEGER NOT NULL DEFAULT 1," +
-                "organizer STRING" +
+                "organizer STRING," +
+                "deleted INTEGER NOT NULL DEFAULT 0" +
                 ");");
 
         db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
@@ -235,18 +228,6 @@ import com.android.internal.content.SyncStateContentProviderHelper;
                 "originalInstanceTime2445 TEXT," +
                 "lastDate2445 TEXT," +
                 "UNIQUE (event_id)" +
-                ");");
-
-        // NOTE: we do not create a trigger to delete an event's instances upon update,
-        // as all rows currently get updated during a merge.
-
-        db.execSQL("CREATE TABLE DeletedEvents (" +
-                "_sync_id TEXT," +
-                "_sync_version TEXT," +
-                ACCOUNT_NAME + " TEXT," +
-                ACCOUNT_TYPE + " TEXT," +
-                "_sync_mark INTEGER," + // To filter out new rows
-                "calendar_id INTEGER" +
                 ");");
 
         db.execSQL("CREATE TABLE Instances (" +
@@ -306,7 +287,7 @@ import com.android.internal.content.SyncStateContentProviderHelper;
                 Calendar.Reminders.EVENT_ID +
                 ");");
 
-        // This table stores the Calendar notifications that have gone off.
+         // This table stores the Calendar notifications that have gone off.
         db.execSQL("CREATE TABLE CalendarAlerts (" +
                 "_id INTEGER PRIMARY KEY," +
                 "event_id INTEGER," +
@@ -347,49 +328,7 @@ import com.android.internal.content.SyncStateContentProviderHelper;
                 "DELETE FROM ExtendedProperties WHERE event_id = old._id;" +
                 "END");
 
-        // Triggers to set the _sync_dirty flag when an attendee is changed,
-        // inserted or deleted
-        db.execSQL("CREATE TRIGGER attendees_update UPDATE ON Attendees " +
-                "BEGIN " +
-                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
-                "END");
-        db.execSQL("CREATE TRIGGER attendees_insert INSERT ON Attendees " +
-                "BEGIN " +
-                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=new.event_id;" +
-                "END");
-        db.execSQL("CREATE TRIGGER attendees_delete DELETE ON Attendees " +
-                "BEGIN " +
-                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
-                "END");
-
-        // Triggers to set the _sync_dirty flag when a reminder is changed,
-        // inserted or deleted
-        db.execSQL("CREATE TRIGGER reminders_update UPDATE ON Reminders " +
-                "BEGIN " +
-                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
-                "END");
-        db.execSQL("CREATE TRIGGER reminders_insert INSERT ON Reminders " +
-                "BEGIN " +
-                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=new.event_id;" +
-                "END");
-        db.execSQL("CREATE TRIGGER reminders_delete DELETE ON Reminders " +
-                "BEGIN " +
-                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
-                "END");
-        // Triggers to set the _sync_dirty flag when an extended property is changed,
-        // inserted or deleted
-        db.execSQL("CREATE TRIGGER extended_properties_update UPDATE ON ExtendedProperties " +
-                "BEGIN " +
-                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
-                "END");
-        db.execSQL("CREATE TRIGGER extended_properties_insert UPDATE ON ExtendedProperties " +
-                "BEGIN " +
-                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=new.event_id;" +
-                "END");
-        db.execSQL("CREATE TRIGGER extended_properties_delete UPDATE ON ExtendedProperties " +
-                "BEGIN " +
-                "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
-                "END");
+        createEventsView(db);
 
         ContentResolver.requestSync(null /* all accounts */,
                 ContactsContract.AUTHORITY, new Bundle());
@@ -630,7 +569,6 @@ import com.android.internal.content.SyncStateContentProviderHelper;
         db.execSQL("DROP TABLE IF EXISTS Calendars;");
         db.execSQL("DROP TABLE IF EXISTS Events;");
         db.execSQL("DROP TABLE IF EXISTS EventsRawTimes;");
-        db.execSQL("DROP TABLE IF EXISTS DeletedEvents;");
         db.execSQL("DROP TABLE IF EXISTS Instances;");
         db.execSQL("DROP TABLE IF EXISTS CalendarMetaData;");
         db.execSQL("DROP TABLE IF EXISTS BusyBits;");
@@ -654,12 +592,16 @@ import com.android.internal.content.SyncStateContentProviderHelper;
      * Schedule a calendar sync for the account.
      * @param account the account for which to schedule a sync
      * @param uploadChangesOnly if set, specify that the sync should only send
-     *   up local changes
-     * @param url the url feed for the calendar to sync (may be null)
+     *   up local changes.  This is typically used for a local sync, a user override of
+     *   too many deletions, or a sync after a calendar is unselected.
+     * @param url the url feed for the calendar to sync (may be null, in which case a poll of
+     *   all feeds is done.)
      */
     void scheduleSync(Account account, boolean uploadChangesOnly, String url) {
         Bundle extras = new Bundle();
-        extras.putBoolean(ContentResolver.SYNC_EXTRAS_UPLOAD, uploadChangesOnly);
+        if (uploadChangesOnly) {
+            extras.putBoolean(ContentResolver.SYNC_EXTRAS_UPLOAD, uploadChangesOnly);
+        }
         if (url != null) {
             extras.putString("feed", url);
             extras.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
@@ -673,7 +615,6 @@ import com.android.internal.content.SyncStateContentProviderHelper;
         db.execSQL("DELETE FROM Calendars;");
         db.execSQL("DELETE FROM Events;");
         db.execSQL("DELETE FROM EventsRawTimes;");
-        db.execSQL("DELETE FROM DeletedEvents;");
         db.execSQL("DELETE FROM Instances;");
         db.execSQL("DELETE FROM CalendarMetaData;");
         db.execSQL("DELETE FROM BusyBits;");
@@ -681,5 +622,64 @@ import com.android.internal.content.SyncStateContentProviderHelper;
         db.execSQL("DELETE FROM Reminders;");
         db.execSQL("DELETE FROM CalendarAlerts;");
         db.execSQL("DELETE FROM ExtendedProperties;");
+    }
+
+    public interface Views {
+      public static final String EVENTS = "view_events";
+    }
+
+    public interface Tables {
+      public static final String EVENTS = "Events";
+      public static final String CALENDARS = "Calendars";
+    }
+
+    private static void createEventsView(SQLiteDatabase db) {
+        db.execSQL("DROP VIEW IF EXISTS " + Views.EVENTS + ";");
+        String eventsSelect = "SELECT "
+                + Tables.EVENTS + "." + Calendar.Events._ID + " AS " + Calendar.Events._ID + ","
+                + Calendar.Events.HTML_URI + ","
+                + Calendar.Events.TITLE + ","
+                + Calendar.Events.DESCRIPTION + ","
+                + Calendar.Events.EVENT_LOCATION + ","
+                + Calendar.Events.STATUS + ","
+                + Calendar.Events.SELF_ATTENDEE_STATUS + ","
+                + Calendar.Events.COMMENTS_URI + ","
+                + Calendar.Events.DTSTART + ","
+                + Calendar.Events.DTEND + ","
+                + Calendar.Events.DURATION + ","
+                + Calendar.Events.EVENT_TIMEZONE + ","
+                + Calendar.Events.ALL_DAY + ","
+                + Calendar.Events.VISIBILITY + ","
+                + Calendar.Events.TRANSPARENCY + ","
+                + Calendar.Events.HAS_ALARM + ","
+                + Calendar.Events.HAS_EXTENDED_PROPERTIES + ","
+                + Calendar.Events.RRULE + ","
+                + Calendar.Events.RDATE + ","
+                + Calendar.Events.EXRULE + ","
+                + Calendar.Events.EXDATE + ","
+                + Calendar.Events.ORIGINAL_EVENT + ","
+                + Calendar.Events.ORIGINAL_INSTANCE_TIME + ","
+                + Calendar.Events.ORIGINAL_ALL_DAY + ","
+                + Calendar.Events.LAST_DATE + ","
+                + Calendar.Events.HAS_ATTENDEE_DATA + ","
+                + Calendar.Events.CALENDAR_ID + ","
+                + Calendar.Events.GUESTS_CAN_INVITE_OTHERS + ","
+                + Calendar.Events.GUESTS_CAN_MODIFY + ","
+                + Calendar.Events.GUESTS_CAN_SEE_GUESTS + ","
+                + Calendar.Events.ORGANIZER + ","
+                + Calendar.Events.DELETED + ","
+                + Tables.EVENTS + "." + Calendar.Events._SYNC_ID +
+                " AS " + Calendar.Events._SYNC_ID + ","
+                + Tables.EVENTS + "." + Calendar.Events._SYNC_VERSION
+                + " AS " + Calendar.Events._SYNC_VERSION + ","
+                + Tables.EVENTS + "." + Calendar.Events._SYNC_DIRTY
+                + " AS " + Calendar.Events._SYNC_DIRTY + ","
+                + Calendar.Calendars.URL
+                + " FROM " + Tables.EVENTS + " JOIN " + Tables.CALENDARS
+                + " ON (" + Tables.EVENTS + "." + Calendar.Events.CALENDAR_ID
+                + "=" + Tables.CALENDARS + "." + Calendar.Calendars._ID
+                + ")";
+
+        db.execSQL("CREATE VIEW " + Views.EVENTS + " AS " + eventsSelect);
     }
 }

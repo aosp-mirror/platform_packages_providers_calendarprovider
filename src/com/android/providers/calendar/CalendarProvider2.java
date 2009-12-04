@@ -1788,7 +1788,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                             + "contain an event_id");
                 }
                 id = mDbHelper.calendarAlertsInsert(values);
-                // Note: alerts don't set the dirty bit
+                // Note: dirty bit is not set for Alerts because it is not synced.
+                // It is generated from Reminders, which is synced.
                 break;
             case EXTENDED_PROPERTIES:
                 if (!values.containsKey(Calendar.ExtendedProperties.EVENT_ID)) {
@@ -2367,12 +2368,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 triggerAppWidgetUpdate(-1);
 
-                mDb.delete("Instances", "event_id=" + id, null);
-                mDb.delete("EventsRawTimes", "event_id=" + id, null);
-                mDb.delete("Attendees", "event_id=" + id, null);
-                mDb.delete("Reminders", "event_id=" + id, null);
-                mDb.delete("CalendarAlerts", "event_id=" + id, null);
-                mDb.delete("ExtendedProperties", "event_id=" + id, null);
+                mDb.delete("Instances", "event_id=" + id, null /* selectionArgs */);
+                mDb.delete("EventsRawTimes", "event_id=" + id, null /* selectionArgs */);
+                mDb.delete("Attendees", "event_id=" + id, null /* selectionArgs */);
+                mDb.delete("Reminders", "event_id=" + id, null /* selectionArgs */);
+                mDb.delete("CalendarAlerts", "event_id=" + id, null /* selectionArgs */);
+                mDb.delete("ExtendedProperties", "event_id=" + id, null /* selectionArgs */);
                 return result;
             }
             case ATTENDEES:
@@ -2385,11 +2386,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
             case ATTENDEES_ID:
             {
+                if (selection != null) {
+                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
+                }
                 if (callerIsSyncAdapter) {
                     long id = ContentUris.parseId(uri);
-                    return mDb.delete("Attendees", "_id=" + id, null);
+                    return mDb.delete("Attendees", "_id=" + id, null /* selectionArgs */);
                 } else {
-                    return deleteFromTable("Attendees", uri, null, null);
+                    return deleteFromTable("Attendees", uri, null /* selection */,
+                                           null /* selectionArgs */);
                 }
             }
             case REMINDERS:
@@ -2402,11 +2407,36 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
             case REMINDERS_ID:
             {
+                if (selection != null) {
+                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
+                }
                 if (callerIsSyncAdapter) {
                     long id = ContentUris.parseId(uri);
-                    return mDb.delete("Reminders", "_id=" + id, null);
+                    return mDb.delete("Reminders", "_id=" + id, null /* selectionArgs */);
                 } else {
-                    return deleteFromTable("Reminders", uri, null, null);
+                    return deleteFromTable("Reminders", uri, null /* selection */,
+                                           null /* selectionArgs */);
+                }
+            }
+            case EXTENDED_PROPERTIES:
+            {
+                if (callerIsSyncAdapter) {
+                    return mDb.delete("ExtendedProperties", selection, selectionArgs);
+                } else {
+                    return deleteFromTable("ExtendedProperties", uri, selection, selectionArgs);
+                }
+            }
+            case EXTENDED_PROPERTIES_ID:
+            {
+                if (selection != null) {
+                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
+                }
+                if (callerIsSyncAdapter) {
+                    long id = ContentUris.parseId(uri);
+                    return mDb.delete("ExtendedProperties", "_id=" + id, null /* selectionArgs */);
+                } else {
+                    return deleteFromTable("ExtendedProperties", uri, null /* selection */,
+                                           null /* selectionArgs */);
                 }
             }
             case CALENDAR_ALERTS:
@@ -2419,9 +2449,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
             case CALENDAR_ALERTS_ID:
             {
-                // Note: Alerts don't set the dirty bit
+                if (selection != null) {
+                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
+                }
+                // Note: dirty bit is not set for Alerts because it is not synced.
+                // It is generated from Reminders, which is synced.
                 long id = ContentUris.parseId(uri);
-                return mDb.delete("CalendarAlerts", "_id=" + id, null);
+                return mDb.delete("CalendarAlerts", "_id=" + id, null /* selectionArgs */);
             }
             case DELETED_EVENTS:
             case EVENTS:
@@ -2464,8 +2498,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             while(c.moveToNext()) {
                 long id = c.getLong(ID_INDEX);
                 long event_id = c.getLong(EVENT_ID_INDEX);
-                mDb.delete(table, "_id = " + id, null);
-                mDb.update("Events", values, "_id = " + event_id, null);
+                mDb.delete(table, "_id = " + id, null /* selectionArgs */);
+                mDb.update("Events", values, "_id = " + event_id, null /* selectionArgs */);
                 count++;
             }
         } finally {
@@ -2494,9 +2528,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             while(c.moveToNext()) {
                 long id = c.getLong(ID_INDEX);
                 long event_id = c.getLong(EVENT_ID_INDEX);
-                mDb.update(table, values, "_id = " + id, null);
-                mDb.update("Events", dirtyValues, "_id = " + event_id, null);
-                mDb.update(table, values, "_id = " + id, null);
+                mDb.update(table, values, "_id = " + id, null /* selectionArgs */);
+                mDb.update("Events", dirtyValues, "_id = " + event_id, null /* selectionArgs */);
+                mDb.update(table, values, "_id = " + id, null /* selectionArgs */);
                 count++;
             }
         } finally {
@@ -2566,13 +2600,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
             case CALENDARS_ID:
             {
+                if (selection != null) {
+                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
+                }
                 long id = ContentUris.parseId(uri);
                 Integer syncEvents = values.getAsInteger(Calendars.SYNC_EVENTS);
                 if (syncEvents != null) {
                     modifyCalendarSubscription(id, syncEvents == 1);
                 }
 
-                int result = mDb.update("Calendars", values, "_id="+ id, null);
+                int result = mDb.update("Calendars", values, "_id="+ id, null /* selectionArgs */);
                 // When we change the display status of a Calendar
                 // we need to update the busy bits.
                 if (values.containsKey(Calendars.SELECTED) || (syncEvents != null)) {
@@ -2625,7 +2662,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     return 0;
                 }
 
-                int result = mDb.update("Events", updatedValues, "_id=" + id, null);
+                int result = mDb.update("Events", updatedValues, "_id=" + id,
+                        null /* selectionArgs */);
                 if (result > 0) {
                     updateEventRawTimesLocked(id, updatedValues);
                     updateInstancesLocked(updatedValues, id, false /* not a new event */, mDb);
@@ -2642,8 +2680,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 return result;
             }
-            case ATTENDEES_ID:
-            {
+            case ATTENDEES_ID: {
+                if (selection != null) {
+                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
+                }
                 // Copy the attendee status value to the Events table.
                 updateEventAttendeeStatus(mDb, values);
 
@@ -2651,27 +2691,34 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     long id = ContentUris.parseId(uri);
                     return mDb.update("Attendees", values, "_id=" + id, null);
                 } else {
-                    return updateInTable("Attendees", values, uri, null, null);
+                    return updateInTable("Attendees", values, uri, null /* selection */,
+                            null /* selectionArgs */);
                 }
             }
-            case CALENDAR_ALERTS_ID:
-            {
-                // Note: alerts don't set the dirty bit
+            case CALENDAR_ALERTS_ID: {
+                if (selection != null) {
+                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
+                }
+                // Note: dirty bit is not set for Alerts because it is not synced.
+                // It is generated from Reminders, which is synced.
                 long id = ContentUris.parseId(uri);
-                return mDb.update("CalendarAlerts", values, "_id=" + id, null);
+                return mDb.update("CalendarAlerts", values, "_id=" + id, null /* selectionArgs */);
             }
-            case CALENDAR_ALERTS:
-            {
-                // Note: alerts don't set the dirty bit
+            case CALENDAR_ALERTS: {
+                // Note: dirty bit is not set for Alerts because it is not synced.
+                // It is generated from Reminders, which is synced.
                 return mDb.update("CalendarAlerts", values, selection, selectionArgs);
             }
-            case REMINDERS_ID:
-            {
+            case REMINDERS_ID: {
+                if (selection != null) {
+                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
+                }
                 if (callerIsSyncAdapter) {
                     long id = ContentUris.parseId(uri);
-                    count = mDb.update("Reminders", values, "_id=" + id, null);
+                    count = mDb.update("Reminders", values, "_id=" + id, null /* selectionArgs */);
                 } else {
-                    count = updateInTable("Reminders", values, uri, null, null);
+                    count = updateInTable("Reminders", values, uri, null /* selection */,
+                            null /* selectionArgs */);
                 }
 
                 // Reschedule the event alarms because the
@@ -2682,13 +2729,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 scheduleNextAlarm(false /* do not remove alarms */);
                 return count;
             }
-            case EXTENDED_PROPERTIES_ID:
-            {
+            case EXTENDED_PROPERTIES_ID: {
+                if (selection != null) {
+                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
+                }
                 if (callerIsSyncAdapter) {
                     long id = ContentUris.parseId(uri);
-                    return mDb.update("ExtendedProperties", values, "_id=" + id, null);
+                    return mDb.update("ExtendedProperties", values, "_id=" + id,
+                            null /* selectionArgs */);
                 } else {
-                    return updateInTable("ExtendedProperties", values, uri, null, null);
+                    return updateInTable("ExtendedProperties", values, uri, null /* selection */,
+                            null /* selectionArgs */);
                 }
             }
 

@@ -39,6 +39,9 @@
         <!-- TODO: Remove dependency of application on the test runner
              (android.test) library. -->
         <uses-library android:name="android.test.runner" />
+
+        <!-- NOTE: to use new calendar provider, comment out CalendarProvider
+        and CalendarSyncAdapterService, and uncomment CalendarProvider2 -->
         <provider android:name="CalendarProvider" android:authorities="calendar"
                 android:label="@string/provider_label"
                 android:multiprocess="false"
@@ -51,6 +54,14 @@
             <meta-data android:name="android.content.SyncAdapter"
                        android:resource="@xml/syncadapter" />
         </service>
+        <!--
+        <provider android:name="CalendarProvider2" android:authorities="calendar"
+                android:label="@string/provider_label"
+                android:multiprocess="false"
+                android:readPermission="android.permission.READ_CALENDAR"
+                android:writePermission="android.permission.WRITE_CALENDAR" />
+        -->
+
         <activity android:name="CalendarContentProviderTests" android:label="Calendar Content Provider">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

@@ -45,6 +45,7 @@ public class SyncCalendarTest extends CalendarSyncTestingBase {
     }
 
     public void testCreateAndDeleteNewRecurringEvent() throws Exception {
+        syncCalendar();
         int countBeforeNewEvent = getEventsCount();
         Uri insertUri = insertEvent(dailyRecurringEvent);
 

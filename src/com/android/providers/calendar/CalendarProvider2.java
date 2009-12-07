@@ -2625,14 +2625,18 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 long id = 0;
                 if (match == EVENTS_ID) {
                     id = ContentUris.parseId(uri);
-                } else if (callerIsSyncAdapter && selection != null &&
-                        selection.startsWith("_id=")) {
+                } else if (callerIsSyncAdapter) {
+                    if (selection != null && selection.startsWith("_id=")) {
                         // The ContentProviderOperation generates an _id=n string instead of
                         // adding the id to the URL, so parse that out here.
                         id = Long.parseLong(selection.substring(4));
+                    } else {
+                        // Sync adapter Events operation affects just Events table, not associated
+                        // tables.
+                        return mDb.update("Events", values, selection, selectionArgs);
+                    }
                 } else {
-                    throw new IllegalArgumentException(
-                            "When updating Event, _id must be specified");
+                    throw new IllegalArgumentException("Unknown URL " + uri);
                 }
                 if (!callerIsSyncAdapter) {
                     values.put(Events._SYNC_DIRTY, 1);

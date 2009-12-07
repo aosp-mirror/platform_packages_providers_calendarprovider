@@ -27,21 +27,17 @@ import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
-import android.content.Entity;
-import android.content.EntityIterator;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.UriMatcher;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.SQLException;
-import android.database.sqlite.SQLiteCursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
 import android.os.Debug;
 import android.os.Process;
-import android.os.RemoteException;
 import android.pim.DateException;
 import android.pim.RecurrenceSet;
 import android.provider.BaseColumns;
@@ -444,6 +440,18 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 qb.appendWhere(" AND Events._id=");
                 qb.appendWhere(uri.getPathSegments().get(1));
                 break;
+
+            case EVENT_ENTITIES:
+                qb.setTables(CalendarDatabaseHelper.Views.EVENTS);
+                qb.setProjectionMap(sEventEntitiesProjectionMap);
+                break;
+            case EVENT_ENTITIES_ID:
+                qb.setTables(CalendarDatabaseHelper.Views.EVENTS);
+                qb.setProjectionMap(sEventEntitiesProjectionMap);
+                qb.appendWhere("_id=" + uri.getPathSegments().get(1));
+                qb.appendWhere(uri.getPathSegments().get(1));
+                break;
+
             case CALENDARS:
                 qb.setTables("Calendars");
                 break;
@@ -3215,10 +3223,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final int INSTANCES_BY_DAY = 17;
     private static final int SYNCSTATE = 18;
     private static final int SYNCSTATE_ID = 19;
+    private static final int EVENT_ENTITIES = 20;
+    private static final int EVENT_ENTITIES_ID = 21;
 
     private static final UriMatcher sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
     private static final HashMap<String, String> sInstancesProjectionMap;
     private static final HashMap<String, String> sEventsProjectionMap;
+    private static final HashMap<String, String> sEventEntitiesProjectionMap;
     private static final HashMap<String, String> sAttendeesProjectionMap;
     private static final HashMap<String, String> sRemindersProjectionMap;
     private static final HashMap<String, String> sCalendarAlertsProjectionMap;
@@ -3229,6 +3240,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sUriMatcher.addURI("calendar", "instances/whenbyday/*/*", INSTANCES_BY_DAY);
         sUriMatcher.addURI("calendar", "events", EVENTS);
         sUriMatcher.addURI("calendar", "events/#", EVENTS_ID);
+        sUriMatcher.addURI("calendar", "event_entities", EVENT_ENTITIES);
+        sUriMatcher.addURI("calendar", "event_entities/#", EVENT_ENTITIES_ID);
         sUriMatcher.addURI("calendar", "calendars", CALENDARS);
         sUriMatcher.addURI("calendar", "calendars/#", CALENDARS_ID);
         sUriMatcher.addURI("calendar", "deleted_events", DELETED_EVENTS);
@@ -3303,6 +3316,44 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Events._SYNC_ACCOUNT_TYPE,
                 "Events._sync_account_type AS _sync_account_type");
 
+        sEventEntitiesProjectionMap = Maps.newHashMap();
+        sEventEntitiesProjectionMap.put(Events.HTML_URI, "htmlUri");
+        sEventEntitiesProjectionMap.put(Events.TITLE, "title");
+        sEventEntitiesProjectionMap.put(Events.DESCRIPTION, "description");
+        sEventEntitiesProjectionMap.put(Events.EVENT_LOCATION, "eventLocation");
+        sEventEntitiesProjectionMap.put(Events.STATUS, "eventStatus");
+        sEventEntitiesProjectionMap.put(Events.SELF_ATTENDEE_STATUS, "selfAttendeeStatus");
+        sEventEntitiesProjectionMap.put(Events.COMMENTS_URI, "commentsUri");
+        sEventEntitiesProjectionMap.put(Events.DTSTART, "dtstart");
+        sEventEntitiesProjectionMap.put(Events.DTEND, "dtend");
+        sEventEntitiesProjectionMap.put(Events.DURATION, "duration");
+        sEventEntitiesProjectionMap.put(Events.EVENT_TIMEZONE, "eventTimezone");
+        sEventEntitiesProjectionMap.put(Events.ALL_DAY, "allDay");
+        sEventEntitiesProjectionMap.put(Events.VISIBILITY, "visibility");
+        sEventEntitiesProjectionMap.put(Events.TRANSPARENCY, "transparency");
+        sEventEntitiesProjectionMap.put(Events.HAS_ALARM, "hasAlarm");
+        sEventEntitiesProjectionMap.put(Events.HAS_EXTENDED_PROPERTIES, "hasExtendedProperties");
+        sEventEntitiesProjectionMap.put(Events.RRULE, "rrule");
+        sEventEntitiesProjectionMap.put(Events.RDATE, "rdate");
+        sEventEntitiesProjectionMap.put(Events.EXRULE, "exrule");
+        sEventEntitiesProjectionMap.put(Events.EXDATE, "exdate");
+        sEventEntitiesProjectionMap.put(Events.ORIGINAL_EVENT, "originalEvent");
+        sEventEntitiesProjectionMap.put(Events.ORIGINAL_INSTANCE_TIME, "originalInstanceTime");
+        sEventEntitiesProjectionMap.put(Events.ORIGINAL_ALL_DAY, "originalAllDay");
+        sEventEntitiesProjectionMap.put(Events.LAST_DATE, "lastDate");
+        sEventEntitiesProjectionMap.put(Events.HAS_ATTENDEE_DATA, "hasAttendeeData");
+        sEventEntitiesProjectionMap.put(Events.CALENDAR_ID, "calendar_id");
+        sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_INVITE_OTHERS, "guestsCanInviteOthers");
+        sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_MODIFY, "guestsCanModify");
+        sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_SEE_GUESTS, "guestsCanSeeGuests");
+        sEventEntitiesProjectionMap.put(Events.ORGANIZER, "organizer");
+        sEventEntitiesProjectionMap.put(Events.DELETED, "deleted");
+        sEventEntitiesProjectionMap.put(Events._ID, Events._ID);
+        sEventEntitiesProjectionMap.put(Events._SYNC_ID, Events._SYNC_ID);
+        sEventEntitiesProjectionMap.put(Events._SYNC_VERSION, Events._SYNC_VERSION);
+        sEventEntitiesProjectionMap.put(Events._SYNC_DIRTY, Events._SYNC_DIRTY);
+        sEventEntitiesProjectionMap.put(Calendars.URL, "url");
+
         // Instances columns
         sInstancesProjectionMap.put(Instances.BEGIN, "begin");
         sInstancesProjectionMap.put(Instances.END, "end");
@@ -3342,296 +3393,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sCalendarAlertsProjectionMap.put(CalendarAlerts.ALARM_TIME, "alarmTime");
         sCalendarAlertsProjectionMap.put(CalendarAlerts.STATE, "state");
         sCalendarAlertsProjectionMap.put(CalendarAlerts.MINUTES, "minutes");
-    }
-
-    /**
-     * An implementation of EntityIterator that builds the Entity for a calendar event.
-     */
-    private static class CalendarEntityIterator implements EntityIterator {
-        private final Cursor mEntityCursor;
-        private volatile boolean mIsClosed;
-        private final SQLiteDatabase mDb;
-
-        private static final String[] EVENTS_PROJECTION = new String[]{
-                Calendar.Events._ID,
-                Calendar.Events.HTML_URI,
-                Calendar.Events.TITLE,
-                Calendar.Events.DESCRIPTION,
-                Calendar.Events.EVENT_LOCATION,
-                Calendar.Events.STATUS,
-                Calendar.Events.SELF_ATTENDEE_STATUS,
-                Calendar.Events.COMMENTS_URI,
-                Calendar.Events.DTSTART,
-                Calendar.Events.DTEND,
-                Calendar.Events.DURATION,
-                Calendar.Events.EVENT_TIMEZONE,
-                Calendar.Events.ALL_DAY,
-                Calendar.Events.VISIBILITY,
-                Calendar.Events.TRANSPARENCY,
-                Calendar.Events.HAS_ALARM,
-                Calendar.Events.HAS_EXTENDED_PROPERTIES,
-                Calendar.Events.RRULE,
-                Calendar.Events.RDATE,
-                Calendar.Events.EXRULE,
-                Calendar.Events.EXDATE,
-                Calendar.Events.ORIGINAL_EVENT,
-                Calendar.Events.ORIGINAL_INSTANCE_TIME,
-                Calendar.Events.ORIGINAL_ALL_DAY,
-                Calendar.Events.LAST_DATE,
-                Calendar.Events.HAS_ATTENDEE_DATA,
-                Calendar.Events.CALENDAR_ID,
-                Calendar.Events.GUESTS_CAN_INVITE_OTHERS,
-                Calendar.Events.GUESTS_CAN_MODIFY,
-                Calendar.Events.GUESTS_CAN_SEE_GUESTS,
-                Calendar.Events.ORGANIZER,
-                Calendar.Events.DELETED,
-                Calendar.Events._SYNC_ID,
-                Calendar.Events._SYNC_VERSION,
-                Calendar.Calendars.URL,
-        };
-        private static final int COLUMN_ID = 0;
-        private static final int COLUMN_HTML_URI = 1;
-        private static final int COLUMN_TITLE = 2;
-        private static final int COLUMN_DESCRIPTION = 3;
-        private static final int COLUMN_EVENT_LOCATION = 4;
-        private static final int COLUMN_STATUS = 5;
-        private static final int COLUMN_SELF_ATTENDEE_STATUS = 6;
-        private static final int COLUMN_COMMENTS_URI = 7;
-        private static final int COLUMN_DTSTART = 8;
-        private static final int COLUMN_DTEND = 9;
-        private static final int COLUMN_DURATION = 10;
-        private static final int COLUMN_EVENT_TIMEZONE = 11;
-        private static final int COLUMN_ALL_DAY = 12;
-        private static final int COLUMN_VISIBILITY = 13;
-        private static final int COLUMN_TRANSPARENCY = 14;
-        private static final int COLUMN_HAS_ALARM = 15;
-        private static final int COLUMN_HAS_EXTENDED_PROPERTIES = 16;
-        private static final int COLUMN_RRULE = 17;
-        private static final int COLUMN_RDATE = 18;
-        private static final int COLUMN_EXRULE = 19;
-        private static final int COLUMN_EXDATE = 20;
-        private static final int COLUMN_ORIGINAL_EVENT = 21;
-        private static final int COLUMN_ORIGINAL_INSTANCE_TIME = 22;
-        private static final int COLUMN_ORIGINAL_ALL_DAY = 23;
-        private static final int COLUMN_LAST_DATE = 24;
-        private static final int COLUMN_HAS_ATTENDEE_DATA = 25;
-        private static final int COLUMN_CALENDAR_ID = 26;
-        private static final int COLUMN_GUESTS_CAN_INVITE_OTHERS = 27;
-        private static final int COLUMN_GUESTS_CAN_MODIFY = 28;
-        private static final int COLUMN_GUESTS_CAN_SEE_GUESTS = 29;
-        private static final int COLUMN_ORGANIZER = 30;
-        private static final int COLUMN_DELETED = 31;
-        private static final int COLUMN_SYNC_ID = 32;
-        private static final int COLUMN_SYNC_VERSION = 33;
-        private static final int COLUMN_CALENDAR_URL = 34;
-
-        private static final String[] REMINDERS_PROJECTION = new String[] {
-                Calendar.Reminders.MINUTES,
-                Calendar.Reminders.METHOD,
-        };
-        private static final int COLUMN_MINUTES = 0;
-        private static final int COLUMN_METHOD = 1;
-
-        private static final String[] ATTENDEES_PROJECTION = new String[] {
-                Calendar.Attendees.ATTENDEE_NAME,
-                Calendar.Attendees.ATTENDEE_EMAIL,
-                Calendar.Attendees.ATTENDEE_RELATIONSHIP,
-                Calendar.Attendees.ATTENDEE_TYPE,
-                Calendar.Attendees.ATTENDEE_STATUS,
-        };
-        private static final int COLUMN_ATTENDEE_NAME = 0;
-        private static final int COLUMN_ATTENDEE_EMAIL = 1;
-        private static final int COLUMN_ATTENDEE_RELATIONSHIP = 2;
-        private static final int COLUMN_ATTENDEE_TYPE = 3;
-        private static final int COLUMN_ATTENDEE_STATUS = 4;
-        private static final String[] EXTENDED_PROJECTION = new String[] {
-                Calendar.ExtendedProperties.NAME,
-                Calendar.ExtendedProperties.VALUE,
-        };
-        private static final int COLUMN_NAME = 0;
-        private static final int COLUMN_VALUE = 1;
-
-        public CalendarEntityIterator(CalendarProvider2 provider, String eventIdString, Uri uri,
-                String selection, String[] selectionArgs, String sortOrder) {
-            mIsClosed = false;
-            mDb = provider.mDbHelper.getReadableDatabase();
-            final SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
-            qb.setTables(CalendarDatabaseHelper.Views.EVENTS);
-            if (eventIdString != null) {
-                qb.appendWhere("_id=" + eventIdString);
-            }
-            mEntityCursor = qb.query(mDb, EVENTS_PROJECTION, selection, selectionArgs,
-                    null /* groupBy */, null /* having */, sortOrder);
-            mEntityCursor.moveToFirst();
-        }
-
-        public void close() {
-            if (mIsClosed) {
-                throw new IllegalStateException("closing when already closed");
-            }
-            mIsClosed = true;
-            mEntityCursor.close();
-        }
-
-        public boolean hasNext() throws RemoteException {
-
-            if (mIsClosed) {
-                throw new IllegalStateException("calling hasNext() when the iterator is closed");
-            }
-
-            return !mEntityCursor.isAfterLast();
-        }
-
-        public void reset() throws RemoteException {
-            if (mIsClosed) {
-                throw new IllegalStateException("calling next() when the iterator is closed");
-            }
-            mEntityCursor.moveToFirst();
-        }
-
-        public Entity next() throws RemoteException {
-            if (mIsClosed) {
-                throw new IllegalStateException("calling next() when the iterator is closed");
-            }
-            if (!hasNext()) {
-                throw new IllegalStateException("you may only call next() if hasNext() is true");
-            }
-
-            final SQLiteCursor c = (SQLiteCursor) mEntityCursor;
-            final long eventId = c.getLong(COLUMN_ID);
-
-            // we expect the cursor is already at the row we need to read from
-            ContentValues entityValues = new ContentValues();
-            entityValues.put(Calendar.Events._ID, eventId);
-            entityValues.put(Calendar.Events.CALENDAR_ID, c.getInt(COLUMN_CALENDAR_ID));
-            entityValues.put(Calendar.Events.HTML_URI, c.getString(COLUMN_HTML_URI));
-            entityValues.put(Calendar.Events.TITLE, c.getString(COLUMN_TITLE));
-            entityValues.put(Calendar.Events.DESCRIPTION, c.getString(COLUMN_DESCRIPTION));
-            entityValues.put(Calendar.Events.EVENT_LOCATION, c.getString(COLUMN_EVENT_LOCATION));
-            entityValues.put(Calendar.Events.STATUS, c.getInt(COLUMN_STATUS));
-            entityValues.put(Calendar.Events.SELF_ATTENDEE_STATUS,
-                    c.getInt(COLUMN_SELF_ATTENDEE_STATUS));
-            entityValues.put(Calendar.Events.COMMENTS_URI, c.getString(COLUMN_COMMENTS_URI));
-            entityValues.put(Calendar.Events.DTSTART, c.getLong(COLUMN_DTSTART));
-            entityValues.put(Calendar.Events.DTEND, c.getLong(COLUMN_DTEND));
-            entityValues.put(Calendar.Events.DURATION, c.getString(COLUMN_DURATION));
-            entityValues.put(Calendar.Events.EVENT_TIMEZONE, c.getString(COLUMN_EVENT_TIMEZONE));
-            entityValues.put(Calendar.Events.ALL_DAY, c.getString(COLUMN_ALL_DAY));
-            entityValues.put(Calendar.Events.VISIBILITY, c.getInt(COLUMN_VISIBILITY));
-            entityValues.put(Calendar.Events.TRANSPARENCY, c.getInt(COLUMN_TRANSPARENCY));
-            entityValues.put(Calendar.Events.HAS_ALARM, c.getString(COLUMN_HAS_ALARM));
-            entityValues.put(Calendar.Events.HAS_EXTENDED_PROPERTIES,
-                    c.getString(COLUMN_HAS_EXTENDED_PROPERTIES));
-            entityValues.put(Calendar.Events.RRULE, c.getString(COLUMN_RRULE));
-            entityValues.put(Calendar.Events.RDATE, c.getString(COLUMN_RDATE));
-            entityValues.put(Calendar.Events.EXRULE, c.getString(COLUMN_EXRULE));
-            entityValues.put(Calendar.Events.EXDATE, c.getString(COLUMN_EXDATE));
-            entityValues.put(Calendar.Events.ORIGINAL_EVENT, c.getString(COLUMN_ORIGINAL_EVENT));
-            entityValues.put(Calendar.Events.ORIGINAL_INSTANCE_TIME,
-                    c.getLong(COLUMN_ORIGINAL_INSTANCE_TIME));
-            entityValues.put(Calendar.Events.ORIGINAL_ALL_DAY, c.getInt(COLUMN_ORIGINAL_ALL_DAY));
-            entityValues.put(Calendar.Events.LAST_DATE, c.getLong(COLUMN_LAST_DATE));
-            entityValues.put(Calendar.Events.HAS_ATTENDEE_DATA,
-                             c.getInt(COLUMN_HAS_ATTENDEE_DATA));
-            entityValues.put(Calendar.Events.GUESTS_CAN_INVITE_OTHERS,
-                    c.getInt(COLUMN_GUESTS_CAN_INVITE_OTHERS));
-            entityValues.put(Calendar.Events.GUESTS_CAN_MODIFY,
-                    c.getInt(COLUMN_GUESTS_CAN_MODIFY));
-            entityValues.put(Calendar.Events.GUESTS_CAN_SEE_GUESTS,
-                    c.getInt(COLUMN_GUESTS_CAN_SEE_GUESTS));
-            entityValues.put(Calendar.Events.ORGANIZER, c.getString(COLUMN_ORGANIZER));
-            entityValues.put(Calendar.Calendars.SOURCE_ID, c.getString(COLUMN_SYNC_ID));
-            entityValues.put(Calendar.Calendars._SYNC_ID, c.getString(COLUMN_SYNC_ID));
-            entityValues.put(Calendar.Events._SYNC_VERSION, c.getString(COLUMN_SYNC_VERSION));
-            entityValues.put(Calendar.Events.DELETED,
-                    c.getInt(COLUMN_DELETED));
-            entityValues.put(Calendars.URL, c.getString(COLUMN_CALENDAR_URL));
-
-            Entity entity = new Entity(entityValues);
-            Cursor cursor = null;
-            try {
-                cursor = mDb.query(sRemindersTable, REMINDERS_PROJECTION, "event_id=" + eventId,
-                        null /* selectionArgs */, null /* groupBy */,
-                        null /* having */, null /* sortOrder */);
-                while (cursor.moveToNext()) {
-                    ContentValues reminderValues = new ContentValues();
-                    reminderValues.put(Calendar.Reminders.MINUTES, cursor.getInt(COLUMN_MINUTES));
-                    reminderValues.put(Calendar.Reminders.METHOD, cursor.getInt(COLUMN_METHOD));
-                    entity.addSubValue(Calendar.Reminders.CONTENT_URI, reminderValues);
-                }
-            } finally {
-                if (cursor != null) {
-                    cursor.close();
-                }
-            }
-
-            cursor = null;
-            try {
-                cursor = mDb.query(sAttendeesTable, ATTENDEES_PROJECTION, "event_id=" + eventId,
-                        null /* selectionArgs */, null /* groupBy */,
-                        null /* having */, null /* sortOrder */);
-                while (cursor.moveToNext()) {
-                    ContentValues attendeeValues = new ContentValues();
-                    attendeeValues.put(Calendar.Attendees.ATTENDEE_NAME,
-                            cursor.getString(COLUMN_ATTENDEE_NAME));
-                    attendeeValues.put(Calendar.Attendees.ATTENDEE_EMAIL,
-                            cursor.getString(COLUMN_ATTENDEE_EMAIL));
-                    attendeeValues.put(Calendar.Attendees.ATTENDEE_RELATIONSHIP,
-                            cursor.getInt(COLUMN_ATTENDEE_RELATIONSHIP));
-                    attendeeValues.put(Calendar.Attendees.ATTENDEE_TYPE,
-                            cursor.getInt(COLUMN_ATTENDEE_TYPE));
-                    attendeeValues.put(Calendar.Attendees.ATTENDEE_STATUS,
-                            cursor.getInt(COLUMN_ATTENDEE_STATUS));
-                    entity.addSubValue(Calendar.Attendees.CONTENT_URI, attendeeValues);
-                }
-            } finally {
-                if (cursor != null) {
-                    cursor.close();
-                }
-            }
-
-            cursor = null;
-            try {
-                cursor = mDb.query(sExtendedPropertiesTable, EXTENDED_PROJECTION,
-                        "event_id=" + eventId,
-                        null /* selectionArgs */, null /* groupBy */,
-                        null /* having */, null /* sortOrder */);
-                while (cursor.moveToNext()) {
-                    ContentValues extendedValues = new ContentValues();
-                    extendedValues.put(Calendar.ExtendedProperties.NAME, c.getString(COLUMN_NAME));
-                    extendedValues.put(Calendar.ExtendedProperties.VALUE,
-                            c.getString(COLUMN_VALUE));
-                    entity.addSubValue(Calendar.ExtendedProperties.CONTENT_URI, extendedValues);
-                }
-            } finally {
-                if (cursor != null) {
-                    cursor.close();
-                }
-            }
-
-            mEntityCursor.moveToNext();
-            // add the data to the contact
-            return entity;
-        }
-    }
-
-    @Override
-    public EntityIterator queryEntities(Uri uri, String selection, String[] selectionArgs,
-            String sortOrder) {
-        final int match = sUriMatcher.match(uri);
-        switch (match) {
-            case EVENTS:
-            case EVENTS_ID:
-                String calendarId = null;
-                if (match == EVENTS_ID) {
-                    calendarId = uri.getPathSegments().get(1);
-                }
-
-                return new CalendarEntityIterator(this, calendarId,
-                        uri, selection, selectionArgs, sortOrder);
-            default:
-                throw new UnsupportedOperationException("Unknown uri: " + uri);
-        }
     }
 
     /**

@@ -28,6 +28,7 @@ import android.provider.Calendar;
 import android.provider.Calendar.BusyBits;
 import android.provider.Calendar.Calendars;
 import android.provider.Calendar.Events;
+import android.provider.Calendar.EventsEntity;
 import android.provider.Calendar.Instances;
 import android.test.ProviderTestCase2;
 import android.test.mock.MockContentResolver;
@@ -49,7 +50,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
     private MetaData mMetaData;
     private Context mContext;
     private MockContentResolver mResolver;
-    private Uri mEventsUri = Uri.parse("content://calendar/events");
+    private Uri mEventsUri = Events.CONTENT_URI;
     private int mCalendarId;
 
     protected boolean mWipe = false;
@@ -1410,7 +1411,8 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         attendee.put(Calendar.Attendees.EVENT_ID, 3);
         mResolver.insert(Calendar.Attendees.CONTENT_URI, attendee);
 
-        EntityIterator ei = mResolver.queryEntities(mEventsUri, null, null, null);
+        EntityIterator ei = EventsEntity.newEntityIterator(
+                mResolver.query(EventsEntity.CONTENT_URI, null, null, null, null), mResolver);
         int count = 0;
         try {
             while (ei.hasNext()) {
@@ -1439,9 +1441,10 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
             ei.close();
         }
 
-        ei = null;
+        ei = EventsEntity.newEntityIterator(
+                    mResolver.query(EventsEntity.CONTENT_URI, null, "_id = 3", null, null),
+                mResolver);
         try {
-            ei = mResolver.queryEntities(mEventsUri, "_id = 3", null, null);
             count = 0;
             while (ei.hasNext()) {
                 Entity entity = ei.next();
@@ -1449,9 +1452,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
             }
             assertEquals(1, count);
         } finally {
-            if (ei != null) {
-                ei.close();
-            }
+            ei.close();
         }
     }
 

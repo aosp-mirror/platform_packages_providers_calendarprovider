@@ -88,6 +88,10 @@ import java.net.URLDecoder;
  * interface, syncs that calendar.
  */
 public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
+    // these are here temporarly until this file is replaced by the one in vendor/google
+    private final String GOOGLE_CALENDAR_SYNC_WINDOW_UPDATE_DAYS =
+            "google_calendar_sync_window_update_days";
+    private final String GOOGLE_CALENDAR_SYNC_WINDOW_DAYS = "google_calendar_sync_window_days";
 
     /* package */ static final String USER_AGENT_APP_VERSION = "Android-GData-Calendar/1.2";
 
@@ -1264,11 +1268,11 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
     private long getSyncWindowEnd() {
         // How many days in the future the window extends (e.g. 1 year).  0 for no sliding window.
         long window = Settings.Gservices.getLong(getContext().getContentResolver(),
-                Settings.Gservices.GOOGLE_CALENDAR_SYNC_WINDOW_DAYS, 0);
+                GOOGLE_CALENDAR_SYNC_WINDOW_DAYS, 0);
         if (window > 0) {
             // How often to advance the window (e.g. 30 days)
             long advanceInterval = Settings.Gservices.getLong(getContext().getContentResolver(),
-                    Settings.Gservices.GOOGLE_CALENDAR_SYNC_WINDOW_UPDATE_DAYS, 30) * DAY_IN_MS;
+                    GOOGLE_CALENDAR_SYNC_WINDOW_UPDATE_DAYS, 30) * DAY_IN_MS;
             if (advanceInterval > 0) {
                 // endOfWindow is the proposed end of the sliding window (e.g. 1 year out)
                 long endOfWindow = System.currentTimeMillis() + window * DAY_IN_MS;

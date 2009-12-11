@@ -26,9 +26,8 @@ import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
-import android.content.SyncContext;
 import android.content.SyncResult;
-import android.content.SyncableContentProvider;
+import com.google.android.gsf.SyncableContentProvider;
 import android.database.Cursor;
 import android.database.CursorJoiner;
 import android.graphics.Color;
@@ -190,7 +189,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
     }
 
     @Override
-    protected String cursorToEntry(SyncContext context, Cursor c, Entry entry,
+    protected String cursorToEntry(Cursor c, Entry entry,
             Object info) throws ParseException {
         EventEntry event = (EventEntry) entry;
         SyncInfo syncInfo = (SyncInfo) info;
@@ -580,7 +579,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
     }
 
     @Override
-    protected void deletedCursorToEntry(SyncContext context, Cursor c, Entry entry) {
+    protected void deletedCursorToEntry(Cursor c, Entry entry) {
         EventEntry event = (EventEntry) entry;
         event.setId(c.getString(c.getColumnIndex(Events._SYNC_ID)));
         event.setEditUri(c.getString(c.getColumnIndex(Events._SYNC_VERSION)));
@@ -599,12 +598,12 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
     }
 
     @Override
-    public void onSyncStarting(SyncContext context, Account account, boolean manualSync,
+    public void onSyncStarting(Account account, boolean manualSync,
             SyncResult result) {
         mContentResolver = getContext().getContentResolver();
         mServerDiffs = 0;
         mRefresh = 0;
-        super.onSyncStarting(context, account, manualSync, result);
+        super.onSyncStarting(account, manualSync, result);
     }
 
     public boolean getIsSyncable(Account account)
@@ -1167,7 +1166,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
     }
 
     @Override
-    public void getServerDiffs(SyncContext context,
+    public void getServerDiffs(
             SyncData baseSyncData, SyncableContentProvider tempProvider,
             Bundle extras, Object baseSyncInfo, SyncResult syncResult) {
         final ContentResolver cr = getContext().getContentResolver();
@@ -1210,7 +1209,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                     ContentResolver.requestSync(null /* account */, Calendar.AUTHORITY, syncExtras);
                 }
             }
-            getServerDiffsForFeed(context, baseSyncData, tempProvider, feedUrl,
+            getServerDiffsForFeed(baseSyncData, tempProvider, feedUrl,
                     baseSyncInfo, syncResult);
             return;
         }
@@ -1222,7 +1221,6 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         // up to date.
 
         mRefresh++;
-        context.setStatusText("Fetching list of calendars");
         fetchCalendarsFromServer();
 
         if (syncingMetafeedOnly) {
@@ -1288,7 +1286,7 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
         return Long.MAX_VALUE;
     }
 
-    private void getServerDiffsForFeed(SyncContext context, SyncData baseSyncData,
+    private void getServerDiffsForFeed(SyncData baseSyncData,
             SyncableContentProvider tempProvider,
             String feed, Object baseSyncInfo, SyncResult syncResult) {
         final SyncInfo syncInfo = (SyncInfo) baseSyncInfo;
@@ -1327,11 +1325,9 @@ public final class CalendarSyncAdapter extends AbstractGDataSyncAdapter {
                 return;
             }
 
-            context.setStatusText("Syncing " + name);
-
             // call the superclass implementation to sync the current
             // calendar from the server.
-            getServerDiffsImpl(context, tempProvider, getFeedEntryClass(), feedUrl, syncInfo,
+            getServerDiffsImpl(tempProvider, getFeedEntryClass(), feedUrl, syncInfo,
                     maxResults, syncData, syncResult);
             if (mSyncCanceled || syncResult.hasError()) {
                 return;

@@ -431,7 +431,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case EVENTS:
                 qb.setTables("Events, Calendars");
                 qb.setProjectionMap(sEventsProjectionMap);
-                qb.appendWhere("Events.calendar_id=Calendars._id");
+                qb.appendWhere("Events.calendar_id=Calendars._id AND ");
+                appendAccountFromParameter(qb, uri);
                 break;
             case EVENTS_ID:
                 qb.setTables("Events, Calendars");
@@ -444,6 +445,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case EVENT_ENTITIES:
                 qb.setTables(CalendarDatabaseHelper.Views.EVENTS);
                 qb.setProjectionMap(sEventEntitiesProjectionMap);
+                appendAccountFromParameter(qb, uri);
                 break;
             case EVENT_ENTITIES_ID:
                 qb.setTables(CalendarDatabaseHelper.Views.EVENTS);
@@ -454,6 +456,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
             case CALENDARS:
                 qb.setTables("Calendars");
+                appendAccountFromParameter(qb, uri);
                 break;
             case CALENDARS_ID:
                 qb.setTables("Calendars");
@@ -2479,6 +2482,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 selection = selectionSb.toString();
                 // fall through to CALENDARS for the actual delete
             case CALENDARS:
+                selection = appendAccountToSelection(uri, selection);
                 return deleteMatchingCalendars(selection); // TODO: handle in sync adapter
             case INSTANCES:
             case INSTANCES_BY_DAY:
@@ -2760,9 +2764,22 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     }
 
+    private void appendAccountFromParameter(SQLiteQueryBuilder qb, Uri uri) {
+        final String accountName = getQueryParameter(uri, Calendar.EventsEntity.ACCOUNT_NAME);
+        final String accountType = getQueryParameter(uri, Calendar.EventsEntity.ACCOUNT_TYPE);
+        if (!TextUtils.isEmpty(accountName)) {
+            qb.appendWhere(Calendar.Calendars._SYNC_ACCOUNT + "="
+                    + DatabaseUtils.sqlEscapeString(accountName) + " AND "
+                    + Calendar.Calendars._SYNC_ACCOUNT_TYPE + "="
+                    + DatabaseUtils.sqlEscapeString(accountType));
+        } else {
+            qb.appendWhere("1"); // I.e. always true
+        }
+    }
+
     private String appendAccountToSelection(Uri uri, String selection) {
-        final String accountName = uri.getQueryParameter(Calendar.Calendars._SYNC_ACCOUNT);
-        final String accountType = uri.getQueryParameter(Calendar.Calendars._SYNC_ACCOUNT_TYPE);
+        final String accountName = getQueryParameter(uri, Calendar.EventsEntity.ACCOUNT_NAME);
+        final String accountType = getQueryParameter(uri, Calendar.EventsEntity.ACCOUNT_TYPE);
         if (!TextUtils.isEmpty(accountName)) {
             StringBuilder selectionSb = new StringBuilder(Calendar.Calendars._SYNC_ACCOUNT + "="
                     + DatabaseUtils.sqlEscapeString(accountName) + " AND "
@@ -3454,11 +3471,54 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     }
 
-    private static boolean readBooleanQueryParameter(Uri uri, String name, boolean defaultValue) {
-        final String flag = uri.getQueryParameter(name);
+    /* package */ static boolean readBooleanQueryParameter(Uri uri, String name,
+            boolean defaultValue) {
+        final String flag = getQueryParameter(uri, name);
         return flag == null
                 ? defaultValue
                 : (!"false".equals(flag.toLowerCase()) && !"0".equals(flag.toLowerCase()));
     }
 
+    // Duplicated from ContactsProvider2.  TODO: a utility class for shared code
+    /**
+     * A fast re-implementation of {@link Uri#getQueryParameter}
+     */
+    /* package */ static String getQueryParameter(Uri uri, String parameter) {
+        String query = uri.getEncodedQuery();
+        if (query == null) {
+            return null;
+        }
+
+        int queryLength = query.length();
+        int parameterLength = parameter.length();
+
+        String value;
+        int index = 0;
+        while (true) {
+            index = query.indexOf(parameter, index);
+            if (index == -1) {
+                return null;
+            }
+
+            index += parameterLength;
+
+            if (queryLength == index) {
+                return null;
+            }
+
+            if (query.charAt(index) == '=') {
+                index++;
+                break;
+            }
+        }
+
+        int ampIndex = query.indexOf('&', index);
+        if (ampIndex == -1) {
+            value = query.substring(index);
+        } else {
+            value = query.substring(index, ampIndex);
+        }
+
+        return Uri.decode(value);
+    }
 }

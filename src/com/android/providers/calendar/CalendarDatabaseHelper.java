@@ -674,6 +674,10 @@ import com.android.internal.content.SyncStateContentProviderHelper;
                 + " AS " + Calendar.Events._SYNC_VERSION + ","
                 + Tables.EVENTS + "." + Calendar.Events._SYNC_DIRTY
                 + " AS " + Calendar.Events._SYNC_DIRTY + ","
+                + Tables.EVENTS + "." + Calendar.Events._SYNC_ACCOUNT
+                + " AS " + Calendar.Events._SYNC_ACCOUNT + ","
+                + Tables.EVENTS + "." + Calendar.Events._SYNC_ACCOUNT_TYPE
+                + " AS " + Calendar.Events._SYNC_ACCOUNT_TYPE + ","
                 + Calendar.Calendars.URL
                 + " FROM " + Tables.EVENTS + " JOIN " + Tables.CALENDARS
                 + " ON (" + Tables.EVENTS + "." + Calendar.Events.CALENDAR_ID

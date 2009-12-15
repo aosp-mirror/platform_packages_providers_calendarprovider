@@ -1,11 +1,12 @@
 package com.android.providers.calendar;
 
+import com.google.android.gsf.SyncableContentProvider;
+
 import android.app.Service;
 import android.os.IBinder;
 import android.content.Intent;
 import android.content.ContentProviderClient;
 import android.content.ContentProvider;
-import android.content.SyncableContentProvider;
 import android.provider.Calendar;
 
 public class CalendarSyncAdapterService extends Service {
@@ -24,6 +25,6 @@ public class CalendarSyncAdapterService extends Service {
         ContentProvider contentProvider = mContentProviderClient.getLocalContentProvider();
         if (contentProvider == null) throw new IllegalStateException();
         SyncableContentProvider syncableContentProvider = (SyncableContentProvider)contentProvider;
-        return syncableContentProvider.getTempProviderSyncAdapter().getISyncAdapter().asBinder();
+        return syncableContentProvider.getTempProviderSyncAdapter().getSyncAdapterBinder();
     }
 }

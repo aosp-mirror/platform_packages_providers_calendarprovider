@@ -25,8 +25,8 @@ import android.accounts.OperationCanceledException;
 import android.accounts.AuthenticatorException;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
-import android.content.AbstractSyncableContentProvider;
-import android.content.AbstractTableMerger;
+import com.google.android.gsf.AbstractSyncableContentProvider;
+import com.google.android.gsf.AbstractTableMerger;
 import android.content.BroadcastReceiver;
 import android.content.ContentProvider;
 import android.content.ContentProviderOperation;
@@ -35,24 +35,19 @@ import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
-import android.content.Entity;
-import android.content.EntityIterator;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.OperationApplicationException;
-import android.content.SyncContext;
 import android.content.UriMatcher;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.SQLException;
-import android.database.sqlite.SQLiteCursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Debug;
 import android.os.Process;
-import android.os.RemoteException;
 import android.pim.DateException;
 import android.pim.RecurrenceSet;
 import android.provider.Calendar;
@@ -3315,8 +3310,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     }
 
     @Override
-    public void onSyncStop(SyncContext context, boolean success) {
-        super.onSyncStop(context, success);
+    public void onSyncStop(boolean success) {
+        super.onSyncStop(success);
         if (Log.isLoggable(TAG, Log.DEBUG)) {
             Log.d(TAG, "onSyncStop() success: " + success);
         }

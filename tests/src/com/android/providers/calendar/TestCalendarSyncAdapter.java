@@ -18,10 +18,11 @@
 package com.android.providers.calendar;
 
 import android.content.ContentValues;
-import android.content.SyncableContentProvider;
-import android.content.SyncContext;
+import com.google.android.gsf.SyncableContentProvider;
 import android.content.SyncResult;
-import android.content.TempProviderSyncAdapter;
+import com.google.android.gsf.TempProviderSyncAdapter;
+
+import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
@@ -39,18 +40,18 @@ public class TestCalendarSyncAdapter extends TempProviderSyncAdapter {
     private static Uri sEventsURL = Uri.parse("content://calendar/events/");
     private static Uri sDeletedEventsURL = Uri.parse("content://calendar/deleted_events/");
 
-    public TestCalendarSyncAdapter(SyncableContentProvider provider) {
-        super(provider);
+    public TestCalendarSyncAdapter(Context context, SyncableContentProvider provider) {
+        super(context, provider);
     }
 
     @Override
-    public void onSyncStarting(SyncContext context, Account account, boolean manualSync,
+    public void onSyncStarting(Account account, boolean manualSync,
             SyncResult result)
     {
     }
 
     @Override
-    public void onSyncEnding(SyncContext context, boolean success)
+    public void onSyncEnding(boolean success)
     {
     }
     
@@ -66,7 +67,7 @@ public class TestCalendarSyncAdapter extends TempProviderSyncAdapter {
     }
 
     @Override
-    public void getServerDiffs(SyncContext context, SyncData syncData,
+    public void getServerDiffs(SyncData syncData,
             SyncableContentProvider tempProvider,
             Bundle extras, Object syncInfo, SyncResult syncResult) {
         switch(sSyncClock) {
@@ -144,7 +145,7 @@ public class TestCalendarSyncAdapter extends TempProviderSyncAdapter {
     }
 
     @Override
-    public void sendClientDiffs(SyncContext context,
+    public void sendClientDiffs(
             SyncableContentProvider clientDiffs,
             SyncableContentProvider serverDiffs, SyncResult syncResult,
             boolean dontActuallySendDeletes) {

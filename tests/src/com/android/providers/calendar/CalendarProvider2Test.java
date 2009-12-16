@@ -1002,6 +1002,10 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
     }
 
     private int insertCal(String name, String timezone) {
+        return insertCal(name, timezone, "joe@joe.com");
+    }
+
+    private int insertCal(String name, String timezone, String account) {
         ContentValues m = new ContentValues();
         m.put(Calendars.NAME, name);
         m.put(Calendars.DISPLAY_NAME, name);
@@ -1010,6 +1014,8 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         m.put(Calendars.SELECTED, 1);
         m.put(Calendars.URL, CALENDAR_URL);
         m.put(Calendars.OWNER_ACCOUNT, "joe@joe.com");
+        m.put(Calendars._SYNC_ACCOUNT,  account);
+        m.put(Calendars._SYNC_ACCOUNT_TYPE,  "com.google");
 
         Uri url = mResolver.insert(Uri.parse("content://calendar/calendars"), m);
         String id = url.getLastPathSegment();
@@ -1017,6 +1023,10 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
     }
 
     private Uri insertEvent(int calId, EventInfo event) {
+        return insertEvent(calId, event, "joe@joe.com");
+    }
+
+    private Uri insertEvent(int calId, EventInfo event, String account) {
         if (mWipe) {
             // Wipe instance table so it will be regenerated
             mMetaData.clearInstanceRange();
@@ -1026,6 +1036,8 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         m.put(Events.TITLE, event.mTitle);
         m.put(Events.DTSTART, event.mDtstart);
         m.put(Events.ALL_DAY, event.mAllDay ? 1 : 0);
+        m.put(Calendars._SYNC_ACCOUNT,  account);
+        m.put(Calendars._SYNC_ACCOUNT_TYPE,  "com.google");
 
         if (event.mRrule == null) {
             // This is a normal event
@@ -1076,7 +1088,9 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         int numRows = 0;
         while (cursor.moveToNext()) {
             long id = cursor.getLong(0);
-            Uri uri = ContentUris.withAppendedId(Events.CONTENT_URI, id);
+            // Do delete as a sync adapter so event is really deleted, not just marked
+            // as deleted.
+            Uri uri = updatedUri(ContentUris.withAppendedId(Events.CONTENT_URI, id), true);
             numRows += mResolver.delete(uri, null, null);
         }
         cursor.close();
@@ -1272,7 +1286,9 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
             }
             assertEquals(instance.mExpectedOccurrences, cursor.getCount());
             cursor.close();
-            int rows = mResolver.delete(url, null /* selection */, null /* selection args */);
+            // Delete as sync_adapter so event is really deleted.
+            int rows = mResolver.delete(updatedUri(url, true),
+                    null /* selection */, null /* selection args */);
             assertEquals(1, rows);
         }
     }
@@ -1550,6 +1566,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         Cursor cursor = mResolver.query(uri, null/* projection */, where, null /* selectionArgs */,
                 null /* sortOrder */);
         try {
+            dumpCursor(cursor);
             assertEquals("query results", wanted, cursor.getCount());
         } finally {
             cursor.close();
@@ -1706,7 +1723,11 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         testAndClearDirty(eventId, 0);
         testQueryCount(Calendar.CalendarAlerts.CONTENT_URI, "event_id=" + eventId, 0);
 
-        // Can't delete extended properties, interestingly enough, so don't try that.
+        assertEquals("delete", 1, mResolver.delete(updatedUri(extendedUri, syncAdapter),
+                null /* where */, null /* selectionArgs */));
+
+        testAndClearDirty(eventId, syncAdapter ? 0 : 1);
+        testQueryCount(Calendar.ExtendedProperties.CONTENT_URI, "event_id=" + eventId, 0);
     }
 
     /**
@@ -1722,8 +1743,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         long eventId1 = ContentUris.parseId(eventUri);
         assertEquals("delete", 1, mResolver.delete(eventUri1, null, null));
         // Calendar has one event and one deleted event
-        testQueryCount(Calendar.Events.CONTENT_URI, null, 1);
-        //testQueryCount(Calendar.Events.DELETED_CONTENT_URI, null, 1);
+        testQueryCount(Calendar.Events.CONTENT_URI, null, 2);
 
         assertEquals("delete", 1, mResolver.delete(Calendar.Calendars.CONTENT_URI,
                 "_id=" + mCalendarId, null));
@@ -1731,9 +1751,24 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         testQueryCount(Calendar.Calendars.CONTENT_URI, null, 0);
         // Event should be gone
         testQueryCount(Calendar.Events.CONTENT_URI, null, 0);
-        // Can't query deleted table so don't check
-        // This test will be relevant with the new provider
-        // testQueryCount(Calendar.Events.DELETED_CONTENT_URI, null, 1);
+    }
+
+    /**
+     * Test multiple account support.
+     */
+    public void testMultipleAccounts() throws Exception {
+        mCalendarId = insertCal("Calendar0", DEFAULT_TIMEZONE);
+        int calendarId1 = insertCal("Calendar1", DEFAULT_TIMEZONE, "user2@google.com");
+        Uri eventUri0 = insertEvent(mCalendarId, findEvent("daily0"));
+        Uri eventUri1 = insertEvent(calendarId1, findEvent("daily1"), "user2@google.com");  
+
+        testQueryCount(Calendar.Events.CONTENT_URI, null, 2);
+        Uri eventsWithAccount = Calendar.Events.CONTENT_URI.buildUpon()
+                .appendQueryParameter(Calendar.EventsEntity.ACCOUNT_NAME, "joe@joe.com")
+                .appendQueryParameter(Calendar.EventsEntity.ACCOUNT_TYPE, "com.google")
+                .build();
+        // Only one event for that account
+        testQueryCount(eventsWithAccount, null, 1);
     }
 
     /**

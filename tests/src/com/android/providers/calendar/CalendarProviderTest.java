@@ -16,7 +16,7 @@
 
 package com.android.providers.calendar;
 
-import com.android.internal.database.ArrayListCursor;
+import com.android.common.ArrayListCursor;
 
 import android.content.*;
 import android.database.Cursor;

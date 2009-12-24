@@ -62,7 +62,6 @@ import android.pim.DateException;
 import android.pim.RecurrenceSet;
 import android.provider.Calendar;
 import android.provider.Calendar.Attendees;
-import android.provider.Calendar.BusyBits;
 import android.provider.Calendar.CalendarAlerts;
 import android.provider.Calendar.Calendars;
 import android.provider.Calendar.Events;
@@ -133,24 +132,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
      * can access it.
      */
     MetaData mMetaData;
-
-    // The interval in minutes for calculating busy bits
-    private static final int BUSYBIT_INTERVAL = 60;
-
-    // A lookup table for getting a bit mask of length N, for N <= 32
-    // For example, BIT_MASKS[4] gives 0xf (which has 4 bits set to 1).
-    // We use this for computing the busy bits for events.
-    private static final int[] BIT_MASKS = {
-            0,
-            0x00000001, 0x00000003, 0x00000007, 0x0000000f,
-            0x0000001f, 0x0000003f, 0x0000007f, 0x000000ff,
-            0x000001ff, 0x000003ff, 0x000007ff, 0x00000fff,
-            0x00001fff, 0x00003fff, 0x00007fff, 0x0000ffff,
-            0x0001ffff, 0x0003ffff, 0x0007ffff, 0x000fffff,
-            0x001fffff, 0x003fffff, 0x007fffff, 0x00ffffff,
-            0x01ffffff, 0x03ffffff, 0x07ffffff, 0x0fffffff,
-            0x1fffffff, 0x3fffffff, 0x7fffffff, 0xffffffff,
-    };
 
     // To determine if a recurrence exception originally overlapped the
     // window, we need to assume a maximum duration, since we only know
@@ -265,12 +246,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     private static final int INSTANCES_INDEX_END_MINUTE = 3;
     private static final int INSTANCES_INDEX_ALL_DAY = 4;
 
-    private static final String[] sBusyBitProjection = new String[] {
-            BusyBits.DAY, BusyBits.BUSYBITS, BusyBits.ALL_DAY_COUNT };
-
-    private static final int BUSYBIT_INDEX_DAY = 0;
-    private static final int BUSYBIT_INDEX_BUSYBITS= 1;
-    private static final int BUSYBIT_INDEX_ALL_DAY_COUNT = 2;
 
     private CalendarClient mCalendarClient = null;
 
@@ -392,12 +367,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         handleInstanceQuery(qb, begin, end, new String[] { Instances._ID },
                 null /* selection */, null /* sort */, false /* searchByDayInsteadOfMillis */);
 
-        // Also pre-compute the BusyBits table for this month.
-        int startDay = Time.getJulianDay(begin, time.gmtoff);
-        int endDay = startDay + 31;
-        qb = new SQLiteQueryBuilder();
-        handleBusyBitsQuery(qb, startDay, endDay, sBusyBitProjection,
-                null /* selection */, null /* sort */);
         rescheduleMissedAlarms();
     }
 
@@ -1137,7 +1106,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 }
                 return handleInstanceQuery(qb, begin, end, projectionIn,
                         selection, sort, match == INSTANCES_BY_DAY);
-            case BUSYBITS:
+            case EVENT_DAYS:
                 int startDay;
                 int endDay;
                 try {
@@ -1152,8 +1121,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     throw new IllegalArgumentException("Cannot parse end day "
                             + url.getPathSegments().get(3));
                 }
-                return handleBusyBitsQuery(qb, startDay, endDay, projectionIn,
-                        selection, sort);
+                return handleEventDayQuery(qb, startDay, endDay, projectionIn, selection);
             case ATTENDEES:
                 qb.setTables("Attendees, Events, Calendars");
                 qb.setProjectionMap(sAttendeesProjectionMap);
@@ -1269,18 +1237,19 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         return qb.query(db, projectionIn, selection, null, null, null, sort);
     }
 
-    private Cursor handleBusyBitsQuery(SQLiteQueryBuilder qb, int startDay,
-            int endDay, String[] projectionIn,
-            String selection, String sort) {
+    private Cursor handleEventDayQuery(SQLiteQueryBuilder qb, int begin, int end,
+            String[] projection, String selection) {
         final SQLiteDatabase db = getDatabase();
-        acquireBusyBitRange(startDay, endDay);
-        qb.setTables("BusyBits");
-        qb.setProjectionMap(sBusyBitsProjectionMap);
-        qb.appendWhere("day >= ");
-        qb.appendWhere(String.valueOf(startDay));
-        qb.appendWhere(" AND day <= ");
-        qb.appendWhere(String.valueOf(endDay));
-        return qb.query(db, projectionIn, selection, null, null, null, sort);
+        qb.setTables("Instances INNER JOIN Events ON (Instances.event_id=Events._id) " +
+                "INNER JOIN Calendars ON (Events.calendar_id = Calendars._id)");
+        qb.setProjectionMap(sInstancesProjectionMap);
+        acquireInstanceRange(begin, end, true);
+        qb.appendWhere("startDay <= ");
+        qb.appendWhere(String.valueOf(end));
+        qb.appendWhere(" AND endDay >= ");
+        qb.appendWhere(String.valueOf(begin));
+        return qb.query(db, projection, selection, null /* selectionArgs */,
+                Instances.START_DAY /* groupBy */, null /* having */, null);
     }
 
     /**
@@ -1297,20 +1266,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         mDb.beginTransaction();
         try {
             acquireInstanceRangeLocked(begin, end, useMinimumExpansionWindow);
-            mDb.setTransactionSuccessful();
-        } finally {
-            mDb.endTransaction();
-        }
-    }
-
-    /**
-     * Expands the Instances table (if needed) and the BusyBits table.
-     * Acquires the database lock and calls {@link #acquireBusyBitRangeLocked}.
-     */
-    private void acquireBusyBitRange(final int startDay, final int endDay) {
-        mDb.beginTransaction();
-        try {
-            acquireBusyBitRangeLocked(startDay, endDay);
             mDb.setTransactionSuccessful();
         } finally {
             mDb.endTransaction();
@@ -1355,9 +1310,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         if (maxInstance == 0 || timezoneChanged) {
             // Empty the Instances table and expand from scratch.
             mDb.execSQL("DELETE FROM Instances;");
-            mDb.execSQL("DELETE FROM BusyBits;");
             if (Config.LOGV) {
-                Log.v(TAG, "acquireInstanceRangeLocked() deleted Instances and Busybits,"
+                Log.v(TAG, "acquireInstanceRangeLocked() deleted Instances,"
                         + " timezone changed: " + timezoneChanged);
             }
             expandInstanceRangeLocked(expandBegin, expandEnd, localTimezone);
@@ -1403,122 +1357,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         // Update the bounds on the Instances table.
         mMetaData.writeLocked(localTimezone, minInstance, maxInstance,
                 fields.minBusyBit, fields.maxBusyBit);
-    }
-
-    private void acquireBusyBitRangeLocked(int firstDay, int lastDay) {
-        if (firstDay > lastDay) {
-            throw new IllegalArgumentException("firstDay must not be greater than lastDay");
-        }
-        String localTimezone = TimeZone.getDefault().getID();
-        MetaData.Fields fields = mMetaData.getFieldsLocked();
-        String dbTimezone = fields.timezone;
-        int minBusyBit = fields.minBusyBit;
-        int maxBusyBit = fields.maxBusyBit;
-        boolean timezoneChanged = (dbTimezone == null) || !dbTimezone.equals(localTimezone);
-        if (firstDay >= minBusyBit && lastDay <= maxBusyBit && !timezoneChanged) {
-            if (Config.LOGV) {
-                Log.v(TAG, "acquireBusyBitRangeLocked() no expansion needed");
-            }
-            return;
-        }
-
-        // Avoid gaps in the BusyBit table and avoid recomputing the busy bits
-        // that are already in the table.  If the busy bit range has been cleared,
-        // don't bother checking.
-        if (maxBusyBit != 0) {
-            if (firstDay > maxBusyBit) {
-                firstDay = maxBusyBit;
-            } else if (lastDay < minBusyBit) {
-                lastDay = minBusyBit;
-            } else if (firstDay < minBusyBit && lastDay <= maxBusyBit) {
-                lastDay = minBusyBit;
-            } else if (lastDay > maxBusyBit && firstDay >= minBusyBit) {
-                firstDay = maxBusyBit;
-            }
-        }
-
-        // Allocate space for the busy bits, one 32-bit integer for each day.
-        int numDays = lastDay - firstDay + 1;
-        int[] busybits = new int[numDays];
-        int[] allDayCounts = new int[numDays];
-
-        // Convert the first and last Julian day range to a range that uses
-        // UTC milliseconds.
-        Time time = new Time();
-        long begin = time.setJulianDay(firstDay);
-
-        // We add one to lastDay because the time is set to 12am on the given
-        // Julian day and we want to include all the events on the last day.
-        long end = time.setJulianDay(lastDay + 1);
-
-        // Make sure the Instances table includes events in the range
-        // [begin, end].
-        acquireInstanceRange(begin, end, true /* use minimum expansion window */);
-
-        SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
-        qb.setTables("Instances INNER JOIN Events ON (Instances.event_id=Events._id) " +
-                "INNER JOIN Calendars ON (Events.calendar_id = Calendars._id)");
-        qb.setProjectionMap(sInstancesProjectionMap);
-        qb.appendWhere("begin <= ");
-        qb.appendWhere(String.valueOf(end));
-        qb.appendWhere(" AND end >= ");
-        qb.appendWhere(String.valueOf(begin));
-        qb.appendWhere(" AND ");
-        qb.appendWhere(Instances.SELECTED);
-        qb.appendWhere("=1");
-
-        final SQLiteDatabase db = getDatabase();
-        // Get all the instances that overlap the range [begin,end]
-        Cursor cursor = qb.query(db, sInstancesProjection, null, null, null, null, null);
-        int count = 0;
-        try {
-            count = cursor.getCount();
-            while (cursor.moveToNext()) {
-                int startDay = cursor.getInt(INSTANCES_INDEX_START_DAY);
-                int endDay = cursor.getInt(INSTANCES_INDEX_END_DAY);
-                int startMinute = cursor.getInt(INSTANCES_INDEX_START_MINUTE);
-                int endMinute = cursor.getInt(INSTANCES_INDEX_END_MINUTE);
-                boolean allDay = cursor.getInt(INSTANCES_INDEX_ALL_DAY) != 0;
-                fillBusyBits(firstDay, startDay, endDay, startMinute, endMinute,
-                        allDay, busybits, allDayCounts);
-            }
-        } finally {
-            if (cursor != null) {
-                cursor.close();
-            }
-        }
-
-        if (count == 0) {
-            return;
-        }
-
-        // Read the busybit range again because that may have changed when we
-        // called acquireInstanceRange().
-        fields = mMetaData.getFieldsLocked();
-        minBusyBit = fields.minBusyBit;
-        maxBusyBit = fields.maxBusyBit;
-
-        // If the busybit range was cleared, then delete all the entries.
-        if (maxBusyBit == 0) {
-            mDb.execSQL("DELETE FROM BusyBits;");
-        }
-
-        // Merge the busy bits with the database.
-        mergeBusyBits(firstDay, lastDay, busybits, allDayCounts);
-        if (maxBusyBit == 0) {
-            minBusyBit = firstDay;
-            maxBusyBit = lastDay;
-        } else {
-            if (firstDay < minBusyBit) {
-                minBusyBit = firstDay;
-            }
-            if (lastDay > maxBusyBit) {
-                maxBusyBit = lastDay;
-            }
-        }
-        // Update the busy bit range
-        mMetaData.writeLocked(fields.timezone, fields.minInstance, fields.maxInstance,
-                minBusyBit, maxBusyBit);
     }
 
     private static final String[] EXPAND_COLUMNS = new String[] {
@@ -1960,324 +1798,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         values.put(Instances.END_MINUTE, endMinute);
     }
 
-    private void fillBusyBits(int minDay, int startDay, int endDay, int startMinute,
-            int endMinute, boolean allDay, int[] busybits, int[] allDayCounts) {
-
-        // The startDay can be less than the minDay if we have an event
-        // that starts earlier than the time range we are interested in.
-        // In that case, we ignore the time range that falls outside the
-        // the range we are interested in.
-        if (startDay < minDay) {
-            startDay = minDay;
-            startMinute = 0;
-        }
-
-        // Likewise, truncate the event's end day so that it doesn't go past
-        // the expected range.
-        int numDays = busybits.length;
-        int stopDay = endDay;
-        if (stopDay > minDay + numDays - 1) {
-            stopDay = minDay + numDays - 1;
-        }
-        int dayIndex = startDay - minDay;
-
-        if (allDay) {
-            for (int day = startDay; day <= stopDay; day++, dayIndex++) {
-                allDayCounts[dayIndex] += 1;
-            }
-            return;
-        }
-
-        for (int day = startDay; day <= stopDay; day++, dayIndex++) {
-            int endTime = endMinute;
-            // If the event ends on a future day, then show it extending to
-            // the end of this day.
-            if (endDay > day) {
-                endTime = 24 * 60;
-            }
-
-            int startBit = startMinute / BUSYBIT_INTERVAL ;
-            int endBit = (endTime + BUSYBIT_INTERVAL - 1) / BUSYBIT_INTERVAL;
-            int len = endBit - startBit;
-            if (len == 0) {
-                len = 1;
-            }
-            if (len < 0 || len > 24) {
-                Log.e("Cal", "fillBusyBits() error: len " + len
-                        + " startMinute,endTime " + startMinute + " , " + endTime
-                        + " startDay,endDay " + startDay + " , " + endDay);
-            } else {
-                int oneBits = BIT_MASKS[len];
-                busybits[dayIndex] |= oneBits << startBit;
-            }
-
-            // Set the start minute to the beginning of the day, in
-            // case this event spans multiple days.
-            startMinute = 0;
-        }
-    }
-
-    private void mergeBusyBits(int startDay, int endDay, int[] busybits, int[] allDayCounts) {
-        mDb.beginTransaction();
-        try {
-            mergeBusyBitsLocked(startDay, endDay, busybits, allDayCounts);
-            mDb.setTransactionSuccessful();
-        } finally {
-            mDb.endTransaction();
-        }
-    }
-
-    private void mergeBusyBitsLocked(int startDay, int endDay, int[] busybits,
-            int[] allDayCounts) {
-        final SQLiteDatabase db = getDatabase();
-        Cursor cursor = null;
-        try {
-            String selection = "day>=" + startDay + " AND day<=" + endDay;
-            cursor = db.query("BusyBits", sBusyBitProjection, selection, null, null, null, null);
-            if (cursor == null) {
-                return;
-            }
-            while (cursor.moveToNext()) {
-                int day = cursor.getInt(BUSYBIT_INDEX_DAY);
-                int busy = cursor.getInt(BUSYBIT_INDEX_BUSYBITS);
-                int allDayCount = cursor.getInt(BUSYBIT_INDEX_ALL_DAY_COUNT);
-
-                int dayIndex = day - startDay;
-                busybits[dayIndex] |= busy;
-                allDayCounts[dayIndex] += allDayCount;
-            }
-        } finally {
-            if (cursor != null) {
-                cursor.close();
-            }
-        }
-
-        // Allocate a map that we can reuse
-        ContentValues values = new ContentValues();
-
-        // Write the busy bits to the database
-        int len = busybits.length;
-        for (int dayIndex = 0; dayIndex < len; dayIndex++) {
-            int busy = busybits[dayIndex];
-            int allDayCount = allDayCounts[dayIndex];
-            if (busy == 0 && allDayCount == 0) {
-                continue;
-            }
-            int day = startDay + dayIndex;
-
-            values.clear();
-            values.put(BusyBits.DAY, day);
-            values.put(BusyBits.BUSYBITS, busy);
-            values.put(BusyBits.ALL_DAY_COUNT, allDayCount);
-            db.replace("BusyBits", null, values);
-        }
-    }
-
-    /**
-     * Updates the BusyBit table when a new event is inserted into the Events
-     * table.  This is called after the event has been entered into the Events
-     * table.  If the event time is not within the date range of the current
-     * BusyBits table, then the busy bits are not updated.  The BusyBits
-     * table is not automatically expanded to include this event.
-     *
-     * @param eventId the id of the newly created event
-     * @param values the ContentValues for the new event
-     */
-    private void insertBusyBitsLocked(long eventId, ContentValues values) {
-        MetaData.Fields fields = mMetaData.getFieldsLocked();
-        if (fields.maxBusyBit == 0) {
-            return;
-        }
-
-        // If this is a recurrence event, then the expanded Instances range
-        // should be 0 because this is called after updateInstancesLocked().
-        // But for now check this condition and report an error if it occurs.
-        // In the future, we could even support recurring events by
-        // expanding them here and updating the busy bits for each instance.
-        if (isRecurrenceEvent(values))  {
-            Log.e(TAG, "insertBusyBitsLocked(): unexpected recurrence event\n");
-            return;
-        }
-
-        long dtstartMillis = values.getAsLong(Events.DTSTART);
-        Long dtendMillis = values.getAsLong(Events.DTEND);
-        if (dtendMillis == null) {
-            dtendMillis = dtstartMillis;
-        }
-
-        boolean allDay = false;
-        Integer allDayInteger = values.getAsInteger(Events.ALL_DAY);
-        if (allDayInteger != null) {
-            allDay = allDayInteger != 0;
-        }
-
-        Time time = new Time();
-        if (allDay) {
-            time.timezone = Time.TIMEZONE_UTC;
-        }
-
-        ContentValues busyValues = new ContentValues();
-        computeTimezoneDependentFields(dtstartMillis, dtendMillis, time, busyValues);
-
-        int startDay = busyValues.getAsInteger(Instances.START_DAY);
-        int endDay = busyValues.getAsInteger(Instances.END_DAY);
-
-        // If the event time is not in the expanded BusyBits range,
-        // then return.
-        if (startDay > fields.maxBusyBit || endDay < fields.minBusyBit) {
-            return;
-        }
-
-        // Allocate space for the busy bits, one 32-bit integer for each day,
-        // plus 24 bytes for the count of events that occur in each time slot.
-        int numDays = endDay - startDay + 1;
-        int[] busybits = new int[numDays];
-        int[] allDayCounts = new int[numDays];
-
-        int startMinute = busyValues.getAsInteger(Instances.START_MINUTE);
-        int endMinute = busyValues.getAsInteger(Instances.END_MINUTE);
-        fillBusyBits(startDay, startDay, endDay, startMinute, endMinute,
-                allDay, busybits, allDayCounts);
-        mergeBusyBits(startDay, endDay, busybits, allDayCounts);
-    }
-
-    /**
-     * Updates the busy bits for an event that is being updated.  This is
-     * called before the event is updated in the Events table because we need
-     * to know the time of the event before it was changed.
-     *
-     * @param eventId the id of the event being updated
-     * @param values the ContentValues for the updated event
-     */
-    private void updateBusyBitsLocked(long eventId, ContentValues values) {
-        MetaData.Fields fields = mMetaData.getFieldsLocked();
-        if (fields.maxBusyBit == 0) {
-            return;
-        }
-
-        // If this is a recurring event, then clear the BusyBits table.
-        if (isRecurrenceEvent(values))  {
-            mMetaData.writeLocked(fields.timezone, fields.minInstance, fields.maxInstance,
-                    0 /* startDay */, 0 /* endDay */);
-            return;
-        }
-
-        // If the event fields being updated don't contain the start or end
-        // time, then we don't need to bother updating the BusyBits table.
-        Long dtstartLong = values.getAsLong(Events.DTSTART);
-        Long dtendLong = values.getAsLong(Events.DTEND);
-        if (dtstartLong == null && dtendLong == null) {
-            return;
-        }
-
-        // If the timezone has changed, then clear the busy bits table
-        // and return.
-        String dbTimezone = fields.timezone;
-        String localTimezone = TimeZone.getDefault().getID();
-        boolean timezoneChanged = (dbTimezone == null) || !dbTimezone.equals(localTimezone);
-        if (timezoneChanged) {
-            mMetaData.writeLocked(fields.timezone, fields.minInstance, fields.maxInstance,
-                    0 /* startDay */, 0 /* endDay */);
-            return;
-        }
-
-        // Read the existing event start and end times from the Events table.
-        TimeRange eventRange = readEventStartEnd(eventId);
-
-        // Fill in the new start time (if missing) or the new end time (if
-        // missing) from the existing event start and end times.
-        long dtstartMillis;
-        if (dtstartLong != null) {
-            dtstartMillis = dtstartLong;
-        } else {
-            dtstartMillis = eventRange.begin;
-        }
-
-        long dtendMillis;
-        if (dtendLong != null) {
-            dtendMillis = dtendLong;
-        } else {
-            dtendMillis = eventRange.end;
-        }
-
-        // Compute the start and end Julian days for the event.
-        Time time = new Time();
-        if (eventRange.allDay) {
-            time.timezone = Time.TIMEZONE_UTC;
-        }
-        ContentValues busyValues = new ContentValues();
-        computeTimezoneDependentFields(eventRange.begin, eventRange.end, time, busyValues);
-        int oldStartDay = busyValues.getAsInteger(Instances.START_DAY);
-        int oldEndDay = busyValues.getAsInteger(Instances.END_DAY);
-
-        boolean allDay = false;
-        Integer allDayInteger = values.getAsInteger(Events.ALL_DAY);
-        if (allDayInteger != null) {
-            allDay = allDayInteger != 0;
-        }
-
-        if (allDay) {
-            time.timezone = Time.TIMEZONE_UTC;
-        } else {
-            time.timezone = TimeZone.getDefault().getID();
-        }
-
-        computeTimezoneDependentFields(dtstartMillis, dtendMillis, time, busyValues);
-        int newStartDay = busyValues.getAsInteger(Instances.START_DAY);
-        int newEndDay = busyValues.getAsInteger(Instances.END_DAY);
-
-        // If both the old and new event times are outside the expanded
-        // BusyBits table, then return.
-        if ((oldStartDay > fields.maxBusyBit || oldEndDay < fields.minBusyBit)
-                && (newStartDay > fields.maxBusyBit || newEndDay < fields.minBusyBit)) {
-            return;
-        }
-
-        // If the old event time is within the expanded Instances range,
-        // then clear the BusyBits table and return.
-        if (oldStartDay <= fields.maxBusyBit && oldEndDay >= fields.minBusyBit) {
-            // We could recompute the busy bits for the days containing the
-            // old event time.  For now, just clear the BusyBits table.
-            mMetaData.writeLocked(fields.timezone, fields.minInstance, fields.maxInstance,
-                    0 /* startDay */, 0 /* endDay */);
-            return;
-        }
-
-        // The new event time is within the expanded Instances range.
-        // So insert the busy bits for that day (or days).
-
-        // Allocate space for the busy bits, one 32-bit integer for each day,
-        // plus 24 bytes for the count of events that occur in each time slot.
-        int numDays = newEndDay - newStartDay + 1;
-        int[] busybits = new int[numDays];
-        int[] allDayCounts = new int[numDays];
-
-        int startMinute = busyValues.getAsInteger(Instances.START_MINUTE);
-        int endMinute = busyValues.getAsInteger(Instances.END_MINUTE);
-        fillBusyBits(newStartDay, newStartDay, newEndDay, startMinute, endMinute,
-                allDay, busybits, allDayCounts);
-        mergeBusyBits(newStartDay, newEndDay, busybits, allDayCounts);
-    }
-
-    /**
-     * This method is called just before an event is deleted.
-     *
-     * @param eventId
-     */
-    private void deleteBusyBitsLocked(long eventId) {
-        MetaData.Fields fields = mMetaData.getFieldsLocked();
-        if (fields.maxBusyBit == 0) {
-            return;
-        }
-
-        // TODO: if the event being deleted is not a recurring event and the
-        // start and end time are outside the BusyBit range, then we could
-        // avoid clearing the BusyBits table.  For now, always clear the
-        // BusyBits table because deleting events is relatively rare.
-        mMetaData.writeLocked(fields.timezone, fields.minInstance, fields.maxInstance,
-                0 /* startDay */, 0 /* endDay */);
-    }
-
     // Read the start and end time for an event from the Events table.
     // Also read the "all-day" indicator.
     private TimeRange readEventStartEnd(long eventId) {
@@ -2324,9 +1844,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 return "vnd.android.cursor.item/calendar-alert";
             case INSTANCES:
             case INSTANCES_BY_DAY:
+            case EVENT_DAYS:
                 return "vnd.android.cursor.dir/event-instance";
-            case BUSYBITS:
-                return "vnd.android.cursor.dir/busybits";
             default:
                 throw new IllegalArgumentException("Unknown URL " + url);
         }
@@ -2379,7 +1898,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 if (!isTemporary() && rowId != -1) {
                     updateEventRawTimesLocked(rowId, updatedValues);
                     updateInstancesLocked(updatedValues, rowId, true /* new event */, db);
-                    insertBusyBitsLocked(rowId, updatedValues);
 
                     // If we inserted a new event that specified the self-attendee
                     // status, then we need to add an entry to the attendees table.
@@ -2462,6 +1980,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             case EXTENDED_PROPERTIES_ID:
             case INSTANCES:
             case INSTANCES_BY_DAY:
+            case EVENT_DAYS:
                 throw new UnsupportedOperationException("Cannot insert into that URL");
             default:
                 throw new IllegalArgumentException("Unknown URL " + url);
@@ -2953,7 +2472,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                             + match);
                 }
                 if (!isTemporary()) {
-                    deleteBusyBitsLocked(Integer.parseInt(id));
 
                     // Query this event to get the fields needed for inserting
                     // a new row in the DeletedEvents table.
@@ -3068,6 +2586,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 return deleteMatchingCalendars(where);
             case INSTANCES:
             case INSTANCES_BY_DAY:
+            case EVENT_DAYS:
                 throw new UnsupportedOperationException("Cannot delete that URL");
             default:
                 throw new IllegalArgumentException("Unknown URL " + url);
@@ -3124,14 +2643,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 }
 
                 int result = db.update("Calendars", values, "_id="+ id, null);
-                if (!isTemporary()) {
-                    // When we change the display status of a Calendar
-                    // we need to update the busy bits.
-                    if (values.containsKey(Calendars.SELECTED) || (syncEvents != null)) {
-                        // Clear the BusyBits table.
-                        mMetaData.clearBusyBitRange();
-                    }
-                }
 
                 return result;
             }
@@ -3157,7 +2668,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                                 + " in Events table is not allowed.");
                     }
 
-                    updateBusyBitsLocked(id, values);
                 }
 
                 ContentValues updatedValues = updateContentValuesFromEvent(values);
@@ -3699,7 +3209,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             insertExtendedPropertiesIfNecessary(diffs, diffsRowId, rowId, db);
             updateEventRawTimesLocked(rowId, mValues);
             updateInstancesLocked(mValues, rowId, true /* new event */, db);
-            insertBusyBitsLocked(rowId, mValues);
 
             // Update the _SYNC_DIRTY flag of the event. We have to do this
             // after inserting since the update of the reminders and extended properties
@@ -3818,7 +3327,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 Cursor diffsCursor) {
             rowToContentValues(diffsCursor, mValues);
             final SQLiteDatabase db = getDatabase();
-            updateBusyBitsLocked(localId, mValues);
             int numRows = db.update(mTable, mValues, "_id=" + localId, null /* selectionArgs */);
 
             if (numRows <= 0) {
@@ -3864,7 +3372,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         @Override
         public void deleteRow(Cursor localCursor) {
             long localId = localCursor.getLong(localCursor.getColumnIndexOrThrow(Events._ID));
-            deleteBusyBitsLocked(localId);
 
             // we have to read this row from the DB since the projection that is used
             // by cursor doesn't necessarily contain the columns we need
@@ -3955,8 +3462,8 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     private static final int CALENDAR_ALERTS = 13;
     private static final int CALENDAR_ALERTS_ID = 14;
     private static final int CALENDAR_ALERTS_BY_INSTANCE = 15;
-    private static final int BUSYBITS = 16;
-    private static final int INSTANCES_BY_DAY = 17;
+    private static final int INSTANCES_BY_DAY = 16;
+    private static final int EVENT_DAYS = 17;
 
     private static final UriMatcher sURLMatcher = new UriMatcher(UriMatcher.NO_MATCH);
     private static final HashMap<String, String> sInstancesProjectionMap;
@@ -3964,11 +3471,11 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     private static final HashMap<String, String> sAttendeesProjectionMap;
     private static final HashMap<String, String> sRemindersProjectionMap;
     private static final HashMap<String, String> sCalendarAlertsProjectionMap;
-    private static final HashMap<String, String> sBusyBitsProjectionMap;
 
     static {
         sURLMatcher.addURI("calendar", "instances/when/*/*", INSTANCES);
         sURLMatcher.addURI("calendar", "instances/whenbyday/*/*", INSTANCES_BY_DAY);
+        sURLMatcher.addURI("calendar", "instances/groupbyday/*/*", EVENT_DAYS);
         sURLMatcher.addURI("calendar", "events", EVENTS);
         sURLMatcher.addURI("calendar", "events/#", EVENTS_ID);
         sURLMatcher.addURI("calendar", "calendars", CALENDARS);
@@ -3983,7 +3490,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         sURLMatcher.addURI("calendar", "calendar_alerts", CALENDAR_ALERTS);
         sURLMatcher.addURI("calendar", "calendar_alerts/#", CALENDAR_ALERTS_ID);
         sURLMatcher.addURI("calendar", "calendar_alerts/by_instance", CALENDAR_ALERTS_BY_INSTANCE);
-        sURLMatcher.addURI("calendar", "busybits/when/*/*", BUSYBITS);
 
 
         sEventsProjectionMap = new HashMap<String, String>();
@@ -4052,12 +3558,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         sInstancesProjectionMap.put(Instances.END_DAY, "endDay");
         sInstancesProjectionMap.put(Instances.START_MINUTE, "startMinute");
         sInstancesProjectionMap.put(Instances.END_MINUTE, "endMinute");
-
-        // BusyBits columns
-        sBusyBitsProjectionMap = new HashMap<String, String>();
-        sBusyBitsProjectionMap.put(BusyBits.DAY, "day");
-        sBusyBitsProjectionMap.put(BusyBits.BUSYBITS, "busyBits");
-        sBusyBitsProjectionMap.put(BusyBits.ALL_DAY_COUNT, "allDayCount");
 
         // Attendees columns
         sAttendeesProjectionMap.put(Attendees.EVENT_ID, "event_id");

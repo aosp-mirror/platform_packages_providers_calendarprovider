@@ -19,8 +19,8 @@ package com.android.providers.calendar;
 
 import com.google.android.collect.Maps;
 import com.google.android.collect.Sets;
-import com.google.android.gdata.client.AndroidGDataClient;
-import com.google.android.gdata.client.AndroidXmlParserFactory;
+import com.google.android.common.gdata.AndroidGDataClient;
+import com.google.android.common.gdata.AndroidXmlParserFactory;
 import com.google.android.googlelogin.GoogleLoginServiceConstants;
 import com.google.android.gsf.AbstractGDataSyncAdapter;
 import com.google.android.gsf.AbstractGDataSyncAdapter.GDataSyncData;

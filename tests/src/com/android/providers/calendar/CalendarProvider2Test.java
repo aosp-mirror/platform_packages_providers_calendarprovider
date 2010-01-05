@@ -1769,6 +1769,20 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
                 .build();
         // Only one event for that account
         testQueryCount(eventsWithAccount, null, 1);
+
+        // Test deletion with account and selection
+
+        long eventId = ContentUris.parseId(eventUri1);
+        // Wrong account, should not be deleted
+        assertEquals("delete", 0, mResolver.delete(
+                updatedUri(eventsWithAccount, true /* syncAdapter */),
+                "_id=" + eventId, null /* selectionArgs */));
+        testQueryCount(Calendar.Events.CONTENT_URI, null, 2);
+        // Right account, should be deleted
+        assertEquals("delete", 1, mResolver.delete(
+                updatedUri(Calendar.Events.CONTENT_URI, true /* syncAdapter */),
+                "_id=" + eventId, null /* selectionArgs */));
+        testQueryCount(Calendar.Events.CONTENT_URI, null, 1);
     }
 
     /**

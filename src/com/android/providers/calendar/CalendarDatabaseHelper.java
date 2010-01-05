@@ -650,7 +650,11 @@ import com.android.internal.content.SyncStateContentProviderHelper;
                 + Calendar.Events.EVENT_TIMEZONE + ","
                 + Calendar.Events.ALL_DAY + ","
                 + Calendar.Events.VISIBILITY + ","
+                + Calendar.Events.TIMEZONE + ","
+                + Calendar.Events.SELECTED + ","
+                + Calendar.Events.ACCESS_LEVEL + ","
                 + Calendar.Events.TRANSPARENCY + ","
+                + Calendar.Events.COLOR + ","
                 + Calendar.Events.HAS_ALARM + ","
                 + Calendar.Events.HAS_EXTENDED_PROPERTIES + ","
                 + Calendar.Events.RRULE + ","
@@ -668,8 +672,8 @@ import com.android.internal.content.SyncStateContentProviderHelper;
                 + Calendar.Events.GUESTS_CAN_SEE_GUESTS + ","
                 + Calendar.Events.ORGANIZER + ","
                 + Calendar.Events.DELETED + ","
-                + Tables.EVENTS + "." + Calendar.Events._SYNC_ID +
-                " AS " + Calendar.Events._SYNC_ID + ","
+                + Tables.EVENTS + "." + Calendar.Events._SYNC_ID
+                + " AS " + Calendar.Events._SYNC_ID + ","
                 + Tables.EVENTS + "." + Calendar.Events._SYNC_VERSION
                 + " AS " + Calendar.Events._SYNC_VERSION + ","
                 + Tables.EVENTS + "." + Calendar.Events._SYNC_DIRTY
@@ -678,7 +682,12 @@ import com.android.internal.content.SyncStateContentProviderHelper;
                 + " AS " + Calendar.Events._SYNC_ACCOUNT + ","
                 + Tables.EVENTS + "." + Calendar.Events._SYNC_ACCOUNT_TYPE
                 + " AS " + Calendar.Events._SYNC_ACCOUNT_TYPE + ","
-                + Calendar.Calendars.URL
+                + Tables.EVENTS + "." + Calendar.Events._SYNC_TIME
+                + " AS " + Calendar.Events._SYNC_TIME + ","
+                + Tables.EVENTS + "." + Calendar.Events._SYNC_LOCAL_ID
+                + " AS " + Calendar.Events._SYNC_LOCAL_ID + ","
+                + Calendar.Calendars.URL + ","
+                + Calendar.Calendars.OWNER_ACCOUNT
                 + " FROM " + Tables.EVENTS + " JOIN " + Tables.CALENDARS
                 + " ON (" + Tables.EVENTS + "." + Calendar.Events.CALENDAR_ID
                 + "=" + Tables.CALENDARS + "." + Calendar.Calendars._ID

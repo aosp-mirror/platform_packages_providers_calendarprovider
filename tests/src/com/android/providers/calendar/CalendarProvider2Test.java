@@ -880,7 +880,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         m.put(Calendars.TIMEZONE, timezone);
         m.put(Calendars.SELECTED, 1);
         m.put(Calendars.URL, CALENDAR_URL);
-        m.put(Calendars.OWNER_ACCOUNT, "joe@joe.com");
+        m.put(Calendars.OWNER_ACCOUNT, account);
         m.put(Calendars._SYNC_ACCOUNT,  account);
         m.put(Calendars._SYNC_ACCOUNT_TYPE,  "com.google");
 
@@ -1332,7 +1332,6 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         Cursor cursor = mResolver.query(uri, null/* projection */, where, null /* selectionArgs */,
                 null /* sortOrder */);
         try {
-            dumpCursor(cursor);
             assertEquals("query results", wanted, cursor.getCount());
         } finally {
             cursor.close();
@@ -1582,7 +1581,6 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         mCalendarId = insertCal("Calendar0", DEFAULT_TIMEZONE);
 
         cursor = mResolver.query(mEventsUri, null, null, null, null);
-        dumpCursor(cursor);
         assertEquals(0, cursor.getCount());
         cursor.close();
         Command[] commands;
@@ -1662,6 +1660,43 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         String result = "20390101T230000UTC(0,0,0,-1,0)";
         time.parse3339(str);
         assertEquals(result, time.toString());
+    }
+
+    /**
+     * Test the query done by Event.loadEvents
+     * @throws Exception
+     */
+    public void testInstanceQuery() throws Exception {
+        final String[] PROJECTION = new String[] {
+                Instances.TITLE,                 // 0
+                Instances.EVENT_LOCATION,        // 1
+                Instances.ALL_DAY,               // 2
+                Instances.COLOR,                 // 3
+                Instances.EVENT_TIMEZONE,        // 4
+                Instances.EVENT_ID,              // 5
+                Instances.BEGIN,                 // 6
+                Instances.END,                   // 7
+                Instances._ID,                   // 8
+                Instances.START_DAY,             // 9
+                Instances.END_DAY,               // 10
+                Instances.START_MINUTE,          // 11
+                Instances.END_MINUTE,            // 12
+                Instances.HAS_ALARM,             // 13
+                Instances.RRULE,                 // 14
+                Instances.RDATE,                 // 15
+                Instances.SELF_ATTENDEE_STATUS,  // 16
+                Events.ORGANIZER,                // 17
+                Events.GUESTS_CAN_MODIFY,        // 18
+        };
+
+        String orderBy = Instances.SORT_CALENDAR_VIEW;
+        String where = Instances.SELF_ATTENDEE_STATUS + "!=" + Calendar.Attendees.ATTENDEE_STATUS_DECLINED;
+
+        long start = 0;
+        long end = 0;
+        Cursor c = Instances.query(mResolver, PROJECTION,
+                start - DateUtils.DAY_IN_MILLIS, end + DateUtils.DAY_IN_MILLIS, where, orderBy);
+        // Just make sure the query doesn't crash.  TODO: could check results
     }
 
     private Cursor queryInstances(long begin, long end) {

@@ -25,7 +25,6 @@ import android.net.Uri;
 import android.text.format.DateUtils;
 import android.text.format.Time;
 import android.provider.Calendar;
-import android.provider.Calendar.BusyBits;
 import android.provider.Calendar.Calendars;
 import android.provider.Calendar.Events;
 import android.provider.Calendar.EventsEntity;
@@ -516,26 +515,6 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         }
     }
 
-    private class BusyBitInfo {
-        EventInfo[] mEvents;
-        int mStartDay;
-        int mNumDays;
-        int[] mBusyBits;
-        int[] mAllDayCounts;
-
-        public BusyBitInfo(EventInfo[] events, String startDate, int numDays,
-                int[] busybits, int[] allDayCounts) {
-            mEvents = events;
-            Time time = new Time(DEFAULT_TIMEZONE);
-            time.parse3339(startDate);
-            long millis = time.toMillis(true /* ignore isDst */);
-            mStartDay = Time.getJulianDay(millis, time.gmtoff);
-            mNumDays = numDays;
-            mBusyBits = busybits;
-            mAllDayCounts = allDayCounts;
-        }
-    }
-
     /**
      * This is the main table of events.  The events in this table are
      * referred to by name in other places.
@@ -667,118 +646,6 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
 
             new InstanceInfo("yearly0", "2008-05-01", "2009-04-30", 1),
             new InstanceInfo("yearly0", "2008-05-01", "2009-05-02", 2),
-    };
-
-    /**
-     * This tables of events is used to test the BusyBit database table.
-     */
-    private EventInfo[] mBusyBitEvents = {
-            new EventInfo("1: 12am - 1am",     "2008-05-01T00:00:00", "2008-05-01T01:00:00", false),
-            new EventInfo("2: 1:30am - 2am",   "2008-05-02T01:30:00", "2008-05-02T02:00:00", false),
-            new EventInfo("3: 3am - 5am",      "2008-05-03T03:00:00", "2008-05-03T05:00:00", false),
-            new EventInfo("4: 12am - 5am",     "2008-05-04T00:00:00", "2008-05-04T05:00:00", false),
-            new EventInfo("5: 1am - 2am",      "2008-05-05T01:00:00", "2008-05-05T02:00:00", false),
-            new EventInfo("5: 8am - 9am",      "2008-05-05T08:00:00", "2008-05-05T09:00:00", false),
-            new EventInfo("6: 1am - 10am",     "2008-05-06T01:00:00", "2008-05-06T10:00:00", false),
-            new EventInfo("6: 8am - 9am",      "2008-05-06T08:00:00", "2008-05-06T09:00:00", false),
-            new EventInfo("7: 1am - 5am",      "2008-05-07T01:00:00", "2008-05-07T05:00:00", false),
-            new EventInfo("7: 12am - 2am",     "2008-05-07T00:00:00", "2008-05-07T02:00:00", false),
-            new EventInfo("7: 8am - 9am",      "2008-05-07T08:00:00", "2008-05-07T09:00:00", false),
-            new EventInfo("7: 1pm - 2pm",      "2008-05-07T13:00:00", "2008-05-07T14:00:00", false),
-            new EventInfo("7: 3:30pm - 4:30pm", "2008-05-07T15:30:00", "2008-05-07T16:30:00",
-                    false),
-            new EventInfo("7: 7pm - 8pm",      "2008-05-07T19:00:00", "2008-05-07T20:00:00", false),
-            new EventInfo("7: 6:30pm - 7:30pm", "2008-05-07T18:30:00", "2008-05-07T19:30:00",
-                    false),
-            new EventInfo("7: 11pm - midnight", "2008-05-07T23:00:00", "2008-05-08T00:00:00",
-                    false),
-            new EventInfo("8: 1am - 2am",      "2008-05-08T01:00:00", "2008-05-08T02:00:00", false),
-            new EventInfo("8: 3am - 4am",      "2008-05-08T03:00:00", "2008-05-08T04:00:00", false),
-            new EventInfo("8: 5am - 6am",      "2008-05-08T05:00:00", "2008-05-08T06:00:00", false),
-            new EventInfo("8: 7am - 8am",      "2008-05-08T07:00:00", "2008-05-08T08:00:00", false),
-            new EventInfo("8: 9am - 10am",     "2008-05-08T09:00:00", "2008-05-08T10:00:00", false),
-            new EventInfo("8: 11am - 12pm",    "2008-05-08T11:00:00", "2008-05-08T12:00:00", false),
-            new EventInfo("8: 1pm - 2pm",      "2008-05-08T13:00:00", "2008-05-08T14:00:00", false),
-            new EventInfo("8: 3pm - 4pm",      "2008-05-08T15:00:00", "2008-05-08T16:00:00", false),
-            new EventInfo("8: 5pm - 6pm",      "2008-05-08T17:00:00", "2008-05-08T18:00:00", false),
-            new EventInfo("8: 7pm - 8pm",      "2008-05-08T19:00:00", "2008-05-08T20:00:00", false),
-            new EventInfo("8: 9pm - 10pm",     "2008-05-08T21:00:00", "2008-05-08T22:00:00", false),
-            new EventInfo("8: 11pm - midnight", "2008-05-08T23:00:00", "2008-05-09T00:00:00",
-                    false),
-            new EventInfo("10: 12am - midnight", "2008-05-10T00:00:00", "2008-05-11T00:00:00",
-                    false),
-            new EventInfo("12: 1 day",         "2008-05-12T00:00:00", "2008-05-13T00:00:00", true),
-            new EventInfo("14: 1 day",         "2008-05-14T00:00:00", "2008-05-15T00:00:00", true),
-            new EventInfo("14: 2 days",        "2008-05-14T00:00:00", "2008-05-16T00:00:00", true),
-            new EventInfo("14: 3 days",        "2008-05-14T00:00:00", "2008-05-17T00:00:00", true),
-            new EventInfo("15: 1am - 2am",     "2008-05-15T01:00:00", "2008-05-15T02:00:00", false),
-            new EventInfo("16: 10am - 11am",   "2008-05-16T10:00:00", "2008-05-16T11:00:00", false),
-            new EventInfo("16: 11pm - midnight", "2008-05-16T23:00:00", "2008-05-17T00:00:00",
-                    false),
-    };
-
-    private EventInfo[] mBusyBitRepeatingEvents = {
-            new EventInfo("daily0", "daily from 5/1/2008 12am to 1am",
-                    "2008-05-01T00:00:00", "2008-05-01T01:00:00",
-                    "FREQ=DAILY;WKST=SU", false),
-            new EventInfo("daily1", "daily from 5/1/2008 8:30am to 9:30am until 5/3/2008 8am",
-                    "2008-05-01T08:30:00", "2008-05-01T09:30:00",
-                    "FREQ=DAILY;UNTIL=20080503T150000Z;WKST=SU", false),
-            new EventInfo("weekly0", "weekly from 5/6/2008 on Tue 1pm to 2pm",
-                    "2008-05-06T13:00:00", "2008-05-06T14:00:00",
-                    "FREQ=WEEKLY;BYDAY=TU;WKST=MO", false),
-            new EventInfo("weekly1", "every 2 weeks from 5/6/2008 on Tue from 4:30am to 5:30am",
-                    "2008-05-06T04:30:00", "2008-05-06T05:30:00",
-                    "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;WKST=MO", false),
-            new EventInfo("weekly2", "weekly from 5/5/2008 on Mon 1 day",
-                    "2008-05-05T00:00:00", "2008-05-06T00:00:00",
-                    "FREQ=WEEKLY;BYDAY=MO;WKST=MO", true),
-            new EventInfo("weekly3", "weekly from 5/7/2008 on Wed 3 days",
-                    "2008-05-07T00:00:00", "2008-05-10T00:00:00",
-                    "FREQ=WEEKLY;BYDAY=WE;WKST=SU", true),
-            new EventInfo("weekly4", "weekly from 5/8/2008 on Thu 3 days",
-                    "2008-05-08T00:00:00", "2008-05-11T00:00:00",
-                    "FREQ=WEEKLY;BYDAY=TH;WKST=SU", true),
-            new EventInfo("monthly0", "monthly from 5/20/2008 on the 3rd Tues from 3pm to 4pm",
-                    "2008-05-20T15:00:00", "2008-05-20T16:00:00",
-                    "FREQ=MONTHLY;BYDAY=3TU;WKST=SU", false),
-            new EventInfo("monthly1", "monthly from 5/1/2008 on the 1st from 11:00am to 11:10am",
-                    "2008-05-01T11:00:00", "2008-05-01T11:10:00",
-                    "FREQ=MONTHLY;WKST=SU;BYMONTHDAY=1", false),
-            new EventInfo("monthly2", "monthly from 5/31/2008 on the 31st 11pm to midnight",
-                    "2008-05-31T23:00:00", "2008-06-01T00:00:00",
-                    "FREQ=MONTHLY;WKST=SU;BYMONTHDAY=31", false),
-    };
-
-    private BusyBitInfo[] mBusyBitTests = {
-            new BusyBitInfo(mBusyBitEvents, "2008-05-01T00:00:00", 1,
-                    new int[] { 0x1 }, new int[] { 0 } ),
-            new BusyBitInfo(mBusyBitEvents, "2008-05-02T00:00:00", 1,
-                    new int[] { 0x2 }, new int[] { 0 } ),
-            new BusyBitInfo(mBusyBitEvents, "2008-05-02T00:00:00", 2,
-                    new int[] { 0x2, 0x18 }, new int[] { 0, 0 } ),
-            new BusyBitInfo(mBusyBitEvents, "2008-05-01T00:00:00", 3,
-                    new int[] { 0x1, 0x2, 0x18 }, new int[] { 0, 0, 0 } ),
-            new BusyBitInfo(mBusyBitEvents, "2008-05-01T00:00:00", 8,
-                    new int[] { 0x1, 0x2, 0x18, 0x1f, 0x102, 0x3fe, 0x8da11f, 0xaaaaaa },
-                    new int[] { 0, 0, 0, 0, 0, 0, 0, 0 } ),
-            new BusyBitInfo(mBusyBitEvents, "2008-05-10T00:00:00", 4,
-                    new int[] { 0xffffff, 0x0, 0x0, 0x0 }, new int[] { 0, 0, 1, 0 } ),
-            new BusyBitInfo(mBusyBitEvents, "2008-05-14T00:00:00", 4,
-                    new int[] { 0x0, 0x2, 0x800400, 0x0 }, new int[] { 3, 2, 1, 0 } ),
-
-            // Repeating events
-            new BusyBitInfo(mBusyBitRepeatingEvents, "2008-05-01T00:00:00", 3,
-                    new int[] { 0xb01, 0x301, 0x1 }, new int[] { 0, 0, 0 } ),
-            new BusyBitInfo(mBusyBitRepeatingEvents, "2008-05-01T00:00:00", 10,
-                    new int[] { 0xb01, 0x301, 0x1, 0x1, 0x1, 0x2031, 0x1, 0x1, 0x1, 0x1 },
-                    new int[] { 0, 0, 0, 0, 1, 0, 1, 2, 2, 1 } ),
-            new BusyBitInfo(mBusyBitRepeatingEvents, "2008-05-18T00:00:00", 11,
-                    new int[] { 0x1, 0x1, 0xa031, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x2001, 0x1 },
-                    new int[] { 0, 1, 0, 1, 2, 2, 1, 0, 1, 0, 1 } ),
-            new BusyBitInfo(mBusyBitRepeatingEvents, "2008-05-30T00:00:00", 5,
-                    new int[] { 0x1, 0x800001, 0x801, 0x1, 0x2031 },
-                    new int[] { 2, 1, 0, 1, 0 } ),
     };
 
     /**
@@ -1293,107 +1160,6 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         }
     }
 
-    public void testBusyBitRange() throws Exception {
-        Cursor cursor;
-        Uri url = null;
-
-        int calId = insertCal("Calendar0", "America/Los_Angeles");
-
-        cursor = mResolver.query(mEventsUri, null, null, null, null);
-        dumpCursor(cursor);
-        assertEquals(0, cursor.getCount());
-        cursor.close();
-
-        int len = mBusyBitTests.length;
-        for (int ii = 0; ii < len; ii++) {
-            deleteAllEvents();
-            BusyBitInfo busyInfo = mBusyBitTests[ii];
-            EventInfo[] events = busyInfo.mEvents;
-            int numEvents = events.length;
-            for (int jj = 0; jj < numEvents; jj++) {
-                EventInfo event = events[jj];
-                insertEvent(calId, event);
-            }
-
-            int startDay = busyInfo.mStartDay;
-            int numDays = busyInfo.mNumDays;
-            int[] busybits = new int[numDays];
-            int[] allDayCounts = new int[numDays];
-
-            if (false) {
-                cursor = mResolver.query(mEventsUri, null, null, null, null);
-                Log.i(TAG, "Dump of Events table, count: " + cursor.getCount());
-                dumpCursor(cursor);
-                cursor.close();
-
-                Time time = new Time();
-                time.setJulianDay(startDay);
-                long begin = time.toMillis(true);
-                int endDay = startDay + numDays - 1;
-                time.setJulianDay(endDay);
-                long end = time.toMillis(true);
-                cursor = queryInstances(begin, end);
-                Log.i(TAG, "Dump of Instances table, count: " + cursor.getCount()
-                        + " startDay: " + startDay + " endDay: " + endDay
-                        + " begin: " + begin + " end: " + end);
-                dumpCursor(cursor);
-                cursor.close();
-            }
-
-            cursor = queryBusyBits(startDay, numDays);
-            try {
-                int dayColumnIndex = cursor.getColumnIndexOrThrow(BusyBits.DAY);
-                int busybitColumnIndex = cursor.getColumnIndexOrThrow(BusyBits.BUSYBITS);
-                int allDayCountColumnIndex = cursor.getColumnIndexOrThrow(BusyBits.ALL_DAY_COUNT);
-
-                while (cursor.moveToNext()) {
-                    int day = cursor.getInt(dayColumnIndex);
-                    int dayIndex = day - startDay;
-                    busybits[dayIndex] = cursor.getInt(busybitColumnIndex);
-                    allDayCounts[dayIndex] = cursor.getInt(allDayCountColumnIndex);
-                }
-            } finally {
-                if (cursor != null) {
-                    cursor.close();
-                }
-            }
-
-            // Compare the database busy bits with the expected busy bits
-            for (int dayIndex = 0; dayIndex < numDays; dayIndex++) {
-                if (busyInfo.mBusyBits[dayIndex] != busybits[dayIndex]) {
-                    String mesg = String.format("Test failed!"
-                            + " BusyBit test index: %d"
-                            + " day index: %d"
-                            + " mStartDay: %d mNumDays: %d"
-                            + " expected busybits: 0x%x was: 0x%x",
-                            ii, dayIndex, busyInfo.mStartDay, busyInfo.mNumDays,
-                            busyInfo.mBusyBits[dayIndex], busybits[dayIndex]);
-                    Log.e(TAG, mesg);
-
-                    cursor = mResolver.query(mEventsUri, null, null, null, null);
-                    Log.i(TAG, "Dump of Events table, count: " + cursor.getCount());
-                    dumpCursor(cursor);
-                    cursor.close();
-                }
-                assertEquals(busyInfo.mBusyBits[dayIndex], busybits[dayIndex]);
-            }
-
-            // Compare the database all-day counts with the expected all-day counts
-            for (int dayIndex = 0; dayIndex < numDays; dayIndex++) {
-                if (busyInfo.mAllDayCounts[dayIndex] != allDayCounts[dayIndex]) {
-                    String mesg = String.format("Test failed!"
-                            + " BusyBit test index: %d"
-                            + " day index: %d"
-                            + " expected all-day count: %d was: %d",
-                            ii, dayIndex,
-                            busyInfo.mAllDayCounts[dayIndex], allDayCounts[dayIndex]);
-                    Log.e(TAG, mesg);
-                }
-                assertEquals(busyInfo.mAllDayCounts[dayIndex], allDayCounts[dayIndex]);
-            }
-        }
-    }
-
     public void testEntityQuery() throws Exception {
         testInsertNormalEvents(); // To initialize
 
@@ -1900,12 +1666,6 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
 
     private Cursor queryInstances(long begin, long end) {
         Uri url = Uri.parse("content://calendar/instances/when/" + begin + "/" + end);
-        return mResolver.query(url, null, null, null, null);
-    }
-
-    private Cursor queryBusyBits(int startDay, int numDays) {
-        int endDay = startDay + numDays - 1;
-        Uri url = Uri.parse("content://calendar/busybits/when/" + startDay + "/" + endDay);
         return mResolver.query(url, null, null, null, null);
     }
 

@@ -2804,19 +2804,23 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Events.ORGANIZER, "organizer");
         sEventsProjectionMap.put(Events.DELETED, "deleted");
 
-        // Put the shared items into the Instances projection map
-        sInstancesProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
+        // Put the shared items into the Attendees, Reminders, CalendarAlerts projection map
         sAttendeesProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
         sRemindersProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
         sCalendarAlertsProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
 
         // Calendar columns
-        sEventsProjectionMap.put(Events.COLOR, "color");
-        sEventsProjectionMap.put(Events.ACCESS_LEVEL, "access_level");
-        sEventsProjectionMap.put(Events.SELECTED, "selected");
+        sEventsProjectionMap.put(Calendars.COLOR, "color");
+        sEventsProjectionMap.put(Calendars.ACCESS_LEVEL, "access_level");
+        sEventsProjectionMap.put(Calendars.SELECTED, "selected");
         sEventsProjectionMap.put(Calendars.URL, "url");
         sEventsProjectionMap.put(Calendars.TIMEZONE, "timezone");
         sEventsProjectionMap.put(Calendars.OWNER_ACCOUNT, "ownerAccount");
+
+        // Put the shared items into the Instances projection map
+        // The Instances are joined with Calendars, so the projection includes the
+        // above Calendar columns.
+        sInstancesProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
 
         sEventsProjectionMap.put(Events._ID, "_id");
         sEventsProjectionMap.put(Events._SYNC_ID, "_sync_id");

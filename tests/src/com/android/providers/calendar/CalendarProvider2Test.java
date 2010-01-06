@@ -890,10 +890,6 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
     }
 
     private Uri insertEvent(int calId, EventInfo event) {
-        return insertEvent(calId, event, "joe@joe.com");
-    }
-
-    private Uri insertEvent(int calId, EventInfo event, String account) {
         if (mWipe) {
             // Wipe instance table so it will be regenerated
             mMetaData.clearInstanceRange();
@@ -903,8 +899,6 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         m.put(Events.TITLE, event.mTitle);
         m.put(Events.DTSTART, event.mDtstart);
         m.put(Events.ALL_DAY, event.mAllDay ? 1 : 0);
-        m.put(Calendars._SYNC_ACCOUNT,  account);
-        m.put(Calendars._SYNC_ACCOUNT_TYPE,  "com.google");
 
         if (event.mRrule == null) {
             // This is a normal event
@@ -1299,6 +1293,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         cursor.close();
     }
 
+
     /**
      * Test the event's _sync_dirty status and clear it.
      * @param eventId event to fetch.
@@ -1525,7 +1520,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         mCalendarId = insertCal("Calendar0", DEFAULT_TIMEZONE);
         int calendarId1 = insertCal("Calendar1", DEFAULT_TIMEZONE, "user2@google.com");
         Uri eventUri0 = insertEvent(mCalendarId, findEvent("daily0"));
-        Uri eventUri1 = insertEvent(calendarId1, findEvent("daily1"), "user2@google.com");  
+        Uri eventUri1 = insertEvent(calendarId1, findEvent("daily1"));
 
         testQueryCount(Calendar.Events.CONTENT_URI, null, 2);
         Uri eventsWithAccount = Calendar.Events.CONTENT_URI.buildUpon()

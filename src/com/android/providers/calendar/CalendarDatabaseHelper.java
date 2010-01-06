@@ -212,6 +212,16 @@ import com.android.internal.content.SyncStateContentProviderHelper;
                 "deleted INTEGER NOT NULL DEFAULT 0" +
                 ");");
 
+        // Trigger to set event's sync_account
+        db.execSQL("CREATE TRIGGER events_insert AFTER INSERT ON Events " +
+                "BEGIN " +
+                "UPDATE Events SET _sync_account=" +
+                "(SELECT _sync_account FROM Calendars WHERE Calendars._id=new.calendar_id)," +
+                "_sync_account_type=" +
+                "(SELECT _sync_account_type FROM Calendars WHERE Calendars._id=new.calendar_id) " +
+                "WHERE Events._id=new._id;" +
+                "END");
+
         db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
                 + Calendar.Events._SYNC_ACCOUNT_TYPE + ", " + Calendar.Events._SYNC_ACCOUNT + ", "
                 + Calendar.Events._SYNC_ID + ");");

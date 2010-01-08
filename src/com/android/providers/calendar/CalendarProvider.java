@@ -223,7 +223,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 58;
+    private static final int DATABASE_VERSION = 59;
 
     // Make sure we load at least two months worth of data.
     // Client apps can load more data in a background thread.
@@ -644,6 +644,19 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                     "END");
             oldVersion += 1;
         }
+        if(oldVersion == 58) {
+            db.execSQL("DROP TABLE IF EXISTS BusyBits;");
+            db.execSQL("CREATE TEMPORARY TABLE CalendarMetaData_Backup" +
+                    "(_id,localTimezone,minInstance,maxInstance);");
+            db.execSQL("INSERT INTO CalendarMetaData_Backup " +
+                    "SELECT _id,localTimezone,minInstance,maxInstance FROM CalendarMetaData;");
+            db.execSQL("DROP TABLE CalendarMetaData;");
+            db.execSQL("CREATE TABLE CalendarMetaData(_id,localTimezone,minInstance,maxInstance);");
+            db.execSQL("INSERT INTO CalendarMetaData " +
+                    "SELECT _id,localTimezone,minInstance,maxInstance FROM CalendarMetaData_Backup;");
+            db.execSQL("DROP TABLE CalendarMetaData_Backup;");
+            oldVersion += 1;
+        }
 
         return true; // this was lossless
     }
@@ -655,7 +668,6 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         db.execSQL("DROP TABLE IF EXISTS DeletedEvents;");
         db.execSQL("DROP TABLE IF EXISTS Instances;");
         db.execSQL("DROP TABLE IF EXISTS CalendarMetaData;");
-        db.execSQL("DROP TABLE IF EXISTS BusyBits;");
         db.execSQL("DROP TABLE IF EXISTS Attendees;");
         db.execSQL("DROP TABLE IF EXISTS Reminders;");
         db.execSQL("DROP TABLE IF EXISTS CalendarAlerts;");
@@ -789,15 +801,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
                 "_id INTEGER PRIMARY KEY," +
                 "localTimezone TEXT," +
                 "minInstance INTEGER," +      // UTC millis
-                "maxInstance INTEGER," +      // UTC millis
-                "minBusyBits INTEGER," +      // UTC millis
-                "maxBusyBits INTEGER" +       // UTC millis
-                ");");
-
-        db.execSQL("CREATE TABLE BusyBits(" +
-                "day INTEGER PRIMARY KEY," +  // the Julian day
-                "busyBits INTEGER," +         // 24 bits for 60-minute intervals
-                "allDayCount INTEGER" +       // number of all-day events
+                "maxInstance INTEGER" +      // UTC millis
                 ");");
 
         db.execSQL("CREATE TABLE Attendees (" +
@@ -1316,8 +1320,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
             }
             expandInstanceRangeLocked(expandBegin, expandEnd, localTimezone);
 
-            mMetaData.writeLocked(localTimezone, expandBegin, expandEnd,
-                    0 /* startDay */, 0 /* endDay */);
+            mMetaData.writeLocked(localTimezone, expandBegin, expandEnd);
             return;
         }
 
@@ -1355,8 +1358,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         }
 
         // Update the bounds on the Instances table.
-        mMetaData.writeLocked(localTimezone, minInstance, maxInstance,
-                fields.minBusyBit, fields.maxBusyBit);
+        mMetaData.writeLocked(localTimezone, minInstance, maxInstance);
     }
 
     private static final String[] EXPAND_COLUMNS = new String[] {
@@ -2315,8 +2317,7 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         }
 
         // Clear busy bits
-        mMetaData.writeLocked(fields.timezone, fields.minInstance, fields.maxInstance,
-                0 /* startDay */, 0 /* endDay */);
+        mMetaData.writeLocked(fields.timezone, fields.minInstance, fields.maxInstance);
     }
 
     long calculateLastDate(ContentValues values)

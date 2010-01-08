@@ -654,8 +654,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
             expandInstanceRangeLocked(expandBegin, expandEnd, localTimezone);
 
-            mMetaData.writeLocked(localTimezone, expandBegin, expandEnd,
-                    0 /* startDay */, 0 /* endDay */);
+            mMetaData.writeLocked(localTimezone, expandBegin, expandEnd);
             return;
         }
 
@@ -693,8 +692,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
 
         // Update the bounds on the Instances table.
-        mMetaData.writeLocked(localTimezone, minInstance, maxInstance,
-                0 /*unused*/, 0 /*unused*/);
+        mMetaData.writeLocked(localTimezone, minInstance, maxInstance);
     }
 
     private static final String[] EXPAND_COLUMNS = new String[] {
@@ -1644,9 +1642,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
         }
 
-        // Clear busy bits
-        mMetaData.writeLocked(fields.timezone, fields.minInstance, fields.maxInstance,
-                0 /* startDay */, 0 /* endDay */);
+        // Clear busy bits (is this still needed?)
+        mMetaData.writeLocked(fields.timezone, fields.minInstance, fields.maxInstance);
     }
 
     long calculateLastDate(ContentValues values)

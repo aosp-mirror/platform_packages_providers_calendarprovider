@@ -16,15 +16,15 @@
 
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/agenda_appwidget"
-    android:layout_width="fill_parent"
-    android:layout_height="fill_parent"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
     android:background="@drawable/appwidget_background"
     android:focusable="true"
     android:clickable="true">
 
     <ImageView
         android:id="@+id/divider"
-        android:layout_width="fill_parent"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentTop="true"
         android:layout_alignParentLeft="true"
@@ -34,8 +34,8 @@
 
     <TextView
         android:id="@+id/no_events"
-        android:layout_width="fill_parent"
-        android:layout_height="fill_parent"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:padding="10dip"
         android:gravity="center"
         android:textSize="14sp"
@@ -77,7 +77,7 @@
 
     <TextView
         android:id="@+id/when"
-        android:layout_width="fill_parent"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_below="@id/divider"
         android:layout_marginTop="6dip"
@@ -92,7 +92,7 @@
 
     <TextView
         android:id="@+id/where"
-        android:layout_width="fill_parent"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:layout_marginBottom="6dip"
@@ -106,7 +106,7 @@
 
     <TextView
         android:id="@+id/conflict"
-        android:layout_width="fill_parent"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_above="@id/where"
         android:layout_alignWithParentIfMissing="true"
@@ -121,7 +121,7 @@
 
     <TextView
         android:id="@+id/title"
-        android:layout_width="fill_parent"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_below="@id/when"
         android:layout_above="@id/conflict"

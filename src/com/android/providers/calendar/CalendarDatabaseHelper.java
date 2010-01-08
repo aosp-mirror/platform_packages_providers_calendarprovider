@@ -250,7 +250,7 @@ import com.android.internal.content.SyncStateContentProviderHelper;
                 "_id INTEGER PRIMARY KEY," +
                 "localTimezone TEXT," +
                 "minInstance INTEGER," +      // UTC millis
-                "maxInstance INTEGER," +      // UTC millis
+                "maxInstance INTEGER" +       // UTC millis
                 ");");
 
         db.execSQL("CREATE TABLE Attendees (" +

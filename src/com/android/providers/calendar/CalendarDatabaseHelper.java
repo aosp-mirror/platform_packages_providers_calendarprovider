@@ -251,14 +251,6 @@ import com.android.internal.content.SyncStateContentProviderHelper;
                 "localTimezone TEXT," +
                 "minInstance INTEGER," +      // UTC millis
                 "maxInstance INTEGER," +      // UTC millis
-                "minBusyBits INTEGER," +      // UTC millis
-                "maxBusyBits INTEGER" +       // UTC millis
-                ");");
-
-        db.execSQL("CREATE TABLE BusyBits(" +
-                "day INTEGER PRIMARY KEY," +  // the Julian day
-                "busyBits INTEGER," +         // 24 bits for 60-minute intervals
-                "allDayCount INTEGER" +       // number of all-day events
                 ");");
 
         db.execSQL("CREATE TABLE Attendees (" +
@@ -571,7 +563,6 @@ import com.android.internal.content.SyncStateContentProviderHelper;
         db.execSQL("DROP TABLE IF EXISTS EventsRawTimes;");
         db.execSQL("DROP TABLE IF EXISTS Instances;");
         db.execSQL("DROP TABLE IF EXISTS CalendarMetaData;");
-        db.execSQL("DROP TABLE IF EXISTS BusyBits;");
         db.execSQL("DROP TABLE IF EXISTS Attendees;");
         db.execSQL("DROP TABLE IF EXISTS Reminders;");
         db.execSQL("DROP TABLE IF EXISTS CalendarAlerts;");
@@ -617,7 +608,6 @@ import com.android.internal.content.SyncStateContentProviderHelper;
         db.execSQL("DELETE FROM EventsRawTimes;");
         db.execSQL("DELETE FROM Instances;");
         db.execSQL("DELETE FROM CalendarMetaData;");
-        db.execSQL("DELETE FROM BusyBits;");
         db.execSQL("DELETE FROM Attendees;");
         db.execSQL("DELETE FROM Reminders;");
         db.execSQL("DELETE FROM CalendarAlerts;");

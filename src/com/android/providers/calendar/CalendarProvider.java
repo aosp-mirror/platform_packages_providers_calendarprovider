@@ -1247,7 +1247,15 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
         qb.setTables("Instances INNER JOIN Events ON (Instances.event_id=Events._id) " +
                 "INNER JOIN Calendars ON (Events.calendar_id = Calendars._id)");
         qb.setProjectionMap(sInstancesProjectionMap);
-        acquireInstanceRange(begin, end, true);
+        // Convert the first and last Julian day range to a range that uses
+        // UTC milliseconds.
+        Time time = new Time();
+        long beginMs = time.setJulianDay((int) begin);
+        // We add one to lastDay because the time is set to 12am on the given
+        // Julian day and we want to include all the events on the last day.
+        long endMs = time.setJulianDay((int) end + 1);
+
+        acquireInstanceRange(beginMs, endMs, true);
         qb.appendWhere("startDay <= ");
         qb.appendWhere(String.valueOf(end));
         qb.appendWhere(" AND endDay >= ");

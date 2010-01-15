@@ -38,7 +38,7 @@ import com.android.internal.content.SyncStateContentProviderHelper;
 /* package */ class CalendarDatabaseHelper extends SQLiteOpenHelper {
     private static final String TAG = "CalendarDatabaseHelper";
 
-    private static final String DATABASE_NAME = "calendar2.db";
+    private static final String DATABASE_NAME = "calendar.db";
 
     // TODO: change the Calendar contract so these are defined there.
     static final String ACCOUNT_NAME = "_sync_account";
@@ -46,7 +46,7 @@ import com.android.internal.content.SyncStateContentProviderHelper;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 57;
+    private static final int DATABASE_VERSION = 60;
 
     private final Context mContext;
     private final SyncStateContentProviderHelper mSyncState;
@@ -340,231 +340,298 @@ import com.android.internal.content.SyncStateContentProviderHelper;
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         Log.i(TAG, "Upgrading DB from version " + oldVersion
                 + " to " + newVersion);
-        if (oldVersion < 46) {
+        if (oldVersion < 49) {
             dropTables(db);
             mSyncState.createDatabase(db);
             return; // this was lossy
         }
 
-        if (oldVersion == 46) {
-            Log.w(TAG, "Upgrading CalendarAlerts table");
-            db.execSQL("UPDATE CalendarAlerts SET reminder_id=NULL;");
-            db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN minutes INTEGER DEFAULT 0;");
-            oldVersion += 1;
+        if (oldVersion < 51) {
+            upgradeToVersion51(db); // From 50 or 51
+            oldVersion = 51;
         }
-
-        if (oldVersion == 47) {
-            // Changing to version 48 was intended to force a data wipe
-            dropTables(db);
-            mSyncState.createDatabase(db);
-            return; // this was lossy
-        }
-
-        if (oldVersion == 48) {
-            // Changing to version 49 was intended to force a data wipe
-            dropTables(db);
-            mSyncState.createDatabase(db);
-            return; // this was lossy
-        }
-
-        if (oldVersion == 49) {
-            Log.w(TAG, "Upgrading DeletedEvents table");
-
-            // We don't have enough information to fill in the correct
-            // value of the calendar_id for old rows in the DeletedEvents
-            // table, but rows in that table are transient so it is unlikely
-            // that there are any rows.  Plus, the calendar_id is used only
-            // when deleting a calendar, which is a rare event.  All new rows
-            // will have the correct calendar_id.
-            db.execSQL("ALTER TABLE DeletedEvents ADD COLUMN calendar_id INTEGER;");
-
-            // Trigger to remove a calendar's events when we delete the calendar
-            db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
-            db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON Calendars " +
-                    "BEGIN " +
-                    "DELETE FROM Events WHERE calendar_id = old._id;" +
-                    "DELETE FROM DeletedEvents WHERE calendar_id = old._id;" +
-                    "END");
-            db.execSQL("DROP TRIGGER IF EXISTS event_to_deleted");
-            oldVersion += 1;
-        }
-
-        if (oldVersion == 50) {
-            // This should have been deleted in the upgrade from version 49
-            // but we missed it.
-            db.execSQL("DROP TRIGGER IF EXISTS event_to_deleted");
-            oldVersion += 1;
-        }
-
         if (oldVersion == 51) {
-            // We added "originalAllDay" to the Events table to keep track of
-            // the allDay status of the original recurring event for entries
-            // that are exceptions to that recurring event.  We need this so
-            // that we can format the date correctly for the "originalInstanceTime"
-            // column when we make a change to the recurrence exception and
-            // send it to the server.
-            db.execSQL("ALTER TABLE Events ADD COLUMN originalAllDay INTEGER;");
-
-            // Iterate through the Events table and for each recurrence
-            // exception, fill in the correct value for "originalAllDay",
-            // if possible.  The only times where this might not be possible
-            // are (1) the original recurring event no longer exists, or
-            // (2) the original recurring event does not yet have a _sync_id
-            // because it was created on the phone and hasn't been synced to the
-            // server yet.  In both cases the originalAllDay field will be set
-            // to null.  In the first case we don't care because the recurrence
-            // exception will not be displayed and we won't be able to make
-            // any changes to it (and even if we did, the server should ignore
-            // them, right?).  In the second case, the calendar client already
-            // disallows making changes to an instance of a recurring event
-            // until the recurring event has been synced to the server so the
-            // second case should never occur.
-
-            // "cursor" iterates over all the recurrences exceptions.
-            Cursor cursor = db.rawQuery("SELECT _id,originalEvent FROM Events"
-                    + " WHERE originalEvent IS NOT NULL", null /* selection args */);
-            if (cursor != null) {
-                try {
-                    while (cursor.moveToNext()) {
-                        long id = cursor.getLong(0);
-                        String originalEvent = cursor.getString(1);
-
-                        // Find the original recurring event (if it exists)
-                        Cursor recur = db.rawQuery("SELECT allDay FROM Events"
-                                + " WHERE _sync_id=?", new String[] {originalEvent});
-                        if (recur == null) {
-                            continue;
-                        }
-
-                        try {
-                            // Fill in the "originalAllDay" field of the
-                            // recurrence exception with the "allDay" value
-                            // from the recurring event.
-                            if (recur.moveToNext()) {
-                                int allDay = recur.getInt(0);
-                                db.execSQL("UPDATE Events SET originalAllDay=" + allDay
-                                        + " WHERE _id="+id);
-                            }
-                        } finally {
-                            recur.close();
-                        }
-                    }
-                } finally {
-                    cursor.close();
-                }
-            }
+            upgradeToVersion52(db);
             oldVersion += 1;
         }
-
         if (oldVersion == 52) {
-            Log.w(TAG, "Upgrading CalendarAlerts table");
-            db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN creationTime INTEGER DEFAULT 0;");
-            db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN receivedTime INTEGER DEFAULT 0;");
-            db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN notifyTime INTEGER DEFAULT 0;");
+            upgradeToVersion53(db);
             oldVersion += 1;
         }
-
         if (oldVersion == 53) {
-            Log.w(TAG, "adding eventSyncAccountAndIdIndex");
-            db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
-                    + Calendar.Events._SYNC_ACCOUNT + ", " + Calendar.Events._SYNC_ID + ");");
+            upgradeToVersion54(db);
             oldVersion += 1;
         }
-
         if (oldVersion == 54) {
-            db.execSQL("ALTER TABLE Calendars ADD COLUMN _sync_account_type TEXT;");
-            db.execSQL("ALTER TABLE Events ADD COLUMN _sync_account_type TEXT;");
-            db.execSQL("ALTER TABLE DeletedEvents ADD COLUMN _sync_account_type TEXT;");
-            db.execSQL("UPDATE Calendars"
-                    + " SET _sync_account_type='com.google'"
-                    + " WHERE _sync_account IS NOT NULL");
-            db.execSQL("UPDATE Events"
-                    + " SET _sync_account_type='com.google'"
-                    + " WHERE _sync_account IS NOT NULL");
-            db.execSQL("UPDATE DeletedEvents"
-                    + " SET _sync_account_type='com.google'"
-                    + " WHERE _sync_account IS NOT NULL");
-            Log.w(TAG, "re-creating eventSyncAccountAndIdIndex");
-            db.execSQL("DROP INDEX eventSyncAccountAndIdIndex");
-            db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
-                    + Calendar.Events._SYNC_ACCOUNT_TYPE + ", "
-                    + Calendar.Events._SYNC_ACCOUNT + ", "
-                    + Calendar.Events._SYNC_ID + ");");
+            upgradeToVersion55(db);
             oldVersion += 1;
         }
-        if (oldVersion == 55 || oldVersion == 56) {  // Both require resync
-            // Delete sync state, so all records will be re-synced.
-            db.execSQL("DELETE FROM _sync_state;");
-
-            // "cursor" iterates over all the calendars
-            Cursor cursor = db.rawQuery("SELECT _sync_account,_sync_account_type,url "
-                    + "FROM Calendars",
-                    null /* selection args */);
-            if (cursor != null) {
-                try {
-                    while (cursor.moveToNext()) {
-                        String accountName = cursor.getString(0);
-                        String accountType = cursor.getString(1);
-                        final Account account = new Account(accountName, accountType);
-                        String calendarUrl = cursor.getString(2);
-                        scheduleSync(account, false /* two-way sync */, calendarUrl);
-                    }
-                } finally {
-                    cursor.close();
-                }
-            }
+        if (oldVersion == 55 || oldVersion == 56) {
+            // Both require resync, so just schedule it once
+            upgradeResync(db);
         }
         if (oldVersion == 55) {
-            db.execSQL("ALTER TABLE Calendars ADD COLUMN ownerAccount TEXT;");
-            db.execSQL("ALTER TABLE Events ADD COLUMN hasAttendeeData INTEGER;");
-            // Clear _sync_dirty to avoid a client-to-server sync that could blow away
-            // server attendees.
-            // Clear _sync_version to pull down the server's event (with attendees)
-            // Change the URLs from full-selfattendance to full
-            db.execSQL("UPDATE Events"
-                    + " SET _sync_dirty=0,"
-                    + " _sync_version=NULL,"
-                    + " _sync_id="
-                    + "REPLACE(_sync_id, '/private/full-selfattendance', '/private/full'),"
-                    + " commentsUri ="
-                    + "REPLACE(commentsUri, '/private/full-selfattendance', '/private/full');");
-            db.execSQL("UPDATE Calendars"
-                    + " SET url="
-                    + "REPLACE(url, '/private/full-selfattendance', '/private/full');");
-
-            // "cursor" iterates over all the calendars
-            Cursor cursor = db.rawQuery("SELECT _id, url FROM Calendars",
-                    null /* selection args */);
-            // Add the owner column.
-            if (cursor != null) {
-                try {
-                    while (cursor.moveToNext()) {
-                        Long id = cursor.getLong(0);
-                        String url = cursor.getString(1);
-                        String owner = CalendarSyncAdapter.calendarEmailAddressFromFeedUrl(url);
-                        db.execSQL("UPDATE Calendars SET ownerAccount=? WHERE _id=?",
-                                new Object[] {owner, id});
-                    }
-                } finally {
-                    cursor.close();
-                }
-            }
+            upgradeToVersion56(db);
             oldVersion += 1;
         }
         if (oldVersion == 56) {
-            db.execSQL("ALTER TABLE Events ADD COLUMN guestsCanModify"
-                    + " INTEGER NOT NULL DEFAULT 0;");
-            db.execSQL("ALTER TABLE Events ADD COLUMN guestsCanInviteOthers"
-                    + " INTEGER NOT NULL DEFAULT 1;");
-            db.execSQL("ALTER TABLE Events ADD COLUMN guestsCanSeeGuests"
-                    + " INTEGER NOT NULL DEFAULT 1;");
-            db.execSQL("ALTER TABLE Events ADD COLUMN organizer STRING;");
-            db.execSQL("UPDATE Events SET organizer="
-                    + "(SELECT attendeeEmail FROM Attendees WHERE "
-                    + "Attendees.event_id = Events._id"
-                    + " AND Attendees.attendeeRelationship=2);");
+            upgradeToVersion57(db);
             oldVersion += 1;
         }
+        if (oldVersion == 57) {
+            // Changes are undone upgrading to 60, so don't do anything.
+            oldVersion += 1;
+        }
+        if (oldVersion == 58) {
+            upgradeToVersion59(db);
+            oldVersion += 1;
+        }
+        if (oldVersion == 59) {
+            upgradeToVersion60(db);
+            oldVersion += 1;
+        }
+    }
+
+    private void upgradeToVersion56(SQLiteDatabase db) {
+        db.execSQL("ALTER TABLE Calendars ADD COLUMN ownerAccount TEXT;");
+        db.execSQL("ALTER TABLE Events ADD COLUMN hasAttendeeData INTEGER;");
+        // Clear _sync_dirty to avoid a client-to-server sync that could blow away
+        // server attendees.
+        // Clear _sync_version to pull down the server's event (with attendees)
+        // Change the URLs from full-selfattendance to full
+        db.execSQL("UPDATE Events"
+                + " SET _sync_dirty=0,"
+                + " _sync_version=NULL,"
+                + " _sync_id="
+                + "REPLACE(_sync_id, '/private/full-selfattendance', '/private/full'),"
+                + " commentsUri ="
+                + "REPLACE(commentsUri, '/private/full-selfattendance', '/private/full');");
+        db.execSQL("UPDATE Calendars"
+                + " SET url="
+                + "REPLACE(url, '/private/full-selfattendance', '/private/full');");
+
+        // "cursor" iterates over all the calendars
+        Cursor cursor = db.rawQuery("SELECT _id, url FROM Calendars",
+                null /* selection args */);
+        // Add the owner column.
+        if (cursor != null) {
+            try {
+                while (cursor.moveToNext()) {
+                    Long id = cursor.getLong(0);
+                    String url = cursor.getString(1);
+                    String owner = CalendarSyncAdapter.calendarEmailAddressFromFeedUrl(url);
+                    db.execSQL("UPDATE Calendars SET ownerAccount=? WHERE _id=?",
+                            new Object[] {owner, id});
+                }
+            } finally {
+                cursor.close();
+            }
+        }
+    }
+
+    private void upgradeResync(SQLiteDatabase db) {
+        // Delete sync state, so all records will be re-synced.
+        db.execSQL("DELETE FROM _sync_state;");
+
+        // "cursor" iterates over all the calendars
+        Cursor cursor = db.rawQuery("SELECT _sync_account,_sync_account_type,url "
+                + "FROM Calendars",
+                null /* selection args */);
+        if (cursor != null) {
+            try {
+                while (cursor.moveToNext()) {
+                    String accountName = cursor.getString(0);
+                    String accountType = cursor.getString(1);
+                    final Account account = new Account(accountName, accountType);
+                    String calendarUrl = cursor.getString(2);
+                    scheduleSync(account, false /* two-way sync */, calendarUrl);
+                }
+            } finally {
+                cursor.close();
+            }
+        }
+    }
+
+    private void upgradeToVersion60(SQLiteDatabase db) {
+        // Switch to CalendarProvider2
+        db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
+        db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON Calendars " +
+                "BEGIN " +
+                "DELETE FROM Events WHERE calendar_id = old._id;" +
+                "END");
+        db.execSQL("ALTER TABLE Events ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0;");
+        db.execSQL("DROP TRIGGER IF EXISTS events_insert");
+        db.execSQL("CREATE TRIGGER events_insert AFTER INSERT ON Events " +
+                "BEGIN " +
+                "UPDATE Events SET _sync_account=" +
+                "(SELECT _sync_account FROM Calendars WHERE Calendars._id=new.calendar_id)," +
+                "_sync_account_type=" +
+                "(SELECT _sync_account_type FROM Calendars WHERE Calendars._id=new.calendar_id) " +
+                "WHERE Events._id=new._id;" +
+                "END");
+        db.execSQL("DROP TABLE IF EXISTS DeletedEvents;");
+        db.execSQL("DROP TRIGGER IF EXISTS events_cleanup_delete");
+        db.execSQL("CREATE TRIGGER events_cleanup_delete DELETE ON Events " +
+                "BEGIN " +
+                "DELETE FROM Instances WHERE event_id = old._id;" +
+                "DELETE FROM EventsRawTimes WHERE event_id = old._id;" +
+                "DELETE FROM Attendees WHERE event_id = old._id;" +
+                "DELETE FROM Reminders WHERE event_id = old._id;" +
+                "DELETE FROM CalendarAlerts WHERE event_id = old._id;" +
+                "DELETE FROM ExtendedProperties WHERE event_id = old._id;" +
+                "END");
+        db.execSQL("DROP TRIGGER IF EXISTS attendees_update");
+        db.execSQL("DROP TRIGGER IF EXISTS attendees_insert");
+        db.execSQL("DROP TRIGGER IF EXISTS attendees_delete");
+        db.execSQL("DROP TRIGGER IF EXISTS reminders_update");
+        db.execSQL("DROP TRIGGER IF EXISTS reminders_insert");
+        db.execSQL("DROP TRIGGER IF EXISTS reminders_delete");
+        db.execSQL("DROP TRIGGER IF EXISTS extended_properties_update");
+        db.execSQL("DROP TRIGGER IF EXISTS extended_properties_insert");
+        db.execSQL("DROP TRIGGER IF EXISTS extended_properties_delete");
+
+        createEventsView(db);
+    }
+
+    private void upgradeToVersion59(SQLiteDatabase db) {
+        db.execSQL("DROP TABLE IF EXISTS BusyBits;");
+        db.execSQL("CREATE TEMPORARY TABLE CalendarMetaData_Backup" +
+                "(_id,localTimezone,minInstance,maxInstance);");
+        db.execSQL("INSERT INTO CalendarMetaData_Backup " +
+                "SELECT _id,localTimezone,minInstance,maxInstance FROM CalendarMetaData;");
+        db.execSQL("DROP TABLE CalendarMetaData;");
+        db.execSQL("CREATE TABLE CalendarMetaData(_id,localTimezone,minInstance,maxInstance);");
+        db.execSQL("INSERT INTO CalendarMetaData " +
+                "SELECT _id,localTimezone,minInstance,maxInstance FROM CalendarMetaData_Backup;");
+        db.execSQL("DROP TABLE CalendarMetaData_Backup;");
+    }
+
+    private void upgradeToVersion57(SQLiteDatabase db) {
+        db.execSQL("ALTER TABLE Events ADD COLUMN guestsCanModify"
+                + " INTEGER NOT NULL DEFAULT 0;");
+        db.execSQL("ALTER TABLE Events ADD COLUMN guestsCanInviteOthers"
+                + " INTEGER NOT NULL DEFAULT 1;");
+        db.execSQL("ALTER TABLE Events ADD COLUMN guestsCanSeeGuests"
+                + " INTEGER NOT NULL DEFAULT 1;");
+        db.execSQL("ALTER TABLE Events ADD COLUMN organizer STRING;");
+        db.execSQL("UPDATE Events SET organizer="
+                + "(SELECT attendeeEmail FROM Attendees WHERE "
+                + "Attendees.event_id = Events._id"
+                + " AND Attendees.attendeeRelationship=2);");
+    }
+
+    private void upgradeToVersion55(SQLiteDatabase db) {
+        db.execSQL("ALTER TABLE Calendars ADD COLUMN _sync_account_type TEXT;");
+        db.execSQL("ALTER TABLE Events ADD COLUMN _sync_account_type TEXT;");
+        db.execSQL("ALTER TABLE DeletedEvents ADD COLUMN _sync_account_type TEXT;");
+        db.execSQL("UPDATE Calendars"
+                + " SET _sync_account_type='com.google'"
+                + " WHERE _sync_account IS NOT NULL");
+        db.execSQL("UPDATE Events"
+                + " SET _sync_account_type='com.google'"
+                + " WHERE _sync_account IS NOT NULL");
+        db.execSQL("UPDATE DeletedEvents"
+                + " SET _sync_account_type='com.google'"
+                + " WHERE _sync_account IS NOT NULL");
+        Log.w(TAG, "re-creating eventSyncAccountAndIdIndex");
+        db.execSQL("DROP INDEX eventSyncAccountAndIdIndex");
+        db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
+                + Calendar.Events._SYNC_ACCOUNT_TYPE + ", "
+                + Calendar.Events._SYNC_ACCOUNT + ", "
+                + Calendar.Events._SYNC_ID + ");");
+    }
+
+    private void upgradeToVersion54(SQLiteDatabase db) {
+        Log.w(TAG, "adding eventSyncAccountAndIdIndex");
+        db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
+                + Calendar.Events._SYNC_ACCOUNT + ", " + Calendar.Events._SYNC_ID + ");");
+    }
+
+    private void upgradeToVersion53(SQLiteDatabase db) {
+        Log.w(TAG, "Upgrading CalendarAlerts table");
+        db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN creationTime INTEGER DEFAULT 0;");
+        db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN receivedTime INTEGER DEFAULT 0;");
+        db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN notifyTime INTEGER DEFAULT 0;");
+    }
+
+    private void upgradeToVersion52(SQLiteDatabase db) {
+        // We added "originalAllDay" to the Events table to keep track of
+        // the allDay status of the original recurring event for entries
+        // that are exceptions to that recurring event.  We need this so
+        // that we can format the date correctly for the "originalInstanceTime"
+        // column when we make a change to the recurrence exception and
+        // send it to the server.
+        db.execSQL("ALTER TABLE Events ADD COLUMN originalAllDay INTEGER;");
+
+        // Iterate through the Events table and for each recurrence
+        // exception, fill in the correct value for "originalAllDay",
+        // if possible.  The only times where this might not be possible
+        // are (1) the original recurring event no longer exists, or
+        // (2) the original recurring event does not yet have a _sync_id
+        // because it was created on the phone and hasn't been synced to the
+        // server yet.  In both cases the originalAllDay field will be set
+        // to null.  In the first case we don't care because the recurrence
+        // exception will not be displayed and we won't be able to make
+        // any changes to it (and even if we did, the server should ignore
+        // them, right?).  In the second case, the calendar client already
+        // disallows making changes to an instance of a recurring event
+        // until the recurring event has been synced to the server so the
+        // second case should never occur.
+
+        // "cursor" iterates over all the recurrences exceptions.
+        Cursor cursor = db.rawQuery("SELECT _id,originalEvent FROM Events"
+                + " WHERE originalEvent IS NOT NULL", null /* selection args */);
+        if (cursor != null) {
+            try {
+                while (cursor.moveToNext()) {
+                    long id = cursor.getLong(0);
+                    String originalEvent = cursor.getString(1);
+
+                    // Find the original recurring event (if it exists)
+                    Cursor recur = db.rawQuery("SELECT allDay FROM Events"
+                            + " WHERE _sync_id=?", new String[] {originalEvent});
+                    if (recur == null) {
+                        continue;
+                    }
+
+                    try {
+                        // Fill in the "originalAllDay" field of the
+                        // recurrence exception with the "allDay" value
+                        // from the recurring event.
+                        if (recur.moveToNext()) {
+                            int allDay = recur.getInt(0);
+                            db.execSQL("UPDATE Events SET originalAllDay=" + allDay
+                                    + " WHERE _id="+id);
+                        }
+                    } finally {
+                        recur.close();
+                    }
+                }
+            } finally {
+                cursor.close();
+            }
+        }
+    }
+
+    private void upgradeToVersion51(SQLiteDatabase db) {
+        Log.w(TAG, "Upgrading DeletedEvents table");
+
+        // We don't have enough information to fill in the correct
+        // value of the calendar_id for old rows in the DeletedEvents
+        // table, but rows in that table are transient so it is unlikely
+        // that there are any rows.  Plus, the calendar_id is used only
+        // when deleting a calendar, which is a rare event.  All new rows
+        // will have the correct calendar_id.
+        db.execSQL("ALTER TABLE DeletedEvents ADD COLUMN calendar_id INTEGER;");
+
+        // Trigger to remove a calendar's events when we delete the calendar
+        db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
+        db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON Calendars " +
+                "BEGIN " +
+                "DELETE FROM Events WHERE calendar_id = old._id;" +
+                "DELETE FROM DeletedEvents WHERE calendar_id = old._id;" +
+                "END");
+        db.execSQL("DROP TRIGGER IF EXISTS event_to_deleted");
     }
 
     private void dropTables(SQLiteDatabase db) {

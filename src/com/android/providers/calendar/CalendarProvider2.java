@@ -73,7 +73,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private static final String TAG = "CalendarProvider2";
 
-    private static final boolean VERBOSE_LOGGING = Log.isLoggable(TAG, Log.VERBOSE) || true;
+    private static final boolean VERBOSE_LOGGING = Log.isLoggable(TAG, Log.VERBOSE);
 
     private static final boolean PROFILE = false;
     private static final boolean MULTIPLE_ATTENDEES_PER_EVENT = true;

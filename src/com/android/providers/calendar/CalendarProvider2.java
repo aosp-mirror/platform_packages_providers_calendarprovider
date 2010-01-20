@@ -558,18 +558,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             long endMs = time.setJulianDay((int) rangeEnd + 1);
             // will lock the database.
             acquireInstanceRange(beginMs, endMs, true /* use minimum expansion window */);
-            qb.appendWhere("startDay <= ");
-            qb.appendWhere(String.valueOf(rangeEnd));
-            qb.appendWhere(" AND endDay >= ");
+            qb.appendWhere("startDay<=? AND endDay>=?");
         } else {
             // will lock the database.
             acquireInstanceRange(rangeBegin, rangeEnd, true /* use minimum expansion window */);
-            qb.appendWhere("begin <= ");
-            qb.appendWhere(String.valueOf(rangeEnd));
-            qb.appendWhere(" AND end >= ");
+            qb.appendWhere("begin<=? AND end>=?");
         }
-        qb.appendWhere(String.valueOf(rangeBegin));
-        return qb.query(mDb, projection, selection, null /* selectionArgs */, null /* groupBy */,
+        String selectionArgs[] = new String[] {String.valueOf(rangeEnd),
+                String.valueOf(rangeBegin)};
+        return qb.query(mDb, projection, selection, selectionArgs, null /* groupBy */,
                 null /* having */, sort);
     }
 
@@ -587,11 +584,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         long endMs = time.setJulianDay((int) end + 1);
 
         acquireInstanceRange(beginMs, endMs, true);
-        qb.appendWhere("startDay <= ");
-        qb.appendWhere(String.valueOf(end));
-        qb.appendWhere(" AND endDay >= ");
-        qb.appendWhere(String.valueOf(begin));
-        return qb.query(mDb, projection, selection, null /* selectionArgs */,
+        qb.appendWhere("startDay<=? AND endDay>=?");
+        String selectionArgs[] = new String[] {String.valueOf(end), String.valueOf(begin)};
+
+        return qb.query(mDb, projection, selection, selectionArgs,
                 Instances.START_DAY /* groupBy */, null /* having */, null);
     }
 
@@ -757,33 +753,24 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         String beginString = String.valueOf(begin);
         String endString = String.valueOf(end);
 
-        qb.appendWhere("(dtstart <= ");
-        qb.appendWhere(endString);
-        qb.appendWhere(" AND ");
-        qb.appendWhere("(lastDate IS NULL OR lastDate >= ");
-        qb.appendWhere(beginString);
-        qb.appendWhere(")) OR (");
         // grab recurrence exceptions that fall outside our expansion window but modify
         // recurrences that do fall within our window.  we won't insert these into the output
         // set of instances, but instead will just add them to our cancellations list, so we
         // can cancel the correct recurrence expansion instances.
-        qb.appendWhere("originalInstanceTime IS NOT NULL ");
-        qb.appendWhere("AND originalInstanceTime <= ");
-        qb.appendWhere(endString);
-        qb.appendWhere(" AND ");
         // we don't have originalInstanceDuration or end time.  for now, assume the original
         // instance lasts no longer than 1 week.
         // TODO: compute the originalInstanceEndTime or get this from the server.
-        qb.appendWhere("originalInstanceTime >= ");
-        qb.appendWhere(String.valueOf(begin - MAX_ASSUMED_DURATION));
-        qb.appendWhere(")");
-
+        qb.appendWhere("(dtstart <= ? AND (lastDate IS NULL OR lastDate >= ?)) OR " +
+                "(originalInstanceTime IS NOT NULL AND originalInstanceTime <= ? AND " +
+                "originalInstanceTime >= ?)");
+        String selectionArgs[] = new String[] {endString, beginString, endString,
+                String.valueOf(begin - MAX_ASSUMED_DURATION)};
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "Retrieving events to expand: " + qb.toString());
         }
 
         return qb.query(mDb, EXPAND_COLUMNS, null /* selection */,
-                null /* selectionArgs */, null /* groupBy */,
+                selectionArgs, null /* groupBy */,
                 null /* having */, null /* sortOrder */);
     }
 

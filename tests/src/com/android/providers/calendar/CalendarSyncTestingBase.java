@@ -32,7 +32,7 @@ import android.text.format.Time;
 import android.util.Log;
 
 import com.google.android.collect.Maps;
-import com.google.android.googlelogin.GoogleLoginServiceConstants;
+import com.google.android.gsf.GoogleLoginServiceConstants;
 
 import java.util.HashSet;
 import java.util.Map;

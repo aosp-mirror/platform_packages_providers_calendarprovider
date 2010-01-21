@@ -50,7 +50,7 @@ import android.util.Config;
 import android.util.Log;
 import com.google.android.common.gdata.AndroidGDataClient;
 import com.google.android.common.gdata.AndroidXmlParserFactory;
-import com.google.android.googlelogin.GoogleLoginServiceConstants;
+import com.google.android.gsf.GoogleLoginServiceConstants;
 import com.google.wireless.gdata.calendar.client.CalendarClient;
 import com.google.wireless.gdata.calendar.data.CalendarEntry;
 import com.google.wireless.gdata.calendar.data.CalendarsFeed;

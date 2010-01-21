@@ -9,7 +9,7 @@ LOCAL_SRC_FILES := $(call all-java-files-under, src)
 
 LOCAL_PACKAGE_NAME := CalendarProviderTests
 
-LOCAL_JAVA_LIBRARIES := ext android.test.runner googlelogin-client
+LOCAL_JAVA_LIBRARIES := ext android.test.runner gsf-client
 
 LOCAL_INSTRUMENTATION_FOR := CalendarProvider
 

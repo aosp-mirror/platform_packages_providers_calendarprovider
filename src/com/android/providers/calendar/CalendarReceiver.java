@@ -22,6 +22,7 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.IContentProvider;
 import android.content.Intent;
+import android.provider.Calendar;
 
 /**
  * This IntentReceiver executes when the boot completes and ensures that
@@ -38,7 +39,7 @@ public class CalendarReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         String action = intent.getAction();
         ContentResolver cr = context.getContentResolver();
-        IContentProvider icp = cr.acquireProvider("calendar");
+        IContentProvider icp = cr.acquireProvider(Calendar.AUTHORITY);
         ContentProvider contentProvider = ContentProvider.
                 coerceToLocalContentProvider(icp);
         // Temporarily handle either CalendarProvider or CalendarProvider2 implementation

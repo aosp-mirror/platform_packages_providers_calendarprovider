@@ -37,8 +37,9 @@ import java.io.IOException;
 
 
 public class TestCalendarSyncAdapter extends TempProviderSyncAdapter {
-    private static Uri sEventsURL = Uri.parse("content://calendar/events/");
-    private static Uri sDeletedEventsURL = Uri.parse("content://calendar/deleted_events/");
+    private static final Uri sEventsURL = android.provider.Calendar.Events.CONTENT_URI;
+    private static final Uri sDeletedEventsURL =
+        android.provider.Calendar.Events.DELETED_CONTENT_URI;
 
     public TestCalendarSyncAdapter(Context context, SyncableContentProvider provider) {
         super(context, provider);
@@ -175,5 +176,3 @@ public class TestCalendarSyncAdapter extends TempProviderSyncAdapter {
     public void onAccountsChanged(Account[] accounts) {
     }
 }
-
-

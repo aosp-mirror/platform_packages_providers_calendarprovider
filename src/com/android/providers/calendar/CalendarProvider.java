@@ -3482,24 +3482,24 @@ public class CalendarProvider extends AbstractSyncableContentProvider {
     private static final HashMap<String, String> sCalendarAlertsProjectionMap;
 
     static {
-        sURLMatcher.addURI("calendar", "instances/when/*/*", INSTANCES);
-        sURLMatcher.addURI("calendar", "instances/whenbyday/*/*", INSTANCES_BY_DAY);
-        sURLMatcher.addURI("calendar", "instances/groupbyday/*/*", EVENT_DAYS);
-        sURLMatcher.addURI("calendar", "events", EVENTS);
-        sURLMatcher.addURI("calendar", "events/#", EVENTS_ID);
-        sURLMatcher.addURI("calendar", "calendars", CALENDARS);
-        sURLMatcher.addURI("calendar", "calendars/#", CALENDARS_ID);
-        sURLMatcher.addURI("calendar", "deleted_events", DELETED_EVENTS);
-        sURLMatcher.addURI("calendar", "attendees", ATTENDEES);
-        sURLMatcher.addURI("calendar", "attendees/#", ATTENDEES_ID);
-        sURLMatcher.addURI("calendar", "reminders", REMINDERS);
-        sURLMatcher.addURI("calendar", "reminders/#", REMINDERS_ID);
-        sURLMatcher.addURI("calendar", "extendedproperties", EXTENDED_PROPERTIES);
-        sURLMatcher.addURI("calendar", "extendedproperties/#", EXTENDED_PROPERTIES_ID);
-        sURLMatcher.addURI("calendar", "calendar_alerts", CALENDAR_ALERTS);
-        sURLMatcher.addURI("calendar", "calendar_alerts/#", CALENDAR_ALERTS_ID);
-        sURLMatcher.addURI("calendar", "calendar_alerts/by_instance", CALENDAR_ALERTS_BY_INSTANCE);
-
+        sURLMatcher.addURI(Calendar.AUTHORITY, "instances/when/*/*", INSTANCES);
+        sURLMatcher.addURI(Calendar.AUTHORITY, "instances/whenbyday/*/*", INSTANCES_BY_DAY);
+        sURLMatcher.addURI(Calendar.AUTHORITY, "instances/groupbyday/*/*", EVENT_DAYS);
+        sURLMatcher.addURI(Calendar.AUTHORITY, "events", EVENTS);
+        sURLMatcher.addURI(Calendar.AUTHORITY, "events/#", EVENTS_ID);
+        sURLMatcher.addURI(Calendar.AUTHORITY, "calendars", CALENDARS);
+        sURLMatcher.addURI(Calendar.AUTHORITY, "calendars/#", CALENDARS_ID);
+        sURLMatcher.addURI(Calendar.AUTHORITY, "deleted_events", DELETED_EVENTS);
+        sURLMatcher.addURI(Calendar.AUTHORITY, "attendees", ATTENDEES);
+        sURLMatcher.addURI(Calendar.AUTHORITY, "attendees/#", ATTENDEES_ID);
+        sURLMatcher.addURI(Calendar.AUTHORITY, "reminders", REMINDERS);
+        sURLMatcher.addURI(Calendar.AUTHORITY, "reminders/#", REMINDERS_ID);
+        sURLMatcher.addURI(Calendar.AUTHORITY, "extendedproperties", EXTENDED_PROPERTIES);
+        sURLMatcher.addURI(Calendar.AUTHORITY, "extendedproperties/#", EXTENDED_PROPERTIES_ID);
+        sURLMatcher.addURI(Calendar.AUTHORITY, "calendar_alerts", CALENDAR_ALERTS);
+        sURLMatcher.addURI(Calendar.AUTHORITY, "calendar_alerts/#", CALENDAR_ALERTS_ID);
+        sURLMatcher.addURI(Calendar.AUTHORITY, "calendar_alerts/by_instance",
+                           CALENDAR_ALERTS_BY_INSTANCE);
 
         sEventsProjectionMap = new HashMap<String, String>();
         // Events columns

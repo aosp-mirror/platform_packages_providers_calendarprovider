@@ -49,7 +49,7 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProviderForT
     private MetaData mMetaData;
     private Context mContext;
     private MockContentResolver mResolver;
-    private Uri mEventsUri = Uri.parse("content://calendar/events");
+    private Uri mEventsUri = Calendar.Events.CONTENT_URI;
     private int mCalendarId;
 
     protected boolean mWipe = false;
@@ -876,7 +876,7 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProviderForT
         m.put(Calendars._SYNC_ACCOUNT, "foo@gmail.com");
         m.put(Calendars._SYNC_ACCOUNT_TYPE, "com.google");
 
-        Uri url = mResolver.insert(Uri.parse("content://calendar/calendars"), m);
+        Uri url = mResolver.insert(Calendar.Calendars.CONTENT_URI, m);
         String id = url.getLastPathSegment();
         return Integer.parseInt(id);
     }
@@ -1492,7 +1492,7 @@ public class CalendarProviderTest extends ProviderTestCase2<CalendarProviderForT
     }
 
     private Cursor queryInstances(long begin, long end) {
-        Uri url = Uri.parse("content://calendar/instances/when/" + begin + "/" + end);
+        Uri url = Uri.withAppendedPath(Calendar.Instances.CONTENT_URI, begin + "/" + end);
         return mResolver.query(url, null, null, null, null);
     }
 

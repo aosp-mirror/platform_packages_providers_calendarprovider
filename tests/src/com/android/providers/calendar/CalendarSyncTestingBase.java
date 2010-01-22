@@ -43,7 +43,7 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
     protected Context mTargetContext;
     protected String mAccount;
     protected ContentResolver mResolver;
-    protected Uri mEventsUri = Uri.parse("content://calendar/events");
+    protected Uri mEventsUri = Calendar.Events.CONTENT_URI;
 
     static final String TAG = "calendar";
     static final String DEFAULT_TIMEZONE = "America/Los_Angeles";

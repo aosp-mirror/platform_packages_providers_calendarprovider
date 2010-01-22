@@ -884,7 +884,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         m.put(Calendars._SYNC_ACCOUNT,  account);
         m.put(Calendars._SYNC_ACCOUNT_TYPE,  "com.google");
 
-        Uri url = mResolver.insert(Uri.parse("content://calendar/calendars"), m);
+        Uri url = mResolver.insert(Calendar.Calendars.CONTENT_URI, m);
         String id = url.getLastPathSegment();
         return Integer.parseInt(id);
     }
@@ -1695,7 +1695,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
     }
 
     private Cursor queryInstances(long begin, long end) {
-        Uri url = Uri.parse("content://calendar/instances/when/" + begin + "/" + end);
+        Uri url = Uri.withAppendedPath(Calendar.Instances.CONTENT_URI, begin + "/" + end);
         return mResolver.query(url, null, null, null, null);
     }
 

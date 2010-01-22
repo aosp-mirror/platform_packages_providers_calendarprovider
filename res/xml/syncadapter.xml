@@ -21,6 +21,6 @@
 <!-- for the SyncAdapter. -->
 
 <sync-adapter xmlns:android="http://schemas.android.com/apk/res/android"
-    android:contentAuthority="calendar"
+    android:contentAuthority="com.android.calendar"
     android:accountType="com.google"
 />

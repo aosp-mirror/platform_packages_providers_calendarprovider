@@ -40,7 +40,7 @@
              (android.test) library. -->
         <uses-library android:name="android.test.runner" />
 
-        <provider android:name="CalendarProvider2" android:authorities="calendar"
+        <provider android:name="CalendarProvider2" android:authorities="com.android.calendar"
                 android:label="@string/provider_label"
                 android:multiprocess="false"
                 android:readPermission="android.permission.READ_CALENDAR"

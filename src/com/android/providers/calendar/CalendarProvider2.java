@@ -53,7 +53,6 @@ import android.text.format.Time;
 import android.util.Config;
 import android.util.Log;
 import android.util.TimeFormatException;
-import com.android.internal.content.SyncStateContentProviderHelper;
 import com.google.android.collect.Maps;
 import com.google.android.collect.Sets;
 import com.google.wireless.gdata.calendar.client.CalendarClient;
@@ -106,6 +105,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     };
     private static final int ID_INDEX = 0;
     private static final int EVENT_ID_INDEX = 1;
+
+    // Copied from DateUtils for unbundling
+    public static final long SECOND_IN_MILLIS = 1000;
+    public static final long MINUTE_IN_MILLIS = SECOND_IN_MILLIS * 60;
+    public static final long HOUR_IN_MILLIS = MINUTE_IN_MILLIS * 60;
+    public static final long DAY_IN_MILLIS = HOUR_IN_MILLIS * 24;
 
     /**
      * The cached copy of the CalendarMetaData database table.
@@ -185,7 +190,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * just crossed into a new timezone and might have just missed an alarm.
      */
     private static final long SCHEDULE_ALARM_SLACK =
-        2 * android.text.format.DateUtils.HOUR_IN_MILLIS;
+        2 * HOUR_IN_MILLIS;
 
     /**
      * Alarms older than this threshold will be deleted from the CalendarAlerts
@@ -199,7 +204,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * set this to something greater than a day.
      */
     private static final long CLEAR_OLD_ALARM_THRESHOLD =
-            7 * android.text.format.DateUtils.DAY_IN_MILLIS + SCHEDULE_ALARM_SLACK;
+            7 * DAY_IN_MILLIS + SCHEDULE_ALARM_SLACK;
 
     // A lock for synchronizing access to fields that are shared
     // with the AlarmScheduler thread.
@@ -2622,7 +2627,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 if (alarmTime < nextAlarmTime) {
                     nextAlarmTime = alarmTime;
                 } else if (alarmTime >
-                           nextAlarmTime + android.text.format.DateUtils.MINUTE_IN_MILLIS) {
+                           nextAlarmTime + MINUTE_IN_MILLIS) {
                     // This event alarm (and all later ones) will be scheduled
                     // later.
                     if (Log.isLoggable(TAG, Log.DEBUG)) {
@@ -2669,9 +2674,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // event is inserted before the next alarm check, then this method
         // will be run again when the new event is inserted.
         if (nextAlarmTime != Long.MAX_VALUE) {
-            scheduleNextAlarmCheck(nextAlarmTime + android.text.format.DateUtils.MINUTE_IN_MILLIS);
+            scheduleNextAlarmCheck(nextAlarmTime + MINUTE_IN_MILLIS);
         } else {
-            scheduleNextAlarmCheck(currentMillis + android.text.format.DateUtils.DAY_IN_MILLIS);
+            scheduleNextAlarmCheck(currentMillis + DAY_IN_MILLIS);
         }
     }
 
@@ -2756,9 +2761,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sUriMatcher.addURI(Calendar.AUTHORITY, "calendar_alerts/#", CALENDAR_ALERTS_ID);
         sUriMatcher.addURI(Calendar.AUTHORITY, "calendar_alerts/by_instance",
                            CALENDAR_ALERTS_BY_INSTANCE);
-        sUriMatcher.addURI(Calendar.AUTHORITY, SyncStateContentProviderHelper.PATH, SYNCSTATE);
-        sUriMatcher.addURI(Calendar.AUTHORITY, SyncStateContentProviderHelper.PATH + "/#",
-                           SYNCSTATE_ID);
+        sUriMatcher.addURI(Calendar.AUTHORITY, "syncstate", SYNCSTATE);
+        sUriMatcher.addURI(Calendar.AUTHORITY, "syncstate" + "/#", SYNCSTATE_ID);
 
         sEventsProjectionMap = new HashMap<String, String>();
         // Events columns

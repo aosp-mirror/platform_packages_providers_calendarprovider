@@ -31,6 +31,9 @@ import android.provider.ContactsContract;
 import android.util.Log;
 import com.android.internal.content.SyncStateContentProviderHelper;
 
+import java.net.URLDecoder;
+import java.io.UnsupportedEncodingException;
+
 /**
  * Database helper for calendar. Designed as a singleton to make sure that all
  * {@link android.content.ContentProvider} users get the same reference.
@@ -419,7 +422,7 @@ import com.android.internal.content.SyncStateContentProviderHelper;
                 while (cursor.moveToNext()) {
                     Long id = cursor.getLong(0);
                     String url = cursor.getString(1);
-                    String owner = CalendarSyncAdapter.calendarEmailAddressFromFeedUrl(url);
+                    String owner = calendarEmailAddressFromFeedUrl(url);
                     db.execSQL("UPDATE Calendars SET ownerAccount=? WHERE _id=?",
                             new Object[] {owner, id});
                 }
@@ -761,5 +764,29 @@ import com.android.internal.content.SyncStateContentProviderHelper;
                 + ")";
 
         db.execSQL("CREATE VIEW " + Views.EVENTS + " AS " + eventsSelect);
+    }
+
+    /**
+     * Extracts the calendar email from a calendar feed url.
+     * @param feed the calendar feed url
+     * @return the calendar email that is in the feed url or null if it can't
+     * find the email address.
+     * TODO: this is duplicated in CalendarSyncAdapter; move to a library
+     */
+    public static String calendarEmailAddressFromFeedUrl(String feed) {
+        // Example feed url:
+        // https://www.google.com/calendar/feeds/foo%40gmail.com/private/full-noattendees
+        String[] pathComponents = feed.split("/");
+        if (pathComponents.length > 5 && "feeds".equals(pathComponents[4])) {
+            try {
+                return URLDecoder.decode(pathComponents[5], "UTF-8");
+            } catch (UnsupportedEncodingException e) {
+                Log.e(TAG, "unable to url decode the email address in calendar " + feed);
+                return null;
+            }
+        }
+
+        Log.e(TAG, "unable to find the email address in calendar " + feed);
+        return null;
     }
 }

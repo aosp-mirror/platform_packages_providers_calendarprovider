@@ -77,6 +77,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private static final boolean PROFILE = false;
     private static final boolean MULTIPLE_ATTENDEES_PER_EVENT = true;
+
+    private static final String INVALID_CALENDARALERTS_SELECTOR =
+            "_id IN (SELECT ca._id FROM CalendarAlerts AS ca"
+                    + " LEFT OUTER JOIN Instances USING (event_id, begin, end)"
+                    + " LEFT OUTER JOIN Reminders AS r ON"
+                    + " (ca.event_id=r.event_id AND ca.minutes=r.minutes)"
+                    + " WHERE Instances.begin ISNULL OR ca.alarmTime<?"
+                    + "   OR (r.minutes ISNULL AND ca.minutes<>0))";
+
     private static final String[] ID_ONLY_PROJECTION =
             new String[] {Events._ID};
 
@@ -1980,6 +1989,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             cursor.close();
             cursor = null;
         }
+
+        scheduleNextAlarm(false /* do not remove alarms */);
         triggerAppWidgetUpdate(-1);
 
         String selectionArgs[] = new String[] {String.valueOf(id)};
@@ -2513,17 +2524,23 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Log.d(TAG, "runScheduleNextAlarm() start search: " + startTimeStr);
         }
 
-        // Clear old alarms but keep alarms around for a while to prevent
+        // Delete rows in CalendarAlert where the corresponding Instance or
+        // Reminder no longer exist.
+        // Also clear old alarms but keep alarms around for a while to prevent
         // multiple alerts for the same reminder.  The "clearUpToTime'
         // should be further in the past than the point in time where
         // we start searching for events (the "start" variable defined above).
-        long clearUpToTime = currentMillis - CLEAR_OLD_ALARM_THRESHOLD;
-        db.delete("CalendarAlerts", CalendarAlerts.ALARM_TIME + "<" + clearUpToTime, null);
+        String selectArg[] = new String[] {
+            Long.toString(currentMillis - CLEAR_OLD_ALARM_THRESHOLD)
+        };
+
+        int rowsDeleted =
+            db.delete(CalendarAlerts.TABLE_NAME, INVALID_CALENDARALERTS_SELECTOR, selectArg);
 
         long nextAlarmTime = end;
-        long alarmTime = CalendarAlerts.findNextAlarmTime(cr, currentMillis);
-        if (alarmTime != -1 && alarmTime < nextAlarmTime) {
-            nextAlarmTime = alarmTime;
+        final long tmpAlarmTime = CalendarAlerts.findNextAlarmTime(cr, currentMillis);
+        if (tmpAlarmTime != -1 && tmpAlarmTime < nextAlarmTime) {
+            nextAlarmTime = tmpAlarmTime;
         }
 
         // Extract events from the database sorted by alarm time.  The
@@ -2563,19 +2580,18 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         try {
             cursor = db.rawQuery(query, null);
 
-            int beginIndex = cursor.getColumnIndex(Instances.BEGIN);
-            int endIndex = cursor.getColumnIndex(Instances.END);
-            int eventIdIndex = cursor.getColumnIndex("eventId");
-            int alarmTimeIndex = cursor.getColumnIndex("myAlarmTime");
-            int minutesIndex = cursor.getColumnIndex(Reminders.MINUTES);
+            final int beginIndex = cursor.getColumnIndex(Instances.BEGIN);
+            final int endIndex = cursor.getColumnIndex(Instances.END);
+            final int eventIdIndex = cursor.getColumnIndex("eventId");
+            final int alarmTimeIndex = cursor.getColumnIndex("myAlarmTime");
+            final int minutesIndex = cursor.getColumnIndex(Reminders.MINUTES);
 
             if (Log.isLoggable(TAG, Log.DEBUG)) {
                 Time time = new Time();
                 time.set(nextAlarmTime);
                 String alarmTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
-                Log.d(TAG, "nextAlarmTime: " + alarmTimeStr
-                        + " cursor results: " + cursor.getCount()
-                        + " query: " + query);
+                Log.d(TAG, "cursor results: " + cursor.getCount() + " nextAlarmTime: "
+                        + alarmTimeStr);
             }
 
             while (cursor.moveToNext()) {
@@ -2586,29 +2602,21 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // Actually, we allow alarms up to a minute later to also
                 // be scheduled so that we don't have to check immediately
                 // again after an event alarm goes off.
-                alarmTime = cursor.getLong(alarmTimeIndex);
-                long eventId = cursor.getLong(eventIdIndex);
-                int minutes = cursor.getInt(minutesIndex);
-                long startTime = cursor.getLong(beginIndex);
+                final long alarmTime = cursor.getLong(alarmTimeIndex);
+                final long eventId = cursor.getLong(eventIdIndex);
+                final int minutes = cursor.getInt(minutesIndex);
+                final long startTime = cursor.getLong(beginIndex);
+                final long endTime = cursor.getLong(endIndex);
 
                 if (Log.isLoggable(TAG, Log.DEBUG)) {
-                    int titleIndex = cursor.getColumnIndex(Events.TITLE);
-                    String title = cursor.getString(titleIndex);
                     Time time = new Time();
                     time.set(alarmTime);
                     String schedTime = time.format(" %a, %b %d, %Y %I:%M%P");
                     time.set(startTime);
                     String startTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
-                    long endTime = cursor.getLong(endIndex);
-                    time.set(endTime);
-                    String endTimeStr = time.format(" - %a, %b %d, %Y %I:%M%P");
-                    time.set(currentMillis);
-                    String currentTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
-                    Log.d(TAG, "  looking at id: " + eventId + " " + title
-                            + " " + startTime
-                            + startTimeStr + endTimeStr + " alarm: "
-                            + alarmTime + schedTime
-                            + " currentTime: " + currentTimeStr);
+
+                    Log.d(TAG, "  looking at id: " + eventId + " " + startTime + startTimeStr
+                            + " alarm: " + alarmTime + schedTime);
                 }
 
                 if (alarmTime < nextAlarmTime) {
@@ -2617,6 +2625,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                            nextAlarmTime + android.text.format.DateUtils.MINUTE_IN_MILLIS) {
                     // This event alarm (and all later ones) will be scheduled
                     // later.
+                    if (Log.isLoggable(TAG, Log.DEBUG)) {
+                        Log.d(TAG, "This event alarm (and all later ones) will be scheduled later");
+                    }
                     break;
                 }
 
@@ -2632,7 +2643,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
 
                 // Insert this alarm into the CalendarAlerts table
-                long endTime = cursor.getLong(endIndex);
                 Uri uri = CalendarAlerts.insert(cr, eventId, startTime,
                         endTime, alarmTime, minutes);
                 if (uri == null) {
@@ -2640,38 +2650,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     continue;
                 }
 
-                Intent intent = new Intent(android.provider.Calendar.EVENT_REMINDER_ACTION);
-                intent.setData(uri);
-
-                // Also include the begin and end time of this event, because
-                // we cannot determine that from the Events database table.
-                intent.putExtra(android.provider.Calendar.EVENT_BEGIN_TIME, startTime);
-                intent.putExtra(android.provider.Calendar.EVENT_END_TIME, endTime);
-                if (Log.isLoggable(TAG, Log.DEBUG)) {
-                    int titleIndex = cursor.getColumnIndex(Events.TITLE);
-                    String title = cursor.getString(titleIndex);
-                    Time time = new Time();
-                    time.set(alarmTime);
-                    String schedTime = time.format(" %a, %b %d, %Y %I:%M%P");
-                    time.set(startTime);
-                    String startTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
-                    time.set(endTime);
-                    String endTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
-                    time.set(currentMillis);
-                    String currentTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
-                    Log.d(TAG, "  scheduling " + title
-                            + startTimeStr  + " - " + endTimeStr + " alarm: " + schedTime
-                            + " currentTime: " + currentTimeStr
-                            + " uri: " + uri);
-                }
-                PendingIntent sender = PendingIntent.getBroadcast(getContext(),
-                        0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
-                alarmManager.set(AlarmManager.RTC_WAKEUP, alarmTime, sender);
+                CalendarAlerts.scheduleAlarm(getContext(), alarmManager, alarmTime);
             }
         } finally {
             if (cursor != null) {
                 cursor.close();
             }
+        }
+
+        // Refresh notification bar
+        if (rowsDeleted > 0) {
+            CalendarAlerts.scheduleAlarm(getContext(), alarmManager, currentMillis);
         }
 
         // If we scheduled an event alarm, then schedule the next alarm check

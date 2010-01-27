@@ -1202,6 +1202,13 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
                         break;
                     case 2:
                         assertEquals(1, subvalues.size()); // Extended properties
+                        ContentValues subContentValues = subvalues.get(0).values;
+                        String name = subContentValues.getAsString(
+                                Calendar.ExtendedProperties.NAME);
+                        String value = subContentValues.getAsString(
+                                Calendar.ExtendedProperties.VALUE);
+                        assertEquals("foo", name);
+                        assertEquals("bar", value);
                         break;
                     case 3:
                         assertEquals(1, subvalues.size()); // Attendees

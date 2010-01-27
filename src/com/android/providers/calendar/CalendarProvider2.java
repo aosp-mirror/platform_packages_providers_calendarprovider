@@ -484,21 +484,24 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 qb.appendWhere("Reminders._id=? AND Events._id=Reminders.event_id");
                 break;
             case CALENDAR_ALERTS:
-                qb.setTables("CalendarAlerts, Events");
+                qb.setTables("CalendarAlerts, " + CalendarDatabaseHelper.Views.EVENTS);
                 qb.setProjectionMap(sCalendarAlertsProjectionMap);
-                qb.appendWhere("Events._id=CalendarAlerts.event_id");
+                qb.appendWhere(CalendarDatabaseHelper.Views.EVENTS +
+                        "._id=CalendarAlerts.event_id");
                 break;
             case CALENDAR_ALERTS_BY_INSTANCE:
-                qb.setTables("CalendarAlerts, Events");
+                qb.setTables("CalendarAlerts, " + CalendarDatabaseHelper.Views.EVENTS);
                 qb.setProjectionMap(sCalendarAlertsProjectionMap);
-                qb.appendWhere("Events._id=CalendarAlerts.event_id");
+                qb.appendWhere(CalendarDatabaseHelper.Views.EVENTS +
+                        "._id=CalendarAlerts.event_id");
                 groupBy = CalendarAlerts.EVENT_ID + "," + CalendarAlerts.BEGIN;
                 break;
             case CALENDAR_ALERTS_ID:
-                qb.setTables("CalendarAlerts, Events");
+                qb.setTables("CalendarAlerts, " + CalendarDatabaseHelper.Views.EVENTS);
                 qb.setProjectionMap(sCalendarAlertsProjectionMap);
                 selectionArgs = insertSelectionArg(selectionArgs, uri.getLastPathSegment());
-                qb.appendWhere("CalendarAlerts._id=?  AND Events._id=CalendarAlerts.event_id");
+                qb.appendWhere(CalendarDatabaseHelper.Views.EVENTS +
+                        "._id=CalendarAlerts.event_id AND CalendarAlerts._id=?");
                 break;
             case EXTENDED_PROPERTIES:
                 qb.setTables("ExtendedProperties");
@@ -2802,10 +2805,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Events.ORGANIZER, "organizer");
         sEventsProjectionMap.put(Events.DELETED, "deleted");
 
-        // Put the shared items into the Attendees, Reminders, CalendarAlerts projection map
+        // Put the shared items into the Attendees, Reminders projection map
         sAttendeesProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
         sRemindersProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
-        sCalendarAlertsProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
 
         // Calendar columns
         sEventsProjectionMap.put(Calendars.COLOR, "color");
@@ -2816,9 +2818,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Calendars.OWNER_ACCOUNT, "ownerAccount");
 
         // Put the shared items into the Instances projection map
-        // The Instances are joined with Calendars, so the projection includes the
-        // above Calendar columns.
+        // The Instances and CalendarAlerts are joined with Calendars, so the projections include
+        // the above Calendar columns.
         sInstancesProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
+        sCalendarAlertsProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
 
         sEventsProjectionMap.put(Events._ID, "_id");
         sEventsProjectionMap.put(Events._SYNC_ID, "_sync_id");

@@ -1232,6 +1232,51 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         }
     }
 
+    public void testCalendarAlerts() throws Exception {
+        // This projection is from AlertActivity; want to make sure it works.
+        String[] projection = new String[] {
+                Calendar.CalendarAlerts._ID,              // 0
+                Calendar.CalendarAlerts.TITLE,            // 1
+                Calendar.CalendarAlerts.EVENT_LOCATION,   // 2
+                Calendar.CalendarAlerts.ALL_DAY,          // 3
+                Calendar.CalendarAlerts.BEGIN,            // 4
+                Calendar.CalendarAlerts.END,              // 5
+                Calendar.CalendarAlerts.EVENT_ID,         // 6
+                Calendar.CalendarAlerts.COLOR,            // 7
+                Calendar.CalendarAlerts.RRULE,            // 8
+                Calendar.CalendarAlerts.HAS_ALARM,        // 9
+                Calendar.CalendarAlerts.STATE,            // 10
+                Calendar.CalendarAlerts.ALARM_TIME,       // 11
+        };
+        testInsertNormalEvents(); // To initialize
+
+        Uri alertUri = Calendar.CalendarAlerts.insert(mResolver, 1 /* eventId */,
+                2 /* begin */, 3 /* end */, 4 /* alarmTime */, 5 /* minutes */);
+        Calendar.CalendarAlerts.insert(mResolver, 1 /* eventId */,
+                2 /* begin */, 7 /* end */, 8 /* alarmTime */, 9 /* minutes */);
+
+        // Regular query
+        Cursor cursor = mResolver.query(Calendar.CalendarAlerts.CONTENT_URI, projection,
+                null /* selection */, null /* selectionArgs */, null /* sortOrder */);
+
+        assertEquals(2, cursor.getCount());
+        cursor.close();
+
+        // Instance query
+        cursor = mResolver.query(alertUri, projection,
+                null /* selection */, null /* selectionArgs */, null /* sortOrder */);
+
+        assertEquals(1, cursor.getCount());
+        cursor.close();
+
+        // Grouped by event query
+        cursor = mResolver.query(Calendar.CalendarAlerts.CONTENT_URI_BY_INSTANCE, projection,
+                null /* selection */, null /* selectionArgs */, null /* sortOrder */);
+
+        assertEquals(1, cursor.getCount());
+        cursor.close();
+    }
+
     /**
      * Test attendee processing
      * @throws Exception

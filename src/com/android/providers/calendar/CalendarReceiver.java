@@ -42,22 +42,11 @@ public class CalendarReceiver extends BroadcastReceiver {
         IContentProvider icp = cr.acquireProvider(Calendar.AUTHORITY);
         ContentProvider contentProvider = ContentProvider.
                 coerceToLocalContentProvider(icp);
-        // Temporarily handle either CalendarProvider or CalendarProvider2 implementation
-        // TODO: remove this code when CalendarProvider is removed
-        if (contentProvider instanceof CalendarProvider) {
-            CalendarProvider provider = (CalendarProvider) contentProvider;
-            if (action.equals(SCHEDULE)) {
-                provider.scheduleNextAlarm(false /* do not remove alarms */);
-            } else if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
-                provider.bootCompleted();
-            }
-        } else {
-            CalendarProvider2 provider = (CalendarProvider2) contentProvider;
-            if (action.equals(SCHEDULE)) {
-                provider.scheduleNextAlarm(false /* do not remove alarms */);
-            } else if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
-                provider.bootCompleted();
-            }
+        CalendarProvider2 provider = (CalendarProvider2) contentProvider;
+        if (action.equals(SCHEDULE)) {
+            provider.scheduleNextAlarm(false /* do not remove alarms */);
+        } else if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
+            provider.bootCompleted();
         }
         cr.releaseProvider(icp);
     }

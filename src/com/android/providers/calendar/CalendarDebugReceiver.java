@@ -16,11 +16,9 @@
 
 package com.android.providers.calendar;
 
-import static android.provider.Telephony.Intents.SECRET_CODE_ACTION;
-
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.BroadcastReceiver;
 
 
 public class CalendarDebugReceiver extends BroadcastReceiver {
@@ -28,13 +26,15 @@ public class CalendarDebugReceiver extends BroadcastReceiver {
     public CalendarDebugReceiver() {
     }
 
+    /**
+     * Receives android.provider.Telephony.Intents.SECRET_CODE_ACTION and
+     * displays debugging information.
+     */
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (intent.getAction().equals(SECRET_CODE_ACTION)) {
-            Intent i = new Intent(Intent.ACTION_MAIN);
-            i.setClass(context, CalendarDebug.class);
-            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            context.startActivity(i);
-        }
+        Intent i = new Intent(Intent.ACTION_MAIN);
+        i.setClass(context, CalendarDebug.class);
+        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        context.startActivity(i);
     }
 }

@@ -118,6 +118,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private static final Uri SYNCSTATE_CONTENT_URI =
             Uri.parse("content://syncstate/state");
+    //
+    // SCHEDULE_ALARM_URI runs scheduleNextAlarm(false)
+    // SCHEDULE_ALARM_REMOVE_URI runs scheduleNextAlarm(true)
+    // TODO: use a service to schedule alarms rather than private URI
+    /* package */ static final String SCHEDULE_ALARM_PATH = "schedule_alarms";
+    /* package */ static final String SCHEDULE_ALARM_REMOVE_PATH = "schedule_alarms_remove";
+    /* package */ static final Uri SCHEDULE_ALARM_URI =
+            Uri.withAppendedPath(Calendar.CONTENT_URI, SCHEDULE_ALARM_PATH);
+    /* package */ static final Uri SCHEDULE_ALARM_REMOVE_URI =
+            Uri.withAppendedPath(Calendar.CONTENT_URI, SCHEDULE_ALARM_REMOVE_PATH);
 
     // To determine if a recurrence exception originally overlapped the
     // window, we need to assume a maximum duration, since we only know
@@ -2114,7 +2124,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 selection = appendAccountToSelection(uri, selection);
                 String selectionWithId =
                         (BaseColumns._ID + "=" + ContentUris.parseId(uri) + " ")
-                        + (selection == null ? "" : " AND (" + selection + ")");
+                                + (selection == null ? "" : " AND (" + selection + ")");
                 return mDbHelper.getSyncState().update(mDb, values,
                         selectionWithId, selectionArgs);
             }
@@ -2208,7 +2218,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 if (callerIsSyncAdapter) {
                     long id = ContentUris.parseId(uri);
                     return mDb.update("Attendees", values, "_id=?",
-                        new String[] {String.valueOf(id)});
+                            new String[] {String.valueOf(id)});
                 } else {
                     return updateInTable("Attendees", values, uri, null /* selection */,
                             null /* selectionArgs */);
@@ -2236,7 +2246,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 if (callerIsSyncAdapter) {
                     long id = ContentUris.parseId(uri);
                     count = mDb.update("Reminders", values, "_id=?",
-                        new String[] {String.valueOf(id)});
+                            new String[] {String.valueOf(id)});
                 } else {
                     count = updateInTable("Reminders", values, uri, null /* selection */,
                             null /* selectionArgs */);
@@ -2262,6 +2272,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     return updateInTable("ExtendedProperties", values, uri, null /* selection */,
                             null /* selectionArgs */);
                 }
+            }
+            // TODO: replace the SCHEDULE_ALARM private URIs with a
+            // service
+            case SCHEDULE_ALARM: {
+                scheduleNextAlarm(false);
+                return 0;
+            }
+            case SCHEDULE_ALARM_REMOVE: {
+                scheduleNextAlarm(true);
+                return 0;
             }
 
             default:
@@ -2397,16 +2417,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (context != null) {
             mAppWidgetProvider.providerUpdated(context, changedEventId);
         }
-    }
-
-    void bootCompleted() {
-        // Remove alarms from the CalendarAlerts table that have been marked
-        // as "scheduled" but not fired yet.  We do this because the
-        // AlarmManagerService loses all information about alarms when the
-        // power turns off but we store the information in a database table
-        // that persists across reboots. See the documentation for
-        // scheduleNextAlarmLocked() for more information.
-        scheduleNextAlarm(true /* remove alarms */);
     }
 
     /* Retrieve and cache the alarm manager */
@@ -2725,6 +2735,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final int EVENT_ENTITIES = 19;
     private static final int EVENT_ENTITIES_ID = 20;
     private static final int EVENT_DAYS = 21;
+    private static final int SCHEDULE_ALARM = 22;
+    private static final int SCHEDULE_ALARM_REMOVE = 23;
 
     private static final UriMatcher sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
     private static final HashMap<String, String> sInstancesProjectionMap;
@@ -2756,7 +2768,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sUriMatcher.addURI(Calendar.AUTHORITY, "calendar_alerts/by_instance",
                            CALENDAR_ALERTS_BY_INSTANCE);
         sUriMatcher.addURI(Calendar.AUTHORITY, "syncstate", SYNCSTATE);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "syncstate" + "/#", SYNCSTATE_ID);
+        sUriMatcher.addURI(Calendar.AUTHORITY, "syncstate/#", SYNCSTATE_ID);
+        sUriMatcher.addURI(Calendar.AUTHORITY, SCHEDULE_ALARM_PATH, SCHEDULE_ALARM);
+        sUriMatcher.addURI(Calendar.AUTHORITY, SCHEDULE_ALARM_REMOVE_PATH, SCHEDULE_ALARM_REMOVE);
 
         sEventsProjectionMap = new HashMap<String, String>();
         // Events columns

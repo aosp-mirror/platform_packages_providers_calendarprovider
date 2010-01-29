@@ -17,12 +17,9 @@
 package com.android.providers.calendar;
 
 import android.content.BroadcastReceiver;
-import android.content.ContentProvider;
 import android.content.ContentResolver;
 import android.content.Context;
-import android.content.IContentProvider;
 import android.content.Intent;
-import android.provider.Calendar;
 
 /**
  * This IntentReceiver executes when the boot completes and ensures that
@@ -39,15 +36,18 @@ public class CalendarReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         String action = intent.getAction();
         ContentResolver cr = context.getContentResolver();
-        IContentProvider icp = cr.acquireProvider(Calendar.AUTHORITY);
-        ContentProvider contentProvider = ContentProvider.
-                coerceToLocalContentProvider(icp);
-        CalendarProvider2 provider = (CalendarProvider2) contentProvider;
         if (action.equals(SCHEDULE)) {
-            provider.scheduleNextAlarm(false /* do not remove alarms */);
+            cr.update(CalendarProvider2.SCHEDULE_ALARM_URI, null /* values */, null /* where */,
+                    null /* selectionArgs */);
         } else if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
-            provider.bootCompleted();
+            // Remove alarms from the CalendarAlerts table that have been marked
+            // as "scheduled" but not fired yet.  We do this because the
+            // AlarmManagerService loses all information about alarms when the
+            // power turns off but we store the information in a database table
+            // that persists across reboots. See the documentation for
+            // scheduleNextAlarmLocked() for more information.
+            cr.update(CalendarProvider2.SCHEDULE_ALARM_REMOVE_URI,
+                    null /* values */, null /* where */, null /* selectionArgs */);
         }
-        cr.releaseProvider(icp);
     }
 }

@@ -1239,6 +1239,38 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         }
     }
 
+    public void testDeleteCalendar() throws Exception {
+        int calendarId0 = insertCal("Calendar0", DEFAULT_TIMEZONE);
+        int calendarId1 = insertCal("Calendar1", DEFAULT_TIMEZONE, "user2@google.com");
+        insertEvent(calendarId0, mEvents[0]);
+        insertEvent(calendarId1, mEvents[1]);
+        // Should have 2 calendars and 2 events
+        testQueryCount(Calendar.Calendars.CONTENT_URI, null /* where */, 2);
+        testQueryCount(Calendar.Events.CONTENT_URI, null /* where */, 2);
+
+        int deletes = mResolver.delete(Calendar.Calendars.CONTENT_URI,
+                "ownerAccount='user2@google.com'", null /* selectionArgs */);
+
+        assertEquals(1, deletes);
+        // Should have 1 calendar and 1 event
+        testQueryCount(Calendar.Calendars.CONTENT_URI, null /* where */, 1);
+        testQueryCount(Calendar.Events.CONTENT_URI, null /* where */, 1);
+
+        deletes = mResolver.delete(Uri.withAppendedPath(Calendar.Calendars.CONTENT_URI,
+                String.valueOf(calendarId0)),
+                null /* selection*/ , null /* selectionArgs */);
+
+        assertEquals(1, deletes);
+        // Should have 0 calendars and 0 events
+        testQueryCount(Calendar.Calendars.CONTENT_URI, null /* where */, 0);
+        testQueryCount(Calendar.Events.CONTENT_URI, null /* where */, 0);
+
+        deletes = mResolver.delete(Calendar.Calendars.CONTENT_URI,
+                "ownerAccount=?", new String[] {"user2@google.com"} /* selectionArgs */);
+
+        assertEquals(0, deletes);
+    }
+
     public void testCalendarAlerts() throws Exception {
         // This projection is from AlertActivity; want to make sure it works.
         String[] projection = new String[] {

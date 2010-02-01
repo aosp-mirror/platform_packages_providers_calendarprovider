@@ -2259,7 +2259,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // - delete calendar subscription
         // - delete calendar
 
-        int numDeleted = 0;
         Cursor c = mDb.query("Calendars", sCalendarsIdProjection, where,
                 null /* selectionArgs */, null /* groupBy */,
                 null /* having */, null /* sortOrder */);
@@ -2270,13 +2269,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             while (c.moveToNext()) {
                 long id = c.getLong(CALENDARS_INDEX_ID);
                 modifyCalendarSubscription(id, false /* not selected */);
-                c.deleteRow();
-                numDeleted++;
             }
         } finally {
             c.close();
         }
-        return numDeleted;
+        return mDb.delete("Calendars", where, null /* whereArgs */);
     }
 
     // TODO: call calculateLastDate()!

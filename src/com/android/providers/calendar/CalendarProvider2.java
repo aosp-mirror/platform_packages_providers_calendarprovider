@@ -54,6 +54,7 @@ import android.text.format.DateUtils;
 import android.util.Config;
 import android.util.Log;
 import android.util.TimeFormatException;
+import android.util.TimeUtils;
 import com.google.android.collect.Maps;
 import com.google.android.collect.Sets;
 import com.google.wireless.gdata.calendar.client.CalendarClient;
@@ -72,8 +73,6 @@ import java.util.TimeZone;
 public class CalendarProvider2 extends SQLiteContentProvider implements OnAccountsUpdateListener {
 
     private static final String TAG = "CalendarProvider2";
-
-    private static final boolean VERBOSE_LOGGING = Log.isLoggable(TAG, Log.VERBOSE);
 
     private static final boolean PROFILE = false;
     private static final boolean MULTIPLE_ATTENDEES_PER_EVENT = true;
@@ -113,6 +112,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * can access it.
      */
     MetaData mMetaData;
+    CalendarCache mCalendarCache;
 
     private CalendarDatabaseHelper mDbHelper;
 
@@ -264,6 +264,43 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     };
 
+    /**
+     * Columns from the EventsRawTimes table
+     */
+    public interface EventsRawTimesColumns
+    {
+        /**
+         * The corresponding event id
+         * <P>Type: INTEGER (long)</P>
+         */
+        public static final String EVENT_ID = "event_id";
+
+        /**
+         * The RFC2445 compliant time the event starts
+         * <P>Type: TEXT</P>
+         */
+        public static final String DTSTART_2445 = "dtstart2445";
+
+        /**
+         * The RFC2445 compliant time the event ends
+         * <P>Type: TEXT</P>
+         */
+        public static final String DTEND_2445 = "dtend2445";
+
+        /**
+         * The RFC2445 compliant original instance time of the recurring event for which this
+         * event is an exception.
+         * <P>Type: TEXT</P>
+         */
+        public static final String ORIGINAL_INSTANCE_TIME_2445 = "originalInstanceTime2445";
+
+        /**
+         * The RFC2445 compliant last date this event repeats on, or NULL if it never ends
+         * <P>Type: TEXT</P>
+         */
+        public static final String LAST_DATE_2445 = "lastDate2445";
+    }
+
     protected void verifyAccounts() {
         AccountManager.get(getContext()).addOnAccountsUpdatedListener(this, null, false);
         onAccountsUpdated(AccountManager.get(getContext()).getAccounts());
@@ -297,6 +334,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         c.registerReceiver(mIntentReceiver, filter);
 
         mMetaData = new MetaData(mDbHelper);
+        mCalendarCache = new CalendarCache(mDbHelper);
+
         updateTimezoneDependentFields();
 
         return true;
@@ -336,9 +375,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * then the Instances table will be regenerated.
      */
     private void doUpdateTimezoneDependentFields() {
-        MetaData.Fields fields = mMetaData.getFields();
-        String localTimezone = TimeZone.getDefault().getID();
-        if (TextUtils.equals(fields.timezone, localTimezone)) {
+        if (! isSameTimezoneDatabaseVersion()) {
+            doProcessEventRawTimes(null  /* default current timezone*/,
+            TimeUtils.getTimeZoneDatabaseVersion());
+        }
+        if (isSameTimezone()) {
             // Even if the timezone hasn't changed, check for missed alarms.
             // This code executes when the CalendarProvider2 is created and
             // helps to catch missed alarms when the Calendar process is
@@ -346,7 +387,135 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             rescheduleMissedAlarms();
             return;
         }
+        regenerateInstancesTable();
+    }
 
+    protected void doProcessEventRawTimes(String timezone, String timeZoneDatabaseVersion) {
+        mDb = mDbHelper.getWritableDatabase();
+        if (mDb == null) {
+            if (Log.isLoggable(TAG, Log.VERBOSE)) {
+                Log.v(TAG, "Cannot update Events table from EventsRawTimes table");
+            }
+            return;
+        }
+        mDb.beginTransaction();
+        try {
+            updateEventsStartEndFromEventRawTimesLocked(timezone);
+            updateTimezoneDatabaseVersion(timeZoneDatabaseVersion);
+            cleanInstancesTable();
+            regenerateInstancesTable();
+
+            mDb.setTransactionSuccessful();
+        } finally {
+            mDb.endTransaction();
+        }
+    }
+
+    private void updateEventsStartEndFromEventRawTimesLocked(String timezone) {
+        Cursor cursor = mDb.query("EventsRawTimes",
+                            new String[] { EventsRawTimesColumns.EVENT_ID,
+                                    EventsRawTimesColumns.DTSTART_2445,
+                                    EventsRawTimesColumns.DTEND_2445} /* projection */,
+                            null /* selection */,
+                            null /* selection args */,
+                            null /* group by */,
+                            null /* having */,
+                            null /* order by */
+                );
+        try {
+            while (cursor.moveToNext()) {
+                long eventId = cursor.getLong(0);
+                String dtStart2445 = cursor.getString(1);
+                String dtEnd2445 = cursor.getString(2);
+                updateEventsStartEndLocked(eventId,
+                        timezone,
+                        dtStart2445,
+                        dtEnd2445);
+            }
+        } finally {
+            cursor.close();
+            cursor = null;
+        }
+    }
+
+    private long get2445ToMillis(String timezone, String dt2445) {
+        if (null == dt2445) {
+            Log.v( TAG, "Cannot parse null RFC2445 date");
+            return 0;
+        }
+        Time time = (timezone != null) ? new Time(timezone) : new Time();
+        try {
+            time.parse(dt2445);
+        } catch (TimeFormatException e) {
+            Log.v( TAG, "Cannot parse RFC2445 date " + dt2445);
+            return 0;
+        }
+        return time.toMillis(true /* ignore DST */);
+    }
+
+    private void updateEventsStartEndLocked(long eventId,
+            String timezone, String dtStart2445, String dtEnd2445) {
+
+        ContentValues values = new ContentValues();
+        values.put("dtstart", get2445ToMillis(timezone, dtStart2445));
+        values.put("dtend", get2445ToMillis(timezone, dtEnd2445));
+
+        int result = mDb.update("Events", values, "_id=" + eventId, null /* where args*/);
+        if (0 == result) {
+            if (Log.isLoggable(TAG, Log.VERBOSE)) {
+                Log.v(TAG, "Could not update Events table with values " + values);
+            }
+        }
+    }
+
+    private void cleanInstancesTable() {
+        mDb.delete("Instances", null /* where clause */, null /* where args */);
+    }
+
+    private void updateTimezoneDatabaseVersion(String timeZoneDatabaseVersion) {
+        try {
+            mCalendarCache.writeTimezoneDatabaseVersion(timeZoneDatabaseVersion);
+        } catch (CalendarCache.CacheException e) {
+            Log.e(TAG, "Could not write timezone database version in the cache");
+        }
+    }
+
+    /**
+     * Check if we are in the same time zone
+     */
+    private boolean isSameTimezone() {
+        MetaData.Fields fields = mMetaData.getFields();
+        String localTimezone = TimeZone.getDefault().getID();
+        return TextUtils.equals(fields.timezone, localTimezone);
+    }
+
+    /**
+     * Check if the time zone database version is the same as the cached one
+     */
+    protected boolean isSameTimezoneDatabaseVersion() {
+        String timezoneDatabaseVersion = null;
+        try {
+            timezoneDatabaseVersion = mCalendarCache.readTimezoneDatabaseVersion();
+        } catch (CalendarCache.CacheException e) {
+            Log.e(TAG, "Could not read timezone database version from the cache");
+            return false;
+        }
+        return TextUtils.equals(timezoneDatabaseVersion, TimeUtils.getTimeZoneDatabaseVersion());
+    }
+
+    protected String getTimezoneDatabaseVersion() {
+        String timezoneDatabaseVersion = null;
+        try {
+            timezoneDatabaseVersion = mCalendarCache.readTimezoneDatabaseVersion();
+        } catch (CalendarCache.CacheException e) {
+            Log.e(TAG, "Could not read timezone database version from the cache");
+            return "";
+        }
+        Log.i(TAG, "timezoneDatabaseVersion = " + timezoneDatabaseVersion);
+        return timezoneDatabaseVersion;
+    }
+
+    private void regenerateInstancesTable() {
         // The database timezone is different from the current timezone.
         // Regenerate the Instances table for this month.  Include events
         // starting at the beginning of this month.
@@ -398,7 +567,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
-        if (VERBOSE_LOGGING) {
+        if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "query: " + uri);
         }
 
@@ -1184,7 +1353,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     @Override
     protected Uri insertInTransaction(Uri uri, ContentValues values) {
-        if (VERBOSE_LOGGING) {
+        if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "insertInTransaction: " + uri);
         }
 
@@ -1801,7 +1970,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     @Override
     protected int deleteInTransaction(Uri uri, String selection, String[] selectionArgs) {
-        if (VERBOSE_LOGGING) {
+        if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "deleteInTransaction: " + uri);
         }
         final boolean callerIsSyncAdapter =
@@ -2099,7 +2268,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     @Override
     protected int updateInTransaction(Uri uri, ContentValues values, String selection,
             String[] selectionArgs) {
-        if (VERBOSE_LOGGING) {
+        if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "updateInTransaction: " + uri);
         }
 

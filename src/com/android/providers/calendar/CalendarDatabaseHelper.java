@@ -266,6 +266,8 @@ import java.io.UnsupportedEncodingException;
                 "maxInstance INTEGER" +       // UTC millis
                 ");");
 
+        createCalendarCacheTable(db);
+
         db.execSQL("CREATE TABLE Attendees (" +
                 "_id INTEGER PRIMARY KEY," +
                 "event_id INTEGER," +
@@ -339,6 +341,19 @@ import java.io.UnsupportedEncodingException;
                 ContactsContract.AUTHORITY, new Bundle());
     }
 
+    private void createCalendarCacheTable(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE CalendarCache (" +
+                "_id INTEGER PRIMARY KEY," +
+                "key TEXT NOT NULL," +
+                "value TEXT" +
+                ");");
+
+        db.execSQL("INSERT INTO CalendarCache (key, value) VALUES (" +
+                "'" + CalendarCache.KEY_TIMEZONE_DATABASE_VERSION + "',"  +
+                "'" + CalendarCache.DEFAULT_TIMEZONE_DATABASE_VERSION + "'" +
+                ");");
+    }
+
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         Log.i(TAG, "Upgrading DB from version " + oldVersion
@@ -391,6 +406,10 @@ import java.io.UnsupportedEncodingException;
         }
         if (oldVersion == 59) {
             upgradeToVersion60(db);
+            oldVersion += 1;
+        }
+        if (oldVersion == 60) {
+            upgradeToVersion61(db);
             oldVersion += 1;
         }
     }
@@ -453,6 +472,10 @@ import java.io.UnsupportedEncodingException;
                 cursor.close();
             }
         }
+    }
+
+    private void upgradeToVersion61(SQLiteDatabase db) {
+        createCalendarCacheTable(db);
     }
 
     private void upgradeToVersion60(SQLiteDatabase db) {
@@ -643,6 +666,7 @@ import java.io.UnsupportedEncodingException;
         db.execSQL("DROP TABLE IF EXISTS EventsRawTimes;");
         db.execSQL("DROP TABLE IF EXISTS Instances;");
         db.execSQL("DROP TABLE IF EXISTS CalendarMetaData;");
+        db.execSQL("DROP TABLE IF EXISTS CalendarCache;");
         db.execSQL("DROP TABLE IF EXISTS Attendees;");
         db.execSQL("DROP TABLE IF EXISTS Reminders;");
         db.execSQL("DROP TABLE IF EXISTS CalendarAlerts;");
@@ -688,6 +712,7 @@ import java.io.UnsupportedEncodingException;
         db.execSQL("DELETE FROM EventsRawTimes;");
         db.execSQL("DELETE FROM Instances;");
         db.execSQL("DELETE FROM CalendarMetaData;");
+        db.execSQL("DELETE FROM CalendarCache;");
         db.execSQL("DELETE FROM Attendees;");
         db.execSQL("DELETE FROM Reminders;");
         db.execSQL("DELETE FROM CalendarAlerts;");

@@ -16,6 +16,8 @@
 
 package com.android.providers.calendar;
 
+import android.database.sqlite.SQLiteOpenHelper;
+import android.util.TimeUtils;
 import com.android.common.ArrayListCursor;
 
 import android.content.*;
@@ -43,7 +45,6 @@ import java.util.ArrayList;
 @LargeTest
 public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2ForTesting> {
     static final String TAG = "calendar";
-    static final String DEFAULT_TIMEZONE = "America/Los_Angeles";
 
     private SQLiteDatabase mDb;
     private MetaData mMetaData;
@@ -59,6 +60,12 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
     private int mGlobalSyncId = 1000;
     private static final String CALENDAR_URL =
             "http://www.google.com/calendar/feeds/joe%40joe.com/private/full";
+
+    private static final String TIME_ZONE_AMERICA_ANCHORAGE = "America/Anchorage";
+    private static final String TIME_ZONE_AMERICA_LOS_ANGELES = "America/Los_Angeles";
+    private static final String DEFAULT_TIMEZONE = TIME_ZONE_AMERICA_LOS_ANGELES;
+
+    private static final String MOCK_TIME_ZONE_DATABASE_VERSION = "2010a";
 
     /**
      * KeyValue is a simple class that stores a pair of strings representing
@@ -1825,5 +1832,97 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
                 String[] selectionArgs) {
             return 0;
         }
+    }
+
+    private void cleanCalendarDataTable(SQLiteOpenHelper helper) {
+        if (null == helper) {
+            return;
+        }
+        SQLiteDatabase db = helper.getWritableDatabase();
+        db.execSQL("DELETE FROM CalendarCache;");
+    }
+
+    public void testGetAndSetTimezoneDatabaseVersion() throws CalendarCache.CacheException {
+        CalendarDatabaseHelper helper = (CalendarDatabaseHelper) getProvider().getDatabaseHelper();
+        cleanCalendarDataTable(helper);
+        CalendarCache cache = new CalendarCache(helper);
+
+        boolean hasException = false;
+        try {
+            String value = cache.readData(null);
+        } catch (CalendarCache.CacheException e) {
+            hasException = true;
+        }
+        assertTrue(hasException);
+
+        assertNull(cache.readTimezoneDatabaseVersion());
+
+        cache.writeTimezoneDatabaseVersion("1234");
+        assertEquals("1234", cache.readTimezoneDatabaseVersion());
+
+        cache.writeTimezoneDatabaseVersion("5678");
+        assertEquals("5678", cache.readTimezoneDatabaseVersion());
+    }
+
+    private void checkEvent(int eventId, String title, long dtStart, long dtEnd, boolean allDay) {
+        Uri uri = Uri.parse("content://" + Calendar.AUTHORITY + "/events");
+        Log.i(TAG, "Looking for EventId = " + eventId);
+
+        Cursor cursor = mResolver.query(uri, null, null, null, null);
+        assertEquals(1, cursor.getCount());
+
+        int colIndexTitle = cursor.getColumnIndex(Calendar.Events.TITLE);
+        int colIndexDtStart = cursor.getColumnIndex(Calendar.Events.DTSTART);
+        int colIndexDtEnd = cursor.getColumnIndex(Calendar.Events.DTEND);
+        int colIndexAllDay = cursor.getColumnIndex(Calendar.Events.ALL_DAY);
+        if (!cursor.moveToNext()) {
+            Log.e(TAG,"Could not find inserted event");
+            assertTrue(false);
+        }
+        assertEquals(title, cursor.getString(colIndexTitle));
+        assertEquals(dtStart, cursor.getLong(colIndexDtStart));
+        assertEquals(dtEnd, cursor.getLong(colIndexDtEnd));
+        assertEquals(allDay, (cursor.getInt(colIndexAllDay) != 0));
+        cursor.close();
+    }
+
+    public void testChangeTimezoneDB() {
+        int calId = insertCal("Calendar0", DEFAULT_TIMEZONE);
+
+        Cursor cursor = mResolver.query(Calendar.Events.CONTENT_URI, null, null, null, null);
+        assertEquals(0, cursor.getCount());
+        cursor.close();
+
+        EventInfo[] events = { new EventInfo("normal0",
+                                        "2008-05-01T00:00:00",
+                                        "2008-05-02T00:00:00",
+                                        false,
+                                        DEFAULT_TIMEZONE) };
+
+        Uri uri = insertEvent(calId, events[0]);
+        assertNotNull(uri);
+
+        // check the inserted event
+        checkEvent(1, events[0].mTitle, events[0].mDtstart, events[0].mDtend, events[0].mAllDay);
+
+// TODO (fdimeglio): uncomment when the VM is more stable
+//        // check timezone database version
+//        assertEquals(TimeUtils.getTimeZoneDatabaseVersion(),
+//                getProvider().getTimezoneDatabaseVersion());
+
+        // inject a new time zone
+        getProvider().doProcessEventRawTimes(TIME_ZONE_AMERICA_ANCHORAGE,
+                MOCK_TIME_ZONE_DATABASE_VERSION);
+
+        // check timezone database version
+        assertEquals(MOCK_TIME_ZONE_DATABASE_VERSION, getProvider().getTimezoneDatabaseVersion());
+
+        // check if the inserted event as been updated with the timezone information
+        // there is 1h time difference between America/LosAngeles and America/Anchorage
+        long deltaMillisForTimezones = 3600000L;
+        checkEvent(1, events[0].mTitle,
+                events[0].mDtstart + deltaMillisForTimezones,
+                events[0].mDtend + deltaMillisForTimezones,
+                events[0].mAllDay);
     }
 }

@@ -28,6 +28,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Bundle;
 import android.provider.Calendar;
 import android.provider.ContactsContract;
+import android.text.format.Time;
 import android.util.Log;
 import com.android.internal.content.SyncStateContentProviderHelper;
 
@@ -49,7 +50,7 @@ import java.io.UnsupportedEncodingException;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 61;
+    private static final int DATABASE_VERSION = 62;
 
     private final Context mContext;
     private final SyncStateContentProviderHelper mSyncState;
@@ -212,7 +213,10 @@ import java.io.UnsupportedEncodingException;
                 "guestsCanInviteOthers INTEGER NOT NULL DEFAULT 1," +
                 "guestsCanSeeGuests INTEGER NOT NULL DEFAULT 1," +
                 "organizer STRING," +
-                "deleted INTEGER NOT NULL DEFAULT 0" +
+                "deleted INTEGER NOT NULL DEFAULT 0," +
+                "dtstart2 INTEGER," + //millis since epoch, allDay events in local timezone
+                "dtend2 INTEGER," + //millis since epoch, allDay events in local timezone
+                "eventTimezone2 TEXT" + //timezone for event with allDay events in local timezone
                 ");");
 
         // Trigger to set event's sync_account
@@ -417,6 +421,10 @@ import java.io.UnsupportedEncodingException;
             upgradeToVersion61(db);
             oldVersion += 1;
         }
+        if (oldVersion == 61) {
+            upgradeToVersion62(db);
+            oldVersion += 1;
+        }
     }
 
     private void upgradeToVersion56(SQLiteDatabase db) {
@@ -472,6 +480,71 @@ import java.io.UnsupportedEncodingException;
                     final Account account = new Account(accountName, accountType);
                     String calendarUrl = cursor.getString(2);
                     scheduleSync(account, false /* two-way sync */, calendarUrl);
+                }
+            } finally {
+                cursor.close();
+            }
+        }
+    }
+
+    private void upgradeToVersion62(SQLiteDatabase db) {
+        // New columns are to transition to having allDay events in the local timezone
+        db.execSQL("ALTER TABLE Events ADD COLUMN dtstart2 INTEGER NOT NULL DEFAULT 0;");
+        db.execSQL("ALTER TABLE Events ADD COLUMN dtend2 INTEGER NOT NULL DEFAULT 0;");
+        db.execSQL("ALTER TABLE Events ADD COLUMN eventTimezone2 TEXT;");
+
+        String[] allDayBit = new String[] {"0"};
+        // Copy over all the data that isn't an all day event.
+        db.execSQL("UPDATE Events " +
+                "SET dtstart2=dtstart,dtend2=dtend,eventTimezone2=eventTimezone " +
+                "WHERE allDay=?;",
+                allDayBit /* selection args */);
+
+        // "cursor" iterates over all the calendars
+        allDayBit[0] = "1";
+        Cursor cursor = db.rawQuery("SELECT Events._id,dtstart,dtend,eventTimezone,timezone " +
+                "FROM Events INNER JOIN Calendars " +
+                "WHERE Events.calendar_id=Calendars._id AND allDay=?",
+                allDayBit /* selection args */);
+
+        Time oldTime = new Time();
+        Time newTime = new Time();
+        // Update the allday events in the new columns
+        if (cursor != null) {
+            try {
+                String[] newData = new String[4];
+                cursor.moveToPosition(-1);
+                while (cursor.moveToNext()) {
+                    long id = cursor.getLong(0); // Order from query above
+                    long dtstart = cursor.getLong(1);
+                    long dtend = cursor.getLong(2);
+                    String eTz = cursor.getString(3); // current event timezone
+                    String tz = cursor.getString(4); // Calendar timezone
+
+                    // Convert start time for all day events into the timezone of their calendar
+                    oldTime.clear(eTz);
+                    oldTime.set(dtstart);
+                    newTime.clear(tz);
+                    newTime.set(oldTime.monthDay, oldTime.month, oldTime.year);
+                    newTime.normalize(false);
+                    dtstart = newTime.toMillis(false /*ignoreDst*/);
+
+                    // Convert end time for all day events into the timezone of their calendar
+                    oldTime.clear(eTz);
+                    oldTime.set(dtend);
+                    newTime.clear(tz);
+                    newTime.set(oldTime.monthDay, oldTime.month, oldTime.year);
+                    newTime.normalize(false);
+                    dtend = newTime.toMillis(false /*ignoreDst*/);
+
+                    newData[0] = String.valueOf(dtstart);
+                    newData[1] = String.valueOf(dtend);
+                    newData[2] = tz;
+                    newData[3] = String.valueOf(id);
+                    db.execSQL("UPDATE Events " +
+                            "SET dtstart2=?,dtend2=?,eventTimezone2=? " +
+                            "WHERE _id=?",
+                            newData);
                 }
             } finally {
                 cursor.close();

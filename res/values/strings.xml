@@ -23,7 +23,7 @@
     <string name="gadget_title">Calendar</string>
 
     <!-- Title of event when no explicit title is specified by the user -->
-    <string name="no_title_label">(No subject)</string>
+    <string name="no_title_label">(No title)</string>
 
     <!-- Temporary Calendar name to use before we have the calendar name from the server -->
     <string name="calendar_default_name">Default</string>

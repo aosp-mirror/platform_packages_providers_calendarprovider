@@ -49,7 +49,7 @@ import java.io.UnsupportedEncodingException;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 60;
+    private static final int DATABASE_VERSION = 61;
 
     private final Context mContext;
     private final SyncStateContentProviderHelper mSyncState;
@@ -342,7 +342,12 @@ import java.io.UnsupportedEncodingException;
     }
 
     private void createCalendarCacheTable(SQLiteDatabase db) {
-        db.execSQL("CREATE TABLE CalendarCache (" +
+        // This is a hack because versioning skipped version number 61 of schema
+        // TODO after version 70 this can be removed
+        db.execSQL("DROP TABLE IF EXISTS CalendarCache;");
+
+        // IF NOT EXISTS should be normal pattern for table creation
+        db.execSQL("CREATE TABLE IF NOT EXISTS CalendarCache (" +
                 "_id INTEGER PRIMARY KEY," +
                 "key TEXT NOT NULL," +
                 "value TEXT" +

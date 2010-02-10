@@ -489,8 +489,8 @@ import java.io.UnsupportedEncodingException;
 
     private void upgradeToVersion62(SQLiteDatabase db) {
         // New columns are to transition to having allDay events in the local timezone
-        db.execSQL("ALTER TABLE Events ADD COLUMN dtstart2 INTEGER NOT NULL DEFAULT 0;");
-        db.execSQL("ALTER TABLE Events ADD COLUMN dtend2 INTEGER NOT NULL DEFAULT 0;");
+        db.execSQL("ALTER TABLE Events ADD COLUMN dtstart2 INTEGER;");
+        db.execSQL("ALTER TABLE Events ADD COLUMN dtend2 INTEGER;");
         db.execSQL("ALTER TABLE Events ADD COLUMN eventTimezone2 TEXT;");
 
         String[] allDayBit = new String[] {"0"};

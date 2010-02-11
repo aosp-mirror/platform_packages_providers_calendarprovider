@@ -520,6 +520,10 @@ import java.io.UnsupportedEncodingException;
                     long dtend = cursor.getLong(2);
                     String eTz = cursor.getString(3); // current event timezone
                     String tz = cursor.getString(4); // Calendar timezone
+                    //If there's no timezone for some reason use UTC by default.
+                    if(eTz == null) {
+                        eTz = Time.TIMEZONE_UTC;
+                    }
 
                     // Convert start time for all day events into the timezone of their calendar
                     oldTime.clear(eTz);

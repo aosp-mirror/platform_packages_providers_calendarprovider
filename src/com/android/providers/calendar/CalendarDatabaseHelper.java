@@ -86,6 +86,10 @@ import java.io.UnsupportedEncodingException;
         return mInstancesInserter.insert(values);
     }
 
+    public long instancesReplace(ContentValues values) {
+        return mInstancesInserter.replace(values);
+    }
+
     public long attendeesInsert(ContentValues values) {
         return mAttendeesInserter.insert(values);
     }

@@ -1279,7 +1279,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 values.remove(Events.ORIGINAL_INSTANCE_TIME);
                 values.remove(Events.STATUS);
 
-                mDbHelper.instancesInsert(values);
+                mDbHelper.instancesReplace(values);
             }
         }
     }

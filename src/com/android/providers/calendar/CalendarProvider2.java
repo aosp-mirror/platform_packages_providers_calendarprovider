@@ -2513,11 +2513,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
         }
 
-        if (account == null || TextUtils.isEmpty(calendarUrl)) {
+        if (account == null) {
             // should not happen?
             Log.w(TAG, "Cannot update subscription because account "
-                    + "or calendar url empty -- should not happen.");
+                    + "is empty -- should not happen.");
             return;
+        }
+
+        if (TextUtils.isEmpty(calendarUrl)) {
+            // Passing in a null Url will cause it to not add any extras
+            // Should only happen for non-google calendars.
+            calendarUrl = null;
         }
 
         if (oldSyncEvents == syncEvents) {

@@ -55,14 +55,10 @@ import android.util.Config;
 import android.util.Log;
 import android.util.TimeFormatException;
 import android.util.TimeUtils;
-import com.google.android.collect.Maps;
-import com.google.android.collect.Sets;
-import com.google.wireless.gdata.calendar.client.CalendarClient;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
 
@@ -234,8 +230,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final int INSTANCES_INDEX_START_MINUTE = 2;
     private static final int INSTANCES_INDEX_END_MINUTE = 3;
     private static final int INSTANCES_INDEX_ALL_DAY = 4;
-
-    private CalendarClient mCalendarClient = null;
 
     private AlarmManager mAlarmManager;
 
@@ -3003,7 +2997,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Events._SYNC_ACCOUNT_TYPE,
                 "_sync_account_type");
 
-        sEventEntitiesProjectionMap = Maps.newHashMap();
+        sEventEntitiesProjectionMap = new HashMap<String, String>();
         sEventEntitiesProjectionMap.put(Events.HTML_URI, "htmlUri");
         sEventEntitiesProjectionMap.put(Events.TITLE, "title");
         sEventEntitiesProjectionMap.put(Events.DESCRIPTION, "description");
@@ -3087,8 +3081,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         mDb = mDbHelper.getWritableDatabase();
         if (mDb == null) return;
 
-        Map<Account, Boolean> accountHasCalendar = Maps.newHashMap();
-        Set<Account> validAccounts = Sets.newHashSet();
+        HashMap<Account, Boolean> accountHasCalendar = new HashMap<Account, Boolean>();
+        HashSet<Account> validAccounts = new HashSet<Account>();
         for (Account account : accounts) {
             validAccounts.add(new Account(account.name, account.type));
             accountHasCalendar.put(account, false);
@@ -3128,10 +3122,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             mDb.setTransactionSuccessful();
         } finally {
             mDb.endTransaction();
-        }
-
-        if (mCalendarClient == null) {
-            return;
         }
     }
 

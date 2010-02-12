@@ -1496,6 +1496,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * @return email of owner or null
      */
     private String getOwner(long calId) {
+        if (calId < 0) {
+            Log.e(TAG, "Calendar Id is not valid: " + calId);
+            return null;
+        }
         // Get the email address of this user from this Calendar
         String emailAddress = null;
         Cursor cursor = null;

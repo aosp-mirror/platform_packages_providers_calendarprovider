@@ -17,7 +17,6 @@
 package com.android.providers.calendar;
 
 import android.database.sqlite.SQLiteOpenHelper;
-import android.util.TimeUtils;
 import com.android.common.ArrayListCursor;
 
 import android.content.*;
@@ -1750,6 +1749,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
 
     /**
      * Test the query done by Event.loadEvents
+     * Also test that instance queries work when an even straddles the expansion range
      * @throws Exception
      */
     public void testInstanceQuery() throws Exception {
@@ -1778,11 +1778,41 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         String orderBy = Instances.SORT_CALENDAR_VIEW;
         String where = Instances.SELF_ATTENDEE_STATUS + "!=" + Calendar.Attendees.ATTENDEE_STATUS_DECLINED;
 
-        long start = 0;
-        long end = 0;
-        Cursor c = Instances.query(mResolver, PROJECTION,
-                start - DateUtils.DAY_IN_MILLIS, end + DateUtils.DAY_IN_MILLIS, where, orderBy);
-        // Just make sure the query doesn't crash.  TODO: could check results
+        int calId = insertCal("Calendar0", DEFAULT_TIMEZONE);
+        final String START = "2008-05-01T00:00:00";
+        final String END = "2008-05-01T20:00:00";
+
+        EventInfo[] events = { new EventInfo("normal0",
+                START,
+                END,
+                false /* allDay */,
+                DEFAULT_TIMEZONE) };
+
+        insertEvent(calId, events[0]);
+
+        Time time = new Time(DEFAULT_TIMEZONE);
+        time.parse3339(START);
+        long startMs = time.toMillis(true /* ignoreDst */);
+        // Query starting from way in the past to one hour into the event.
+        // Query is more than 2 months so the range won't get extended by the provider.
+        Cursor cursor = Instances.query(mResolver, PROJECTION,
+                startMs - DateUtils.YEAR_IN_MILLIS, startMs + DateUtils.HOUR_IN_MILLIS,
+                where, orderBy);
+        try {
+            assertEquals(1, cursor.getCount());
+        } finally {
+            cursor.close();
+        }
+
+        // Now expand the instance range.  The event overlaps the new part of the range.
+        cursor = Instances.query(mResolver, PROJECTION,
+                startMs - DateUtils.YEAR_IN_MILLIS, startMs + 2 * DateUtils.HOUR_IN_MILLIS,
+                where, orderBy);
+        try {
+            assertEquals(1, cursor.getCount());
+        } finally {
+            cursor.close();
+        }
     }
 
     private Cursor queryInstances(long begin, long end) {

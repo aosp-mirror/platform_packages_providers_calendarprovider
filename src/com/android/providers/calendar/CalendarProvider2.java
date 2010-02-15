@@ -39,6 +39,7 @@ import android.net.Uri;
 import android.os.Debug;
 import android.os.Process;
 import android.pim.DateException;
+import android.pim.EventRecurrence;
 import android.pim.RecurrenceSet;
 import android.provider.BaseColumns;
 import android.provider.Calendar;
@@ -1052,9 +1053,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 String exruleStr = entries.getString(exruleColumn);
                 String exdateStr = entries.getString(exdateColumn);
 
-                RecurrenceSet recur = new RecurrenceSet(rruleStr, rdateStr, exruleStr, exdateStr);
+                RecurrenceSet recur = null;
+                try {
+                    recur = new RecurrenceSet(rruleStr, rdateStr, exruleStr, exdateStr);
+                } catch (EventRecurrence.InvalidFormatException e) {
+                    Log.w(TAG, "Could not parse RRULE recurrence string: " + rruleStr, e);
+                    continue;
+                }
 
-                if (recur.hasRecurrence()) {
+                if (null != recur && recur.hasRecurrence()) {
                     // the event is repeating
 
                     if (status == Events.STATUS_CANCELED) {
@@ -1862,9 +1869,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 duration.parse(durationStr);
             }
 
-            RecurrenceSet recur = new RecurrenceSet(values);
+            RecurrenceSet recur = null;
+            try {
+                recur = new RecurrenceSet(values);
+            } catch (EventRecurrence.InvalidFormatException e) {
+                Log.w(TAG, "Could not parse RRULE recurrence string: " +
+                        values.get(Calendar.Events.RRULE), e);
+                return lastMillis; // -1
+            }
 
-            if (recur.hasRecurrence()) {
+            if (null != recur && recur.hasRecurrence()) {
                 // the event is repeating, so find the last date it
                 // could appear on
 

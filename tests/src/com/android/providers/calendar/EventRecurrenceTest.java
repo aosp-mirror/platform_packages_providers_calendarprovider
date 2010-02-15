@@ -19,6 +19,7 @@ package com.android.providers.calendar;
 
 import android.pim.EventRecurrence;
 import android.test.suitebuilder.annotation.SmallTest;
+import android.test.suitebuilder.annotation.Suppress;
 import junit.framework.TestCase;
 
 import java.util.Arrays;
@@ -364,6 +365,133 @@ public class EventRecurrenceTest extends TestCase {
                 /* int[] byyearday */  null,
                 /* int[] byweekno */   null,
                 /* int[] bymonth */    null,
+                /* int[] bysetpos */   null,
+                /* int wkst */         EventRecurrence.MO
+        );
+    }
+
+    @Suppress
+    // Repro bug #2331761 - this should fail because of the last comma into BYDAY
+    public void test14() throws Exception {
+        verifyRecurType("FREQ=WEEKLY;WKST=MO;UNTIL=20100129T130000Z;INTERVAL=1;BYDAY=MO,TU,WE,",
+                /* int freq */         EventRecurrence.WEEKLY,
+                /* String until */     "20100129T130000Z",
+                /* int count */        0,
+                /* int interval */     1,
+                /* int[] bysecond */   null,
+                /* int[] byminute */   null,
+                /* int[] byhour */     null,
+                /* int[] byday */      new int[] {
+                        EventRecurrence.MO,
+                        EventRecurrence.TU,
+                        EventRecurrence.WE,
+                },
+                /* int[] bydayNum */   new int[]{0, 0, 0},
+                /* int[] bymonthday */ null,
+                /* int[] byyearday */  null,
+                /* int[] byweekno */   null,
+                /* int[] bymonth */    null,
+                /* int[] bysetpos */   null,
+                /* int wkst */         EventRecurrence.MO
+        );
+    }
+
+    // This test should pass
+    public void test15() throws Exception {
+        verifyRecurType("FREQ=WEEKLY;WKST=MO;UNTIL=20100129T130000Z;INTERVAL=1;"
+                + "BYDAY=MO,TU,WE,TH,FR,SA,SU",
+                /* int freq */         EventRecurrence.WEEKLY,
+                /* String until */     "20100129T130000Z",
+                /* int count */        0,
+                /* int interval */     1,
+                /* int[] bysecond */   null,
+                /* int[] byminute */   null,
+                /* int[] byhour */     null,
+                /* int[] byday */      new int[] {
+                        EventRecurrence.MO,
+                        EventRecurrence.TU,
+                        EventRecurrence.WE,
+                        EventRecurrence.TH,
+                        EventRecurrence.FR,
+                        EventRecurrence.SA,
+                        EventRecurrence.SU
+                },
+                /* int[] bydayNum */   new int[]{0, 0, 0, 0, 0, 0, 0},
+                /* int[] bymonthday */ null,
+                /* int[] byyearday */  null,
+                /* int[] byweekno */   null,
+                /* int[] bymonth */    null,
+                /* int[] bysetpos */   null,
+                /* int wkst */         EventRecurrence.MO
+        );
+    }
+
+    // Sample coming from RFC2445
+    public void test16() throws Exception {
+        verifyRecurType("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1",
+                /* int freq */         EventRecurrence.MONTHLY,
+                /* String until */     null,
+                /* int count */        0,
+                /* int interval */     0,
+                /* int[] bysecond */   null,
+                /* int[] byminute */   null,
+                /* int[] byhour */     null,
+                /* int[] byday */      new int[] {
+                        EventRecurrence.MO,
+                        EventRecurrence.TU,
+                        EventRecurrence.WE,
+                        EventRecurrence.TH,
+                        EventRecurrence.FR
+                },
+                /* int[] bydayNum */   new int[] {0, 0, 0, 0, 0},
+                /* int[] bymonthday */ null,
+                /* int[] byyearday */  null,
+                /* int[] byweekno */   null,
+                /* int[] bymonth */    null,
+                /* int[] bysetpos */   new int[] { -1 },
+                /* int wkst */         EventRecurrence.MO
+        );
+    }
+
+    // Sample coming from RFC2445
+    public void test17() throws Exception {
+        verifyRecurType("FREQ=DAILY;COUNT=10;INTERVAL=2",
+                /* int freq */         EventRecurrence.DAILY,
+                /* String until */     null,
+                /* int count */        10,
+                /* int interval */     2,
+                /* int[] bysecond */   null,
+                /* int[] byminute */   null,
+                /* int[] byhour */     null,
+                /* int[] byday */      null,
+                /* int[] bydayNum */   null,
+                /* int[] bymonthday */ null,
+                /* int[] byyearday */  null,
+                /* int[] byweekno */   null,
+                /* int[] bymonth */    null,
+                /* int[] bysetpos */   null,
+                /* int wkst */         EventRecurrence.MO
+        );
+    }
+
+    // Sample coming from RFC2445
+    public void test18() throws Exception {
+        verifyRecurType("FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10",
+                /* int freq */         EventRecurrence.YEARLY,
+                /* String until */     null,
+                /* int count */        0,
+                /* int interval */     0,
+                /* int[] bysecond */   null,
+                /* int[] byminute */   null,
+                /* int[] byhour */     null,
+                /* int[] byday */      new int[] {
+                        EventRecurrence.SU
+                },
+                /* int[] bydayNum */   new int[] { -1 },
+                /* int[] bymonthday */ null,
+                /* int[] byyearday */  null,
+                /* int[] byweekno */   null,
+                /* int[] bymonth */    new int[] { 10 },
                 /* int[] bysetpos */   null,
                 /* int wkst */         EventRecurrence.MO
         );

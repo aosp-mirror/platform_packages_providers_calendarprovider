@@ -34,8 +34,7 @@
     <uses-permission android:name="android.permission.SUBSCRIBED_FEEDS_WRITE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <application android:process="com.android.calendar"
-                 android:label="@string/calendar_storage"
+    <application android:label="@string/calendar_storage"
                  android:icon="@drawable/app_icon">
         <!-- TODO: Remove dependency of application on the test runner
              (android.test) library. -->

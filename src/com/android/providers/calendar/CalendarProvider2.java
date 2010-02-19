@@ -455,7 +455,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         values.put("dtstart", get2445ToMillis(timezone, dtStart2445));
         values.put("dtend", get2445ToMillis(timezone, dtEnd2445));
 
-        int result = mDb.update("Events", values, "_id=" + eventId, null /* where args*/);
+        int result = mDb.update("Events", values, "_id=?",
+                new String[] {String.valueOf(eventId)});
         if (0 == result) {
             if (Log.isLoggable(TAG, Log.VERBOSE)) {
                 Log.v(TAG, "Could not update Events table with values " + values);
@@ -1993,10 +1994,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 return mDbHelper.getSyncState().delete(mDb, selection, selectionArgs);
 
             case SYNCSTATE_ID:
-                String selectionWithId =
-                        (BaseColumns._ID + "=" + ContentUris.parseId(uri) + " ")
+                String selectionWithId = (BaseColumns._ID + "=?")
                         + (selection == null ? "" : " AND (" + selection + ")");
-                return mDbHelper.getSyncState().delete(mDb, selectionWithId, selectionArgs);
+                selectionArgs = insertSelectionArg(selectionArgs,
+                        String.valueOf(ContentUris.parseId(uri)));
+                return mDbHelper.getSyncState().delete(mDb, selectionWithId,
+                        selectionArgs);
 
             case EVENTS:
             {
@@ -2303,11 +2306,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
             case SYNCSTATE_ID: {
                 selection = appendAccountToSelection(uri, selection);
-                String selectionWithId =
-                        (BaseColumns._ID + "=" + ContentUris.parseId(uri) + " ")
-                                + (selection == null ? "" : " AND (" + selection + ")");
-                return mDbHelper.getSyncState().update(mDb, values,
-                        selectionWithId, selectionArgs);
+                String selectionWithId = (BaseColumns._ID + "=?")
+                        + (selection == null ? "" : " AND (" + selection + ")");
+                selectionArgs = insertSelectionArg(selectionArgs,
+                        String.valueOf(ContentUris.parseId(uri)));
+                return mDbHelper.getSyncState().update(mDb, values, selectionWithId, selectionArgs);
             }
 
             case CALENDARS_ID:
@@ -2763,18 +2766,20 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 + " INNER JOIN Reminders"
                 + " ON (Instances.event_id = Reminders.event_id)"
                 + " WHERE method=" + Reminders.METHOD_ALERT
-                + " AND myAlarmTime>=" + start
-                + " AND myAlarmTime<=" + nextAlarmTime
-                + " AND end>=" + currentMillis
+                + " AND myAlarmTime>=?"
+                + " AND myAlarmTime<=?"
+                + " AND end>=?"
                 + " AND 0=(SELECT count(*) from CalendarAlerts CA"
                 + " where CA.event_id=Instances.event_id AND CA.begin=Instances.begin"
                 + " AND CA.alarmTime=myAlarmTime)"
                 + " ORDER BY myAlarmTime,begin,title";
+        String queryParams[] = new String[] {String.valueOf(start), String.valueOf(nextAlarmTime),
+                String.valueOf(currentMillis)};
 
         acquireInstanceRangeLocked(start, end, false /* don't use minimum expansion windows */);
         Cursor cursor = null;
         try {
-            cursor = db.rawQuery(query, null);
+            cursor = db.rawQuery(query, queryParams);
 
             final int beginIndex = cursor.getColumnIndex(Instances.BEGIN);
             final int endIndex = cursor.getColumnIndex(Instances.END);

@@ -50,7 +50,7 @@ import java.io.UnsupportedEncodingException;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 62;
+    private static final int DATABASE_VERSION = 63;
 
     private final Context mContext;
     private final SyncStateContentProviderHelper mSyncState;
@@ -429,6 +429,10 @@ import java.io.UnsupportedEncodingException;
             upgradeToVersion62(db);
             oldVersion += 1;
         }
+        if (oldVersion == 62) {
+            upgradeToVersion63(db);
+            oldVersion += 1;
+        }
     }
 
     private void upgradeToVersion56(SQLiteDatabase db) {
@@ -489,6 +493,11 @@ import java.io.UnsupportedEncodingException;
                 cursor.close();
             }
         }
+    }
+
+    private void upgradeToVersion63(SQLiteDatabase db) {
+        // we need to recreate the Events view
+        createEventsView(db);
     }
 
     private void upgradeToVersion62(SQLiteDatabase db) {
@@ -868,7 +877,8 @@ import java.io.UnsupportedEncodingException;
                 + Tables.EVENTS + "." + Calendar.Events._SYNC_LOCAL_ID
                 + " AS " + Calendar.Events._SYNC_LOCAL_ID + ","
                 + Calendar.Calendars.URL + ","
-                + Calendar.Calendars.OWNER_ACCOUNT
+                + Calendar.Calendars.OWNER_ACCOUNT + ","
+                + Calendar.Calendars.SYNC_EVENTS
                 + " FROM " + Tables.EVENTS + " JOIN " + Tables.CALENDARS
                 + " ON (" + Tables.EVENTS + "." + Calendar.Events.CALENDAR_ID
                 + "=" + Tables.CALENDARS + "." + Calendar.Calendars._ID

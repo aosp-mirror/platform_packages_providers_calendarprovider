@@ -945,10 +945,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // can cancel the correct recurrence expansion instances.
         // we don't have originalInstanceDuration or end time.  for now, assume the original
         // instance lasts no longer than 1 week.
+        // also filter with syncable state (we dont want the entries from a non syncable account)
         // TODO: compute the originalInstanceEndTime or get this from the server.
-        qb.appendWhere("(dtstart <= ? AND (lastDate IS NULL OR lastDate >= ?)) OR " +
+        qb.appendWhere("((dtstart <= ? AND (lastDate IS NULL OR lastDate >= ?)) OR " +
                 "(originalInstanceTime IS NOT NULL AND originalInstanceTime <= ? AND " +
-                "originalInstanceTime >= ?)");
+                "originalInstanceTime >= ?)) AND (sync_events != 0)");
         String selectionArgs[] = new String[] {endString, beginString, endString,
                 String.valueOf(begin - MAX_ASSUMED_DURATION)};
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
@@ -2545,38 +2546,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (oldSyncEvents == syncEvents) {
             // nothing to do
             return;
-        }
-
-        // If we are no longer syncing a calendar then make sure that the
-        // old calendar sync data is cleared.  Then if we later add this
-        // calendar back, we will sync all the events.
-        if (!syncEvents) {
-            // TODO: clear out the SyncState
-//            byte[] data = readSyncDataBytes(account);
-//            GDataSyncData syncData = AbstractGDataSyncAdapter.newGDataSyncDataFromBytes(data);
-//            if (syncData != null) {
-//                syncData.feedData.remove(calendarUrl);
-//                data = AbstractGDataSyncAdapter.newBytesFromGDataSyncData(syncData);
-//                writeSyncDataBytes(account, data);
-//            }
-
-            // Delete all of the events in this calendar to save space.
-            // This is the closest we can come to deleting a calendar.
-            // Clients should never actually delete a calendar.  That won't
-            // work.  We need to keep the calendar entry in the Calendars table
-            // in order to know not to sync the events for that calendar from
-            // the server.
-            String[] args = new String[] {String.valueOf(id)};
-            mDb.delete("Events", CALENDAR_ID_SELECTION, args);
-
-            // TODO: cancel any pending/ongoing syncs for this calendar.
-
-            // TODO: there is a corner case to deal with here: namely, if
-            // we edit or delete an event on the phone and then remove
-            // (that is, stop syncing) a calendar, and if we also make a
-            // change on the server to that event at about the same time,
-            // then we will never propagate the changes from the phone to
-            // the server.
         }
 
         // If the calendar is not selected for syncing, then don't download

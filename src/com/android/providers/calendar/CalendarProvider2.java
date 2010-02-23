@@ -1996,6 +1996,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case SYNCSTATE_ID:
                 String selectionWithId = (BaseColumns._ID + "=?")
                         + (selection == null ? "" : " AND (" + selection + ")");
+                // Prepend id to selectionArgs
                 selectionArgs = insertSelectionArg(selectionArgs,
                         String.valueOf(ContentUris.parseId(uri)));
                 return mDbHelper.getSyncState().delete(mDb, selectionWithId,
@@ -2305,6 +2306,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 selection = appendAccountToSelection(uri, selection);
                 String selectionWithId = (BaseColumns._ID + "=?")
                         + (selection == null ? "" : " AND (" + selection + ")");
+                // Prepend id to selectionArgs
                 selectionArgs = insertSelectionArg(selectionArgs,
                         String.valueOf(ContentUris.parseId(uri)));
                 return mDbHelper.getSyncState().update(mDb, values, selectionWithId, selectionArgs);
@@ -2755,6 +2757,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // Note 2: we have to name "myAlarmTime" different from the
         // "alarmTime" column in CalendarAlerts because otherwise the
         // query won't find multiple alarms for the same event.
+        // Query parameters are not used with myAlarmTime due to a database
+        // issue with string coercion (bug 2464440)
         String query = "SELECT begin-(minutes*60000) AS myAlarmTime,"
                 + " Instances.event_id AS eventId, begin, end,"
                 + " title, allDay, method, minutes"
@@ -2763,20 +2767,18 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 + " INNER JOIN Reminders"
                 + " ON (Instances.event_id = Reminders.event_id)"
                 + " WHERE method=" + Reminders.METHOD_ALERT
-                + " AND myAlarmTime>=?"
-                + " AND myAlarmTime<=?"
-                + " AND end>=?"
+                + " AND myAlarmTime>=" + start
+                + " AND myAlarmTime<=" + nextAlarmTime
+                + " AND end>=" + currentMillis
                 + " AND 0=(SELECT count(*) from CalendarAlerts CA"
                 + " where CA.event_id=Instances.event_id AND CA.begin=Instances.begin"
                 + " AND CA.alarmTime=myAlarmTime)"
                 + " ORDER BY myAlarmTime,begin,title";
-        String queryParams[] = new String[] {String.valueOf(start), String.valueOf(nextAlarmTime),
-                String.valueOf(currentMillis)};
 
         acquireInstanceRangeLocked(start, end, false /* don't use minimum expansion windows */);
         Cursor cursor = null;
         try {
-            cursor = db.rawQuery(query, queryParams);
+            cursor = db.rawQuery(query, null /* selectionArgs */);
 
             final int beginIndex = cursor.getColumnIndex(Instances.BEGIN);
             final int endIndex = cursor.getColumnIndex(Instances.END);

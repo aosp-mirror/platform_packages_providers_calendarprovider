@@ -440,14 +440,13 @@ public class CalendarAppWidgetService extends Service implements Runnable {
      */
     private PendingIntent getLaunchPendingIntent(Context context, long goToTime) {
         Intent launchIntent = new Intent();
-        launchIntent.setComponent(new ComponentName(ACTION_PACKAGE, ACTION_CLASS));
-        launchIntent.setAction(Intent.ACTION_MAIN);
-        launchIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+        launchIntent.setAction(Intent.ACTION_VIEW);
         launchIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
                 Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
         if (goToTime != 0) {
-            launchIntent.putExtra(Calendar.EVENT_BEGIN_TIME, goToTime);
             launchIntent.putExtra(KEY_DETAIL_VIEW, true);
+            Uri data = Uri.parse("content://com.android.calendar/time/" + goToTime);
+            launchIntent.setData(data);
         }
         return PendingIntent.getActivity(context, 0 /* no requestCode */,
                 launchIntent, PendingIntent.FLAG_UPDATE_CURRENT);

@@ -16,6 +16,8 @@
 
 package com.android.providers.calendar;
 
+import com.android.internal.content.SyncStateContentProviderHelper;
+
 import android.accounts.Account;
 import android.content.ContentResolver;
 import android.content.ContentValues;
@@ -30,10 +32,9 @@ import android.provider.Calendar;
 import android.provider.ContactsContract;
 import android.text.format.Time;
 import android.util.Log;
-import com.android.internal.content.SyncStateContentProviderHelper;
 
-import java.net.URLDecoder;
 import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 
 /**
  * Database helper for calendar. Designed as a singleton to make sure that all
@@ -50,7 +51,7 @@ import java.io.UnsupportedEncodingException;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 63;
+    private static final int DATABASE_VERSION = 64;
 
     private final Context mContext;
     private final SyncStateContentProviderHelper mSyncState;
@@ -220,7 +221,8 @@ import java.io.UnsupportedEncodingException;
                 "deleted INTEGER NOT NULL DEFAULT 0," +
                 "dtstart2 INTEGER," + //millis since epoch, allDay events in local timezone
                 "dtend2 INTEGER," + //millis since epoch, allDay events in local timezone
-                "eventTimezone2 TEXT" + //timezone for event with allDay events in local timezone
+                "eventTimezone2 TEXT," + //timezone for event with allDay events in local timezone
+                "syncAdapterData TEXT" + //available for use by sync adapters
                 ");");
 
         // Trigger to set event's sync_account
@@ -433,6 +435,10 @@ import java.io.UnsupportedEncodingException;
             upgradeToVersion63(db);
             oldVersion += 1;
         }
+        if (oldVersion == 63) {
+            upgradeToVersion64(db);
+            oldVersion += 1;
+        }
     }
 
     private void upgradeToVersion56(SQLiteDatabase db) {
@@ -493,6 +499,11 @@ import java.io.UnsupportedEncodingException;
                 cursor.close();
             }
         }
+    }
+
+    private void upgradeToVersion64(SQLiteDatabase db) {
+        // Add a column that may be used by sync adapters
+        db.execSQL("ALTER TABLE Events ADD COLUMN syncAdapterData TEXT;");
     }
 
     private void upgradeToVersion63(SQLiteDatabase db) {

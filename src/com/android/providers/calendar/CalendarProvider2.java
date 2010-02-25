@@ -2726,8 +2726,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // Note 2: we have to name "myAlarmTime" different from the
         // "alarmTime" column in CalendarAlerts because otherwise the
         // query won't find multiple alarms for the same event.
-        // Query parameters are not used with myAlarmTime due to a database
-        // issue with string coercion (bug 2464440)
+        //
+        // The CAST is needed in the query because otherwise the expression
+        // will be untyped and sqlite3's manifest typing will not convert the
+        // string query parameter to an int in myAlarmtime>=?, so the comparison
+        // will fail.  This could be simplified if bug 2464440 is resolved.
         String query = "SELECT begin-(minutes*60000) AS myAlarmTime,"
                 + " Instances.event_id AS eventId, begin, end,"
                 + " title, allDay, method, minutes"
@@ -2736,18 +2739,20 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 + " INNER JOIN Reminders"
                 + " ON (Instances.event_id = Reminders.event_id)"
                 + " WHERE method=" + Reminders.METHOD_ALERT
-                + " AND myAlarmTime>=" + start
-                + " AND myAlarmTime<=" + nextAlarmTime
-                + " AND end>=" + currentMillis
+                + " AND myAlarmTime>=CAST(? AS INT)"
+                + " AND myAlarmTime<=CAST(? AS INT)"
+                + " AND end>=?"
                 + " AND 0=(SELECT count(*) from CalendarAlerts CA"
                 + " where CA.event_id=Instances.event_id AND CA.begin=Instances.begin"
                 + " AND CA.alarmTime=myAlarmTime)"
                 + " ORDER BY myAlarmTime,begin,title";
+        String queryParams[] = new String[] {String.valueOf(start), String.valueOf(nextAlarmTime),
+                String.valueOf(currentMillis)};
 
         acquireInstanceRangeLocked(start, end, false /* don't use minimum expansion windows */);
         Cursor cursor = null;
         try {
-            cursor = db.rawQuery(query, null /* selectionArgs */);
+            cursor = db.rawQuery(query, queryParams);
 
             final int beginIndex = cursor.getColumnIndex(Instances.BEGIN);
             final int endIndex = cursor.getColumnIndex(Instances.END);

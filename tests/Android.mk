@@ -11,7 +11,7 @@ LOCAL_STATIC_JAVA_LIBRARIES += android-common
 
 LOCAL_PACKAGE_NAME := CalendarProviderTests
 
-LOCAL_JAVA_LIBRARIES := ext android.test.runner gsf-client
+LOCAL_JAVA_LIBRARIES := ext android.test.runner
 
 LOCAL_INSTRUMENTATION_FOR := CalendarProvider
 

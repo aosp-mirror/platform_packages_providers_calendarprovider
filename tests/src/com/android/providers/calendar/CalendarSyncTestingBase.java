@@ -32,7 +32,6 @@ import android.text.format.Time;
 import android.util.Log;
 
 import com.google.android.collect.Maps;
-import com.google.android.gsf.GoogleLoginServiceConstants;
 
 import java.util.HashSet;
 import java.util.Map;
@@ -350,8 +349,7 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
      * @return
      */
     protected String getAccount() {
-        Account[] accounts = mAccountManager.getAccountsByType(
-                GoogleLoginServiceConstants.ACCOUNT_TYPE);
+        Account[] accounts = mAccountManager.getAccountsByType("com.google");
 
         assertTrue("Didn't find any Google accounts", accounts.length > 0);
 

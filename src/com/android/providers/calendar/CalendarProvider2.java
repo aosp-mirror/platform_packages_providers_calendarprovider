@@ -2940,6 +2940,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sUriMatcher.addURI(Calendar.AUTHORITY, SCHEDULE_ALARM_PATH, SCHEDULE_ALARM);
         sUriMatcher.addURI(Calendar.AUTHORITY, SCHEDULE_ALARM_REMOVE_PATH, SCHEDULE_ALARM_REMOVE);
         sUriMatcher.addURI(Calendar.AUTHORITY, "time/#", TIME);
+        sUriMatcher.addURI(Calendar.AUTHORITY, "time", TIME);
 
         sEventsProjectionMap = new HashMap<String, String>();
         // Events columns

@@ -1343,6 +1343,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case INSTANCES_BY_DAY:
             case EVENT_DAYS:
                 return "vnd.android.cursor.dir/event-instance";
+            case TIME:
+                return "time/epoch";
             default:
                 throw new IllegalArgumentException("Unknown URL " + url);
         }
@@ -2902,6 +2904,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final int EVENT_DAYS = 21;
     private static final int SCHEDULE_ALARM = 22;
     private static final int SCHEDULE_ALARM_REMOVE = 23;
+    private static final int TIME = 24;
 
     private static final UriMatcher sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
     private static final HashMap<String, String> sInstancesProjectionMap;
@@ -2936,6 +2939,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sUriMatcher.addURI(Calendar.AUTHORITY, "syncstate/#", SYNCSTATE_ID);
         sUriMatcher.addURI(Calendar.AUTHORITY, SCHEDULE_ALARM_PATH, SCHEDULE_ALARM);
         sUriMatcher.addURI(Calendar.AUTHORITY, SCHEDULE_ALARM_REMOVE_PATH, SCHEDULE_ALARM_REMOVE);
+        sUriMatcher.addURI(Calendar.AUTHORITY, "time/#", TIME);
 
         sEventsProjectionMap = new HashMap<String, String>();
         // Events columns

@@ -50,8 +50,8 @@ import android.provider.Calendar.Events;
 import android.provider.Calendar.Instances;
 import android.provider.Calendar.Reminders;
 import android.text.TextUtils;
-import android.text.format.Time;
 import android.text.format.DateUtils;
+import android.text.format.Time;
 import android.util.Config;
 import android.util.Log;
 import android.util.TimeFormatException;
@@ -172,6 +172,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             mRemoveAlarms = removeAlarms;
         }
 
+        @Override
         public void run() {
             try {
                 Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
@@ -764,10 +765,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // Convert the first and last Julian day range to a range that uses
         // UTC milliseconds.
         Time time = new Time();
-        long beginMs = time.setJulianDay((int) begin);
+        long beginMs = time.setJulianDay(begin);
         // We add one to lastDay because the time is set to 12am on the given
         // Julian day and we want to include all the events on the last day.
-        long endMs = time.setJulianDay((int) end + 1);
+        long endMs = time.setJulianDay(end + 1);
 
         acquireInstanceRange(beginMs, endMs, true);
         qb.appendWhere("startDay<=? AND endDay>=?");
@@ -2143,10 +2144,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private int deleteEventInternal(long id, boolean callerIsSyncAdapter) {
         int result = 0;
+        String selectionArgs[] = new String[] {String.valueOf(id)};
 
         // Query this event to get the fields needed for deleting.
         Cursor cursor = mDb.query("Events", EVENTS_PROJECTION,
-                "_id=?", new String[] {String.valueOf(id)},
+                "_id=?", selectionArgs,
                 null /* groupBy */,
                 null /* having */, null /* sortOrder */);
         try {
@@ -2174,12 +2176,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
 
                 if (callerIsSyncAdapter) {
-                    mDb.delete("Events", "_id=?", new String[] {String.valueOf(id)});
+                    mDb.delete("Events", "_id=?", selectionArgs);
+                    mDb.delete("Attendees", "event_id=?", selectionArgs);
                 } else {
                     ContentValues values = new ContentValues();
                     values.put(Events.DELETED, 1);
                     values.put(Events._SYNC_DIRTY, 1);
-                    mDb.update("Events", values, "_id=?", new String[] {String.valueOf(id)});
+                    mDb.update("Events", values, "_id=?", selectionArgs);
                 }
             }
         } finally {
@@ -2190,10 +2193,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         scheduleNextAlarm(false /* do not remove alarms */);
         triggerAppWidgetUpdate(-1);
 
-        String selectionArgs[] = new String[] {String.valueOf(id)};
+        // Delete associated data; attendees, however, are deleted with the actual event so
+        // that the sync adapter is able to notify attendees of the cancellation.
         mDb.delete("Instances", "event_id=?", selectionArgs);
         mDb.delete("EventsRawTimes", "event_id=?", selectionArgs);
-        mDb.delete("Attendees", "event_id=?", selectionArgs);
         mDb.delete("Reminders", "event_id=?", selectionArgs);
         mDb.delete("CalendarAlerts", "event_id=?", selectionArgs);
         mDb.delete("ExtendedProperties", "event_id=?", selectionArgs);

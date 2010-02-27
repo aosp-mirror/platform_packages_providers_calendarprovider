@@ -17,7 +17,7 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="calendar_storage" msgid="5387668002987562770">"캘린더 저장"</string>
     <string name="gadget_title" msgid="3673051912300198724">"캘린더"</string>
-    <string name="no_title_label" msgid="1986566832415168907">"(제목 없음)"</string>
+    <string name="no_title_label" msgid="4159997003206204899">"(제목 없음)"</string>
     <string name="calendar_default_name" msgid="6924293766625167275">"기본값"</string>
   <plurals name="gadget_more_events">
     <item quantity="one" msgid="4209472169696459059">"1개 일정 더보기"</item>

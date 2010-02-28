@@ -3041,6 +3041,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventEntitiesProjectionMap.put(Events.DELETED, "deleted");
         sEventEntitiesProjectionMap.put(Events._ID, Events._ID);
         sEventEntitiesProjectionMap.put(Events._SYNC_ID, Events._SYNC_ID);
+        sEventEntitiesProjectionMap.put(Events._SYNC_LOCAL_ID, Events._SYNC_LOCAL_ID);
         sEventEntitiesProjectionMap.put(Events._SYNC_VERSION, Events._SYNC_VERSION);
         sEventEntitiesProjectionMap.put(Events._SYNC_DIRTY, Events._SYNC_DIRTY);
         sEventEntitiesProjectionMap.put(Calendars.URL, "url");

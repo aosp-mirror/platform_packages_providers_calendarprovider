@@ -17,7 +17,6 @@
 
 package com.android.providers.calendar;
 
-import android.pim.DateException;
 import android.test.suitebuilder.annotation.SmallTest;
 import junit.framework.TestCase;
 

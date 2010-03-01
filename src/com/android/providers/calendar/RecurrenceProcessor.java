@@ -17,7 +17,6 @@
 
 package com.android.providers.calendar;
 
-import android.pim.DateException;
 import android.pim.EventRecurrence;
 import android.pim.RecurrenceSet;
 import android.text.format.Time;

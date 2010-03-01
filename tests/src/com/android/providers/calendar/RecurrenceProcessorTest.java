@@ -18,20 +18,16 @@
 package com.android.providers.calendar;
 
 import android.os.Debug;
-import android.pim.DateException;
 import android.pim.RecurrenceSet;
 import android.test.suitebuilder.annotation.LargeTest;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
-import android.text.format.DateUtils;
 import android.text.format.Time;
 import android.util.Log;
 import android.util.TimeFormatException;
-
-import java.util.Calendar;
-import java.util.TreeSet;
-
 import junit.framework.TestCase;
+
+import java.util.TreeSet;
 
 public class RecurrenceProcessorTest extends TestCase {
     private static final String TAG = "RecurrenceProcessorTest";
@@ -47,85 +43,6 @@ public class RecurrenceProcessorTest extends TestCase {
             ++i;
         }
         return out;
-    }
-
-    // pass true to positiveTestCase to fail if there's RecurrenceException
-    // and pass false to fail if there isn't one
-    // zulu is the expected return value, only valid on positive verifyParseDateTime cases
-    private static void verifyParseDateTime(boolean positiveTestCase,
-            String s,
-            int yyyy, int m, int dd,
-            int hh, int mm, int ss, boolean zulu) {
-        try {
-            Calendar cal = DateUtils.newCalendar(true);
-            boolean result = DateUtils.parseDateTime(s, cal);
-
-            checkField(cal, Calendar.YEAR, yyyy);
-            checkField(cal, Calendar.MONTH, m);
-            checkField(cal, Calendar.DAY_OF_MONTH, dd);
-            checkField(cal, Calendar.HOUR_OF_DAY, hh);
-            checkField(cal, Calendar.MINUTE, mm);
-            checkField(cal, Calendar.SECOND, ss);
-
-            assertTrue("verifyParseDateTime didn't throw an exception"
-                    + " but we expected it to", positiveTestCase);
-
-            assertEquals("parseDateTime for '" + s
-                    + "' returned " + result + " but " + zulu
-                    + " was expected.",
-                    result, zulu);
-        } catch (DateException e) {
-            assertFalse(positiveTestCase);
-        }
-    }
-
-    private static void checkField(Calendar cal, int field, int value) throws DateException {
-        assertEquals("checkField"
-                + " failed for field " + field + ". Got " + cal.get(field)
-                + ". Expected " + value + " cal=" + cal,
-                value, cal.get(field));
-    }
-
-    @MediumTest
-    public void testParseDateTime() throws Exception {
-        verifyParseDateTime(true, "20060816T143412Z", 2006, 7, 16, 14, 34, 12, true);
-        verifyParseDateTime(true, "20060816T133412", 2006, 7, 16, 13, 34, 12, false);
-        verifyParseDateTime(true, "00010101T000000", 1, 0, 1, 0, 0, 0, false);
-
-        verifyParseDateTime(false, "20060816T13341", 0, 0, 0, 0, 0, 0, false);
-        verifyParseDateTime(false, "20060816?133412", 0, 0, 0, 0, 0, 0, false);
-        verifyParseDateTime(false, "20060816T133412M", 0, 0, 0, 0, 0, 0, false);
-
-        verifyParseDateTime(false, "20061316T133410", 0, 0, 0, 0, 0, 0, false);
-        verifyParseDateTime(false, "20060832T133410", 0, 0, 0, 0, 0, 0, false);
-        verifyParseDateTime(false, "20060816T243410", 0, 0, 0, 0, 0, 0, false);
-        verifyParseDateTime(false, "20060816T136010", 0, 0, 0, 0, 0, 0, false);
-        verifyParseDateTime(false, "20060816T133460", 0, 0, 0, 0, 0, 0, false);
-    }
-
-    private static void verifyWriteDateTime(String str, Calendar cal, StringBuilder sb)
-            throws DateException {
-        DateUtils.parseDateTime(str, cal);
-
-        String result = DateUtils.writeDateTime(cal, sb);
-        assertEquals(str, result);
-    }
-
-    @SmallTest
-    public void testWriteDateTime() throws Exception {
-        Calendar cal = DateUtils.newCalendar(true);
-        StringBuilder sb = new StringBuilder();
-
-        sb.setLength(15);
-
-        verifyWriteDateTime("20061216T143412", cal, sb);
-        verifyWriteDateTime("00010101T000000", cal, sb);
-
-        sb.setLength(16);
-        sb.setCharAt(15, 'Z');
-
-        verifyWriteDateTime("20061216T143412Z", cal, sb);
-        verifyWriteDateTime("00010101T000000Z", cal, sb);
     }
 
     private static void printLists(String[] expected, String[] out) {

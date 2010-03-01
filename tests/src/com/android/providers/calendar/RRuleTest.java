@@ -20,7 +20,6 @@
 package com.android.providers.calendar;
 
 import android.os.Debug;
-import android.pim.DateException;
 import android.pim.RecurrenceSet;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.Suppress;

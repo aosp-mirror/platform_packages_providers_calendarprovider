@@ -3001,7 +3001,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Events._SYNC_ID, "_sync_id");
         sEventsProjectionMap.put(Events._SYNC_VERSION, "_sync_version");
         sEventsProjectionMap.put(Events._SYNC_TIME, "_sync_time");
-        sEventsProjectionMap.put(Events._SYNC_LOCAL_ID, "_sync_local_id");
+        sEventsProjectionMap.put(Events._SYNC_DATA, "_sync_local_id");
         sEventsProjectionMap.put(Events._SYNC_DIRTY, "_sync_dirty");
         sEventsProjectionMap.put(Events._SYNC_ACCOUNT, "_sync_account");
         sEventsProjectionMap.put(Events._SYNC_ACCOUNT_TYPE,
@@ -3041,7 +3041,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventEntitiesProjectionMap.put(Events.DELETED, "deleted");
         sEventEntitiesProjectionMap.put(Events._ID, Events._ID);
         sEventEntitiesProjectionMap.put(Events._SYNC_ID, Events._SYNC_ID);
-        sEventEntitiesProjectionMap.put(Events._SYNC_LOCAL_ID, Events._SYNC_LOCAL_ID);
+        sEventEntitiesProjectionMap.put(Events._SYNC_DATA, Events._SYNC_DATA);
         sEventEntitiesProjectionMap.put(Events._SYNC_VERSION, Events._SYNC_VERSION);
         sEventEntitiesProjectionMap.put(Events._SYNC_DIRTY, Events._SYNC_DIRTY);
         sEventEntitiesProjectionMap.put(Calendars.URL, "url");

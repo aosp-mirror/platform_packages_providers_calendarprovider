@@ -885,8 +885,8 @@ import java.net.URLDecoder;
                 + " AS " + Calendar.Events._SYNC_ACCOUNT_TYPE + ","
                 + Tables.EVENTS + "." + Calendar.Events._SYNC_TIME
                 + " AS " + Calendar.Events._SYNC_TIME + ","
-                + Tables.EVENTS + "." + Calendar.Events._SYNC_LOCAL_ID
-                + " AS " + Calendar.Events._SYNC_LOCAL_ID + ","
+                + Tables.EVENTS + "." + Calendar.Events._SYNC_DATA
+                + " AS " + Calendar.Events._SYNC_DATA + ","
                 + Calendar.Calendars.URL + ","
                 + Calendar.Calendars.OWNER_ACCOUNT + ","
                 + Calendar.Calendars.SYNC_EVENTS

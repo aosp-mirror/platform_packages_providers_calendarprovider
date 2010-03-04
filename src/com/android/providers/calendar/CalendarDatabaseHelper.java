@@ -810,21 +810,6 @@ import java.net.URLDecoder;
         ContentResolver.requestSync(account, Calendar.Calendars.CONTENT_URI.getAuthority(), extras);
     }
 
-    public void wipeData() {
-        SQLiteDatabase db = getWritableDatabase();
-
-        db.execSQL("DELETE FROM Calendars;");
-        db.execSQL("DELETE FROM Events;");
-        db.execSQL("DELETE FROM EventsRawTimes;");
-        db.execSQL("DELETE FROM Instances;");
-        db.execSQL("DELETE FROM CalendarMetaData;");
-        db.execSQL("DELETE FROM CalendarCache;");
-        db.execSQL("DELETE FROM Attendees;");
-        db.execSQL("DELETE FROM Reminders;");
-        db.execSQL("DELETE FROM CalendarAlerts;");
-        db.execSQL("DELETE FROM ExtendedProperties;");
-    }
-
     public interface Views {
       public static final String EVENTS = "view_events";
     }

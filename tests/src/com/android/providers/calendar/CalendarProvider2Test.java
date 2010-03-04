@@ -840,9 +840,25 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         mResolver.addProvider("sync", new MockProvider("sync"));
 
         CalendarDatabaseHelper helper = (CalendarDatabaseHelper) getProvider().getDatabaseHelper();
-        helper.wipeData();
+        wipeData(helper);
         mDb = helper.getWritableDatabase();
         mMetaData = getProvider().mMetaData;
+    }
+
+
+    public void wipeData(CalendarDatabaseHelper helper) {
+        SQLiteDatabase db = helper.getWritableDatabase();
+
+        db.execSQL("DELETE FROM Calendars;");
+        db.execSQL("DELETE FROM Events;");
+        db.execSQL("DELETE FROM EventsRawTimes;");
+        db.execSQL("DELETE FROM Instances;");
+        db.execSQL("DELETE FROM CalendarMetaData;");
+        db.execSQL("DELETE FROM CalendarCache;");
+        db.execSQL("DELETE FROM Attendees;");
+        db.execSQL("DELETE FROM Reminders;");
+        db.execSQL("DELETE FROM CalendarAlerts;");
+        db.execSQL("DELETE FROM ExtendedProperties;");
     }
 
     @Override

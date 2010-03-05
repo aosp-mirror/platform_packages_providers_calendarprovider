@@ -104,6 +104,22 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final int EVENT_ID_INDEX = 1;
 
     /**
+     * Projection to query for correcting times in allDay events.
+     */
+    private static final String[] ALLDAY_TIME_PROJECTION = new String[] {
+        Events._ID,
+        Events.DTSTART,
+        Events.DTEND,
+        Events.DURATION
+    };
+    private static final int ALLDAY_ID_INDEX = 0;
+    private static final int ALLDAY_DTSTART_INDEX = 1;
+    private static final int ALLDAY_DTEND_INDEX = 2;
+    private static final int ALLDAY_DURATION_INDEX = 3;
+
+    private static final int DAY_IN_SECONDS = 24 * 60 * 60;
+
+    /**
      * The cached copy of the CalendarMetaData database table.
      * Make this "package private" instead of "private" so that test code
      * can access it.
@@ -1366,6 +1382,139 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 !TextUtils.isEmpty(values.getAsString(Events.ORIGINAL_EVENT)));
     }
 
+    /**
+     * Takes an event and corrects the hrs, mins, secs if it is an allDay event.
+     *
+     * AllDay events should have hrs, mins, secs set to zero. This checks if this is true and
+     * corrects the fields DTSTART, DTEND, and DURATION if necessary. Also checks to ensure that
+     * either both DTSTART and DTEND or DTSTART and DURATION are set for each event.
+     *
+     * @param updatedValues The values to check and correct
+     * @return Returns true if a correction was necessary, false otherwise
+     */
+    private boolean fixAllDayTime(Uri uri, ContentValues updatedValues) {
+        boolean neededCorrection = false;
+        if (updatedValues.containsKey(Events.ALL_DAY)
+                && updatedValues.getAsInteger(Events.ALL_DAY).intValue() == 1) {
+            Long dtstart = updatedValues.getAsLong(Events.DTSTART);
+            Long dtend = updatedValues.getAsLong(Events.DTEND);
+            String duration = updatedValues.getAsString(Events.DURATION);
+            Time time = new Time();
+            Cursor currentTimesCursor = null;
+            String tempValue;
+            // If a complete set of time fields doesn't exist query the db for them. A complete set
+            // is dtstart and dtend for non-recurring events or dtstart and duration for recurring
+            // events.
+            if(dtstart == null || (dtend == null && duration == null)) {
+                // Make sure we have an id to search for, if not this is probably a new event
+                if (uri.getPathSegments().size() == 2) {
+                    currentTimesCursor = query(uri,
+                            ALLDAY_TIME_PROJECTION,
+                            null /* selection */,
+                            null /* selectionArgs */,
+                            null /* sort */);
+                    if (currentTimesCursor != null) {
+                        if (!currentTimesCursor.moveToFirst() ||
+                                currentTimesCursor.getCount() != 1) {
+                            // Either this is a new event or the query is too general to get data
+                            // from the db. In either case don't try to use the query and catch
+                            // errors when trying to update the time fields.
+                            currentTimesCursor.close();
+                            currentTimesCursor = null;
+                        }
+                    }
+                }
+            }
+
+            // Ensure dtstart exists for this event (always required) and set so h,m,s are 0 if
+            // necessary.
+            // TODO Move this somewhere to check all events, not just allDay events.
+            if (dtstart == null) {
+                if (currentTimesCursor != null) {
+                    // getLong returns 0 for empty fields, we'd like to know if a field is empty
+                    // so getString is used instead.
+                    tempValue = currentTimesCursor.getString(ALLDAY_DTSTART_INDEX);
+                    try {
+                        dtstart = Long.valueOf(tempValue);
+                    } catch (NumberFormatException e) {
+                        currentTimesCursor.close();
+                        throw new IllegalArgumentException("Event has no DTSTART field, the db " +
+                            "may be damaged. Set DTSTART for this event to fix.");
+                    }
+                } else {
+                    throw new IllegalArgumentException("DTSTART cannot be empty for new events.");
+                }
+            }
+            time.clear(Time.TIMEZONE_UTC);
+            time.set(dtstart.longValue());
+            if (time.hour != 0 || time.minute != 0 || time.second != 0) {
+                time.hour = 0;
+                time.minute = 0;
+                time.second = 0;
+                updatedValues.put(Events.DTSTART, time.toMillis(true));
+                neededCorrection = true;
+            }
+
+            // If dtend exists for this event make sure it's h,m,s are 0.
+            if (dtend == null && currentTimesCursor != null) {
+                // getLong returns 0 for empty fields. We'd like to know if a field is empty
+                // so getString is used instead.
+                tempValue = currentTimesCursor.getString(ALLDAY_DTEND_INDEX);
+                try {
+                    dtend = Long.valueOf(tempValue);
+                } catch (NumberFormatException e) {
+                    dtend = null;
+                }
+            }
+            if (dtend != null) {
+                time.clear(Time.TIMEZONE_UTC);
+                time.set(dtend.longValue());
+                if (time.hour != 0 || time.minute != 0 || time.second != 0) {
+                    time.hour = 0;
+                    time.minute = 0;
+                    time.second = 0;
+                    dtend = time.toMillis(true);
+                    updatedValues.put(Events.DTEND, dtend);
+                    neededCorrection = true;
+                }
+            }
+
+            if (currentTimesCursor != null) {
+                if (duration == null) {
+                    duration = currentTimesCursor.getString(ALLDAY_DURATION_INDEX);
+                }
+                currentTimesCursor.close();
+            }
+
+            if (duration != null) {
+                int len = duration.length();
+                /* duration is stored as either "P<seconds>S" or "P<days>D". This checks if it's
+                 * in the seconds format, and if so converts it to days.
+                 */
+                if (len == 0) {
+                    duration = null;
+                } else if (duration.charAt(0) == 'P' &&
+                        duration.charAt(len - 1) == 'S') {
+                    int seconds = Integer.parseInt(duration.substring(1, len - 1));
+                    int days = (seconds + DAY_IN_SECONDS - 1) / DAY_IN_SECONDS;
+                    duration = "P" + days + "D";
+                    updatedValues.put(Events.DURATION, duration);
+                    neededCorrection = true;
+                } else if (duration.charAt(0) != 'P' ||
+                        duration.charAt(len - 1) != 'D') {
+                    throw new IllegalArgumentException("duration is not formatted correctly. " +
+                            "Should be 'P<seconds>S' or 'P<days>D'.");
+                }
+            }
+
+            if (duration == null && dtend == null) {
+                throw new IllegalArgumentException("DTEND and DURATION cannot both be null for " +
+                        "an event.");
+            }
+        }
+        return neededCorrection;
+    }
+
     @Override
     protected Uri insertInTransaction(Uri uri, ContentValues values) {
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
@@ -1408,6 +1557,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     if (owner != null) {
                         updatedValues.put(Events.ORGANIZER, owner);
                     }
+                }
+                if (fixAllDayTime(uri, updatedValues)) {
+                    Log.w(TAG, "insertInTransaction: " +
+                            "allDay is true but sec, min, hour were not 0.");
                 }
 
                 id = mDbHelper.eventsInsert(updatedValues);
@@ -2360,6 +2513,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     } else {
                         // Sync adapter Events operation affects just Events table, not associated
                         // tables.
+                        if (fixAllDayTime(uri, values)) {
+                            Log.w(TAG, "updateInTransaction: Caller is sync adapter. " +
+                                    "allDay is true but sec, min, hour were not 0.");
+                        }
                         return mDb.update("Events", values, selection, selectionArgs);
                     }
                 } else {
@@ -2389,6 +2546,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 if (updatedValues == null) {
                     Log.w(TAG, "Could not update event.");
                     return 0;
+                }
+                // Make sure we pass in a uri with the id appended to fixAllDayTime
+                Uri allDayUri;
+                if (uri.getPathSegments().size() == 1) {
+                    allDayUri = ContentUris.withAppendedId(uri, id);
+                } else {
+                    allDayUri = uri;
+                }
+                if (fixAllDayTime(allDayUri, updatedValues)) {
+                    Log.w(TAG, "updateInTransaction: " +
+                            "allDay is true but sec, min, hour were not 0.");
                 }
 
                 int result = mDb.update("Events", updatedValues, "_id=?",

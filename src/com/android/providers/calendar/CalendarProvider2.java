@@ -57,6 +57,7 @@ import android.util.TimeFormatException;
 import android.util.TimeUtils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
@@ -564,7 +565,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
-            Log.v(TAG, "query: " + uri);
+            Log.v(TAG, "query uri - " + uri);
         }
 
         final SQLiteDatabase db = mDbHelper.getReadableDatabase();
@@ -705,6 +706,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private Cursor query(final SQLiteDatabase db, SQLiteQueryBuilder qb, String[] projection,
             String selection, String[] selectionArgs, String sortOrder, String groupBy,
             String limit) {
+
+        if (Log.isLoggable(TAG, Log.VERBOSE)) {
+            Log.v(TAG, "query sql - projection: " + Arrays.toString(projection) +
+                    " selection: " + selection +
+                    " selectionArgs: " + Arrays.toString(selectionArgs) +
+                    " sortOrder: " + sortOrder +
+                    " groupBy: " + groupBy +
+                    " limit: " + limit);
+        }
         final Cursor c = qb.query(db, projection, selection, selectionArgs, groupBy, null,
                 sortOrder, limit);
         if (c != null) {

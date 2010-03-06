@@ -2164,7 +2164,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             if (cursor.moveToNext()) {
                 result = 1;
                 String syncId = cursor.getString(EVENTS_SYNC_ID_INDEX);
-                if (!TextUtils.isEmpty(syncId)) {
+                boolean emptySyncId = TextUtils.isEmpty(syncId);
+                if (!emptySyncId) {
 
                     // TODO: we may also want to delete exception
                     // events for this event (in case this was a
@@ -2184,7 +2185,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     mMetaData.clearInstanceRange();
                 }
 
-                if (callerIsSyncAdapter) {
+                // we clean the Events and Attendees table if the caller is CalendarSyncAdapter
+                // or if the event is local (no syncId)
+                if (callerIsSyncAdapter || emptySyncId) {
                     mDb.delete("Events", "_id=?", selectionArgs);
                     mDb.delete("Attendees", "event_id=?", selectionArgs);
                 } else {

@@ -905,6 +905,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         m.put(Calendars.OWNER_ACCOUNT, account);
         m.put(Calendars._SYNC_ACCOUNT,  account);
         m.put(Calendars._SYNC_ACCOUNT_TYPE,  "com.google");
+        m.put(Calendars.SYNC_EVENTS,  1);
 
         Uri url = mResolver.insert(Calendar.Calendars.CONTENT_URI, m);
         String id = url.getLastPathSegment();

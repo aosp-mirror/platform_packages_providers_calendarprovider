@@ -51,7 +51,7 @@ import java.net.URLDecoder;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 64;
+    private static final int DATABASE_VERSION = 65;
 
     private final Context mContext;
     private final SyncStateContentProviderHelper mSyncState;
@@ -439,6 +439,10 @@ import java.net.URLDecoder;
             upgradeToVersion64(db);
             oldVersion += 1;
         }
+        if (oldVersion == 64) {
+            upgradeToVersion65(db);
+            oldVersion += 1;
+        }
     }
 
     private void upgradeToVersion56(SQLiteDatabase db) {
@@ -499,6 +503,11 @@ import java.net.URLDecoder;
                 cursor.close();
             }
         }
+    }
+
+    private void upgradeToVersion65(SQLiteDatabase db) {
+        // we need to recreate the Events view
+        createEventsView(db);
     }
 
     private void upgradeToVersion64(SQLiteDatabase db) {

@@ -2703,13 +2703,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         Account account = null;
         String calendarUrl = null;
         boolean oldSyncEvents = false;
-        if (cursor != null && cursor.moveToFirst()) {
+        if (cursor != null) {
             try {
-                final String accountName = cursor.getString(0);
-                final String accountType = cursor.getString(1);
-                account = new Account(accountName, accountType);
-                calendarUrl = cursor.getString(2);
-                oldSyncEvents = (cursor.getInt(3) != 0);
+                if (cursor.moveToFirst()) {
+                    final String accountName = cursor.getString(0);
+                    final String accountType = cursor.getString(1);
+                    account = new Account(accountName, accountType);
+                    calendarUrl = cursor.getString(2);
+                    oldSyncEvents = (cursor.getInt(3) != 0);
+                }
             } finally {
                 cursor.close();
             }

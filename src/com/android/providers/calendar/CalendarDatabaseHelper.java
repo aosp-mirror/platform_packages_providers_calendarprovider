@@ -168,7 +168,8 @@ import java.net.URLDecoder;
                 "sync_events INTEGER NOT NULL DEFAULT 0," +
                 "location TEXT," +
                 "timezone TEXT," +
-                "ownerAccount TEXT" +
+                "ownerAccount TEXT, " +
+                "organizerCanRespond INTEGER NOT NULL DEFAULT 1" +
                 ");");
 
         // Trigger to remove a calendar's events when we delete the calendar
@@ -443,6 +444,10 @@ import java.net.URLDecoder;
             upgradeToVersion65(db);
             oldVersion += 1;
         }
+        if (oldVersion == 65) {
+            upgradeToVersion66(db);
+            oldVersion += 1;
+        }
     }
 
     private void upgradeToVersion56(SQLiteDatabase db) {
@@ -503,6 +508,13 @@ import java.net.URLDecoder;
                 cursor.close();
             }
         }
+    }
+
+    private void upgradeToVersion66(SQLiteDatabase db) {
+        // Add a column to indicate whether the event organizer can respond to his own events
+        // The UI should not show attendee status for events in calendars with this column = 0
+        db.execSQL("ALTER TABLE " +
+                "Calendars ADD COLUMN organizerCanRespond INTEGER NOT NULL DEFAULT 1;");
     }
 
     private void upgradeToVersion65(SQLiteDatabase db) {

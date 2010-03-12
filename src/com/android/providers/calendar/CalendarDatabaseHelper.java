@@ -52,7 +52,7 @@ import java.net.URLDecoder;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 65;
+    private static final int DATABASE_VERSION = 66;
 
     private final Context mContext;
     private final SyncStateContentProviderHelper mSyncState;

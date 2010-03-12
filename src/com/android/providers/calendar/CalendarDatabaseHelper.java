@@ -26,6 +26,7 @@ import android.content.res.Resources;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Bundle;
 import android.provider.Calendar;
@@ -144,6 +145,10 @@ import java.net.URLDecoder;
 
     @Override
     public void onCreate(SQLiteDatabase db) {
+        bootstrapDB(db);
+    }
+
+    private void bootstrapDB(SQLiteDatabase db) {
         Log.i(TAG, "Bootstrapping database");
 
         mSyncState.createDatabase(db);
@@ -380,73 +385,80 @@ import java.net.URLDecoder;
             return; // this was lossy
         }
 
-        if (oldVersion < 51) {
-            upgradeToVersion51(db); // From 50 or 51
-            oldVersion = 51;
-        }
-        if (oldVersion == 51) {
-            upgradeToVersion52(db);
-            oldVersion += 1;
-        }
-        if (oldVersion == 52) {
-            upgradeToVersion53(db);
-            oldVersion += 1;
-        }
-        if (oldVersion == 53) {
-            upgradeToVersion54(db);
-            oldVersion += 1;
-        }
-        if (oldVersion == 54) {
-            upgradeToVersion55(db);
-            oldVersion += 1;
-        }
-        if (oldVersion == 55 || oldVersion == 56) {
-            // Both require resync, so just schedule it once
-            upgradeResync(db);
-        }
-        if (oldVersion == 55) {
-            upgradeToVersion56(db);
-            oldVersion += 1;
-        }
-        if (oldVersion == 56) {
-            upgradeToVersion57(db);
-            oldVersion += 1;
-        }
-        if (oldVersion == 57) {
-            // Changes are undone upgrading to 60, so don't do anything.
-            oldVersion += 1;
-        }
-        if (oldVersion == 58) {
-            upgradeToVersion59(db);
-            oldVersion += 1;
-        }
-        if (oldVersion == 59) {
-            upgradeToVersion60(db);
-            oldVersion += 1;
-        }
-        if (oldVersion == 60) {
-            upgradeToVersion61(db);
-            oldVersion += 1;
-        }
-        if (oldVersion == 61) {
-            upgradeToVersion62(db);
-            oldVersion += 1;
-        }
-        if (oldVersion == 62) {
-            upgradeToVersion63(db);
-            oldVersion += 1;
-        }
-        if (oldVersion == 63) {
-            upgradeToVersion64(db);
-            oldVersion += 1;
-        }
-        if (oldVersion == 64) {
-            upgradeToVersion65(db);
-            oldVersion += 1;
-        }
-        if (oldVersion == 65) {
-            upgradeToVersion66(db);
-            oldVersion += 1;
+        try {
+            if (oldVersion < 51) {
+                upgradeToVersion51(db); // From 50 or 51
+                oldVersion = 51;
+            }
+            if (oldVersion == 51) {
+                upgradeToVersion52(db);
+                oldVersion += 1;
+            }
+            if (oldVersion == 52) {
+                upgradeToVersion53(db);
+                oldVersion += 1;
+            }
+            if (oldVersion == 53) {
+                upgradeToVersion54(db);
+                oldVersion += 1;
+            }
+            if (oldVersion == 54) {
+                upgradeToVersion55(db);
+                oldVersion += 1;
+            }
+            if (oldVersion == 55 || oldVersion == 56) {
+                // Both require resync, so just schedule it once
+                upgradeResync(db);
+            }
+            if (oldVersion == 55) {
+                upgradeToVersion56(db);
+                oldVersion += 1;
+            }
+            if (oldVersion == 56) {
+                upgradeToVersion57(db);
+                oldVersion += 1;
+            }
+            if (oldVersion == 57) {
+                // Changes are undone upgrading to 60, so don't do anything.
+                oldVersion += 1;
+            }
+            if (oldVersion == 58) {
+                upgradeToVersion59(db);
+                oldVersion += 1;
+            }
+            if (oldVersion == 59) {
+                upgradeToVersion60(db);
+                oldVersion += 1;
+            }
+            if (oldVersion == 60) {
+                upgradeToVersion61(db);
+                oldVersion += 1;
+            }
+            if (oldVersion == 61) {
+                upgradeToVersion62(db);
+                oldVersion += 1;
+            }
+            if (oldVersion == 62) {
+                upgradeToVersion63(db);
+                oldVersion += 1;
+            }
+            if (oldVersion == 63) {
+                upgradeToVersion64(db);
+                oldVersion += 1;
+            }
+            if (oldVersion == 64) {
+                upgradeToVersion65(db);
+                oldVersion += 1;
+            }
+            if (oldVersion == 65) {
+                upgradeToVersion66(db);
+                oldVersion += 1;
+            }
+        } catch (SQLiteException e) {
+            Log.e(TAG, "onUpgrade: SQLiteException, recreating db. " + e);
+            dropTables(db);
+            bootstrapDB(db);
+            return; // this was lossy
         }
     }
 

@@ -53,6 +53,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
     private int mCalendarId;
 
     protected boolean mWipe = false;
+    protected boolean mForceDtend = false;
 
     // We need a unique id to put in the _sync_id field so that we can create
     // recurrence exceptions that refer to recurring events.
@@ -843,6 +844,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         mDb = helper.getWritableDatabase();
         wipeData(mDb);
         mMetaData = getProvider().mMetaData;
+        mForceDtend = false;
     }
 
 
@@ -921,10 +923,11 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         m.put(Events.DTSTART, event.mDtstart);
         m.put(Events.ALL_DAY, event.mAllDay ? 1 : 0);
 
-        if (event.mRrule == null) {
+        if (event.mRrule == null || mForceDtend) {
             // This is a normal event
             m.put(Events.DTEND, event.mDtend);
-        } else {
+        }
+        if (event.mRrule != null) {
             // This is a repeating event
             m.put(Events.RRULE, event.mRrule);
             m.put(Events.DURATION, event.mDuration);
@@ -1141,6 +1144,12 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         cursor = mResolver.query(mEventsUri, null, null, null, null);
         assertEquals(numEvents, cursor.getCount());
         cursor.close();
+    }
+
+    // Force a dtend value to be set and make sure instance expansion still works
+    public void testInstanceRangeDtend() throws Exception {
+        mForceDtend = true;
+        testInstanceRange();
     }
 
     public void testInstanceRange() throws Exception {

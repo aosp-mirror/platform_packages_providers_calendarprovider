@@ -978,13 +978,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 "originalInstanceTime >= ?)) AND (sync_events != 0)");
         String selectionArgs[] = new String[] {endString, beginString, endString,
                 String.valueOf(begin - MAX_ASSUMED_DURATION)};
-        if (Log.isLoggable(TAG, Log.VERBOSE)) {
-            Log.v(TAG, "Retrieving events to expand: " + qb.toString());
-        }
-
-        return qb.query(mDb, EXPAND_COLUMNS, null /* selection */,
+        Cursor c = qb.query(mDb, EXPAND_COLUMNS, null /* selection */,
                 selectionArgs, null /* groupBy */,
                 null /* having */, null /* sortOrder */);
+        if (Log.isLoggable(TAG, Log.VERBOSE)) {
+            Log.v(TAG, "Instance expansion:  got " + c.getCount() + " entries");
+        }
+        return c;
     }
 
     /**
@@ -1538,10 +1538,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 if (!values.containsKey(Events.DTSTART)) {
                     throw new RuntimeException("DTSTART field missing from event");
                 }
-                // TODO: avoid the call to updateBundleFromEvent if this is just finding local
-                // changes.
                 // TODO: do we really need to make a copy?
-                ContentValues updatedValues = updateContentValuesFromEvent(values);
+                ContentValues updatedValues = new ContentValues(values);
+                validateEventData(updatedValues);
+                // updateLastDate must be after validation, to ensure proper last date computation
+                updatedValues = updateLastDate(updatedValues);
                 if (updatedValues == null) {
                     throw new RuntimeException("Could not insert event.");
                     // return null;
@@ -1562,7 +1563,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     Log.w(TAG, "insertInTransaction: " +
                             "allDay is true but sec, min, hour were not 0.");
                 }
-
                 id = mDbHelper.eventsInsert(updatedValues);
                 if (id != -1) {
                     updateEventRawTimesLocked(id, updatedValues);
@@ -1658,6 +1658,71 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
 
         return ContentUris.withAppendedId(uri, id);
+    }
+
+    /**
+     * Do some validation on event data before inserting.
+     * In particular make sure dtend, duration, etc make sense for
+     * the type of event (regular, recurrence, exception).  Remove
+     * any unexpected fields.
+     *
+     * @param values the ContentValues to insert
+     */
+    private void validateEventData(ContentValues values) {
+        boolean hasDtend = values.getAsLong(Events.DTEND) != null;
+        boolean hasDuration = !TextUtils.isEmpty(values.getAsString(Events.DURATION));
+        boolean hasRrule = !TextUtils.isEmpty(values.getAsString(Events.RRULE));
+        boolean hasRdate = !TextUtils.isEmpty(values.getAsString(Events.RDATE));
+        boolean hasOriginalEvent = !TextUtils.isEmpty(values.getAsString(Events.ORIGINAL_EVENT));
+        boolean hasOriginalInstanceTime = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME) != null;
+        if (hasRrule || hasRdate) {
+            // Recurrence:
+            // dtstart is start time of first event
+            // dtend is null
+            // duration is the duration of the event
+            // rrule is the recurrence rule
+            // lastDate is the end of the last event or null if it repeats forever
+            // originalEvent is null
+            // originalInstanceTime is null
+            if (hasDtend || !hasDuration || hasOriginalEvent || hasOriginalInstanceTime) {
+                if (Log.isLoggable(TAG, Log.DEBUG)) {
+                    Log.e(TAG, "Invalid values for recurrence: " + values);
+                }
+                values.remove(Events.DTEND);
+                values.remove(Events.ORIGINAL_EVENT);
+                values.remove(Events.ORIGINAL_INSTANCE_TIME);
+            }
+        } else if (hasOriginalEvent || hasOriginalInstanceTime) {
+            // Recurrence exception
+            // dtstart is start time of exception event
+            // dtend is end time of exception event
+            // duration is null
+            // rrule is null
+            // lastdate is same as dtend
+            // originalEvent is the _sync_id of the recurrence
+            // originalInstanceTime is the start time of the event being replaced
+            if (!hasDtend || hasDuration || !hasOriginalEvent || !hasOriginalInstanceTime) {
+                if (Log.isLoggable(TAG, Log.DEBUG)) {
+                    Log.e(TAG, "Invalid values for recurrence exception: " + values);
+                }
+                values.remove(Events.DURATION);
+            }
+        } else {
+            // Regular event
+            // dtstart is the start time
+            // dtend is the end time
+            // duration is null
+            // rrule is null
+            // lastDate is the same as dtend
+            // originalEvent is null
+            // originalInstanceTime is null
+            if (!hasDtend || hasDuration) {
+                if (Log.isLoggable(TAG, Log.DEBUG)) {
+                    Log.e(TAG, "Invalid values for event: " + values);
+                }
+                values.remove(Events.DURATION);
+            }
+        }
     }
 
     private void setEventDirty(int eventId) {
@@ -2075,10 +2140,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         return lastMillis;
     }
 
-    private ContentValues updateContentValuesFromEvent(ContentValues initialValues) {
+    /**
+     * Add LAST_DATE to values.
+     * @param values the ContentValues (in/out)
+     * @return values on success, null on failure
+     */
+    private ContentValues updateLastDate(ContentValues values) {
         try {
-            ContentValues values = new ContentValues(initialValues);
-
             long last = calculateLastDate(values);
             if (last != -1) {
                 values.put(Events.LAST_DATE, last);
@@ -2541,8 +2609,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                             + Events.HTML_URI
                             + " in Events table is not allowed.");
                 }
-
-                ContentValues updatedValues = updateContentValuesFromEvent(values);
+                ContentValues updatedValues = new ContentValues(values);
+                // TODO: should extend validateEventData to work with updates and call it here
+                updatedValues = updateLastDate(updatedValues);
                 if (updatedValues == null) {
                     Log.w(TAG, "Could not update event.");
                     return 0;

@@ -170,11 +170,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     public static final class EventInstancesMap
             extends HashMap<String, InstancesList> {
-        public void add(String syncId, ContentValues values) {
-            InstancesList instances = get(syncId);
+        public void add(String syncIdKey, ContentValues values) {
+            InstancesList instances = get(syncIdKey);
             if (instances == null) {
                 instances = new InstancesList();
-                put(syncId, instances);
+                put(syncIdKey, instances);
             }
             instances.add(values);
         }
@@ -924,7 +924,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Events.DURATION,
             Events.ALL_DAY,
             Events.ORIGINAL_EVENT,
-            Events.ORIGINAL_INSTANCE_TIME
+            Events.ORIGINAL_INSTANCE_TIME,
+            Events.CALENDAR_ID
     };
 
     /**
@@ -990,6 +991,19 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     /**
+     * Generates a unique key from the syncId and calendarId.
+     * The purpose of this is to prevent collisions if two different calendars use the
+     * same sync id.  This can happen if a Google calendar is accessed by two different accounts,
+     * or with Exchange, where ids are not unique between calendars.
+     * @param syncId Id for the event
+     * @param calendarId Id for the calendar
+     * @return key
+     */
+    private String getSyncIdKey(String syncId, long calendarId) {
+        return calendarId + ":" + syncId;
+    }
+
+    /**
      * Perform instance expansion on the given entries.
      * @param begin Window start (ms).
      * @param end Window end (ms).
@@ -999,6 +1013,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private void performInstanceExpansion(long begin, long end, String localTimezone,
                                           Cursor entries) {
         RecurrenceProcessor rp = new RecurrenceProcessor();
+
+        // Key into the instance values to hold the original event concatenated with calendar id.
+        final String ORIGINAL_EVENT_AND_CALENDAR = "ORIGINAL_EVENT_AND_CALENDAR";
 
         int statusColumn = entries.getColumnIndex(Events.STATUS);
         int dtstartColumn = entries.getColumnIndex(Events.DTSTART);
@@ -1014,6 +1031,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         int syncIdColumn = entries.getColumnIndex(Events._SYNC_ID);
         int originalEventColumn = entries.getColumnIndex(Events.ORIGINAL_EVENT);
         int originalInstanceTimeColumn = entries.getColumnIndex(Events.ORIGINAL_INSTANCE_TIME);
+        int calendarIdColumn = entries.getColumnIndex(Events.CALENDAR_ID);
 
         ContentValues initialValues;
         EventInstancesMap instancesMap = new EventInstancesMap();
@@ -1082,6 +1100,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 String rdateStr = entries.getString(rdateColumn);
                 String exruleStr = entries.getString(exruleColumn);
                 String exdateStr = entries.getString(exdateColumn);
+                long calendarId = entries.getLong(calendarIdColumn);
+                String syncIdKey = getSyncIdKey(syncId, calendarId); // key into instancesMap
 
                 RecurrenceSet recur = null;
                 try {
@@ -1160,7 +1180,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
                         computeTimezoneDependentFields(date, dtendMillis,
                                 eventTime, initialValues);
-                        instancesMap.add(syncId, initialValues);
+                        instancesMap.add(syncIdKey, initialValues);
                     }
                 } else {
                     // the event is not repeating
@@ -1171,7 +1191,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     // do that here because the order of this loop isn't
                     // defined)
                     if (originalEvent != null && originalInstanceTimeMillis != -1) {
-                        initialValues.put(Events.ORIGINAL_EVENT, originalEvent);
+                        // The ORIGINAL_EVENT_AND_CALENDAR holds the
+                        // calendar id concatenated with the ORIGINAL_EVENT to form
+                        // a unique key, matching the keys for instancesMap.
+                        initialValues.put(ORIGINAL_EVENT_AND_CALENDAR,
+                                getSyncIdKey(originalEvent, calendarId));
                         initialValues.put(Events.ORIGINAL_INSTANCE_TIME,
                                 originalInstanceTimeMillis);
                         initialValues.put(Events.STATUS, status);
@@ -1213,7 +1237,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     computeTimezoneDependentFields(dtstartMillis, dtendMillis,
                             eventTime, initialValues);
 
-                    instancesMap.add(syncId, initialValues);
+                    instancesMap.add(syncIdKey, initialValues);
                 }
             } catch (DateException e) {
                 Log.w(TAG, "RecurrenceProcessor error ", e);
@@ -1223,18 +1247,19 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
 
         // Invariant: instancesMap contains all instances that affect the
-        // window, indexed by original sync id.  It consists of:
+        // window, indexed by original sync id concatenated with calendar id.
+        // It consists of:
         // a) Individual events that fall in the window.  They have:
         //   EVENT_ID, BEGIN, END
         // b) Instances of recurrences that fall in the window.  They may
         //   be subject to exceptions.  They have:
         //   EVENT_ID, BEGIN, END
         // c) Exceptions that fall in the window.  They have:
-        //   ORIGINAL_EVENT, ORIGINAL_INSTANCE_TIME, STATUS (since they can
+        //   ORIGINAL_EVENT_AND_CALENDAR, ORIGINAL_INSTANCE_TIME, STATUS (since they can
         //   be a modification or cancellation), EVENT_ID, BEGIN, END
         // d) Recurrence exceptions that modify an instance inside the
         //   window but fall outside the window.  They have:
-        //   ORIGINAL_EVENT, ORIGINAL_INSTANCE_TIME, STATUS =
+        //   ORIGINAL_EVENT_AND_CALENDAR, ORIGINAL_INSTANCE_TIME, STATUS =
         //   STATUS_CANCELED, EVENT_ID, BEGIN, END
 
         // First, delete the original instances corresponding to recurrence
@@ -1244,19 +1269,19 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // we remove it from the list.  If we don't find such an instance
         // then we cancel the recurrence exception.
         Set<String> keys = instancesMap.keySet();
-        for (String syncId : keys) {
-            InstancesList list = instancesMap.get(syncId);
+        for (String syncIdKey : keys) {
+            InstancesList list = instancesMap.get(syncIdKey);
             for (ContentValues values : list) {
 
                 // If this instance is not a recurrence exception, then
                 // skip it.
-                if (!values.containsKey(Events.ORIGINAL_EVENT)) {
+                if (!values.containsKey(ORIGINAL_EVENT_AND_CALENDAR)) {
                     continue;
                 }
 
-                String originalEvent = values.getAsString(Events.ORIGINAL_EVENT);
+                String originalEventPlusCalendar = values.getAsString(ORIGINAL_EVENT_AND_CALENDAR);
                 long originalTime = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
-                InstancesList originalList = instancesMap.get(originalEvent);
+                InstancesList originalList = instancesMap.get(originalEventPlusCalendar);
                 if (originalList == null) {
                     // The original recurrence is not present, so don't try canceling it.
                     continue;
@@ -1294,8 +1319,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // while the calendar app is trying to query the db (expanding instances)), we will
         // not be "polite" and yield the lock until we're done.  This will favor local query
         // operations over sync/write operations.
-        for (String syncId : keys) {
-            InstancesList list = instancesMap.get(syncId);
+        for (String syncIdKey : keys) {
+            InstancesList list = instancesMap.get(syncIdKey);
             for (ContentValues values : list) {
 
                 // If this instance was cancelled then don't create a new
@@ -1306,7 +1331,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
 
                 // Remove these fields before inserting a new instance
-                values.remove(Events.ORIGINAL_EVENT);
+                values.remove(ORIGINAL_EVENT_AND_CALENDAR);
                 values.remove(Events.ORIGINAL_INSTANCE_TIME);
                 values.remove(Events.STATUS);
 

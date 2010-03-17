@@ -40,6 +40,14 @@ import java.util.ArrayList;
 
 /**
  * Runs various tests on an isolated Calendar provider with its own database.
+ *
+ * You can run the tests with the following command line:
+ *
+ * adb shell am instrument
+ * -e debug false
+ * -w
+ * -e class com.android.providers.calendar.CalendarProvider2Test
+ * com.android.providers.calendar.tests/android.test.InstrumentationTestRunner
  */
 @LargeTest
 public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2ForTesting> {

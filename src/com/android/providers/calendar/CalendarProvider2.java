@@ -55,6 +55,7 @@ import android.util.Config;
 import android.util.Log;
 import android.util.TimeFormatException;
 import android.util.TimeUtils;
+import com.google.common.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -516,6 +517,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         return TextUtils.equals(timezoneDatabaseVersion, TimeUtils.getTimeZoneDatabaseVersion());
     }
 
+    @VisibleForTesting
     protected String getTimezoneDatabaseVersion() {
         String timezoneDatabaseVersion = null;
         try {

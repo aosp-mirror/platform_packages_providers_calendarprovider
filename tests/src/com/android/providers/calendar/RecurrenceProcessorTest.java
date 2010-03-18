@@ -2291,7 +2291,78 @@ public class RecurrenceProcessorTest extends TestCase {
                 "20121106T100000",
                 });
     }
-    
+
+    /**
+     * Test repeating event from Exchange with count field.
+     * Time range covers the whole repetition.
+     *
+     * @throws Exception
+     */
+    public void testCount1() throws Exception {
+        verifyRecurrence("20100324T153000",
+                "FREQ=WEEKLY;INTERVAL=1;COUNT=10;BYDAY=WE",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "20100301T000000", "20100630T000000",
+                new String[]{
+                        "20100324T153000",
+                        "20100331T153000",
+                        "20100407T153000",
+                        "20100414T153000",
+                        "20100421T153000",
+                        "20100428T153000",
+                        "20100505T153000",
+                        "20100512T153000",
+                        "20100519T153000",
+                        "20100526T153000",
+                });
+    }
+
+    /**
+     * Test repeating event from Exchange with count field.
+     * Time range covers the first part of the repetition.
+     * @throws Exception
+     */
+    public void testCount2() throws Exception {
+        verifyRecurrence("20100324T153000",
+                "FREQ=WEEKLY;INTERVAL=1;COUNT=10;BYDAY=WE",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "20100501T000000", "20100630T000000",
+                new String[]{
+                        "20100505T153000",
+                        "20100512T153000",
+                        "20100519T153000",
+                        "20100526T153000",
+                });
+    }
+
+    /**
+     * Test repeating event from Exchange with count field.
+     * Time range is beyond the repetition.
+     * @throws Exception
+     */
+    public void testCount3() throws Exception {
+        verifyRecurrence("20100324T153000",
+                "FREQ=WEEKLY;INTERVAL=1;COUNT=10;BYDAY=WE",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "20100601T000000", "20100630T000000",
+                new String[]{},
+                "20100526T153000" /* last */);
+    }
+
+    /**
+     * Test repeating event from Exchange with count field.
+     * Time range is before the repetition
+     * @throws Exception
+     */
+    public void testCount4() throws Exception {
+        verifyRecurrence("20100324T153000",
+                "FREQ=WEEKLY;INTERVAL=1;COUNT=10;BYDAY=WE",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "20100101T000000", "20100301T000000",
+                new String[]{},
+                "20100526T153000" /* last */);
+    }
+
     // These recurrence rules are used in the loop that measures the performance
     // of recurrence expansion.
     private static final String[] performanceRrules = new String[] {

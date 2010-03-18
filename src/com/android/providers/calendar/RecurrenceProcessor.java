@@ -502,7 +502,7 @@ byday:
      * Expands the recurrence within the given range using the given dtstart
      * value. Returns an array of longs where each element is a date in UTC
      * milliseconds. The return value is never null.  If there are no dates
-     * then an array of length zero is returned.Da
+     * then an array of length zero is returned.
      *  
      * @param dtstart a Time object representing the first occurrence
      * @param recur the recurrence rules, including RRULE, RDATES, EXRULE, and
@@ -510,7 +510,7 @@ byday:
      * @param rangeStartMillis the beginning of the range to expand, in UTC
      * milliseconds
      * @param rangeEndMillis the non-inclusive end of the range to expand, in
-     * UTC milliseconds
+     * UTC milliseconds; use -1 for the entire range.
      * @return an array of dates, each date is in UTC milliseconds
      * @throws DateException
      * @throws android.util.TimeFormatException if recur cannot be parsed
@@ -596,8 +596,8 @@ byday:
      * strings containing the start date/times of the occurrences; the output
      * times are defined in the local timezone of the event.
      *
-     * If you want all of the events, pass null for rangeEnd.  If you pass
-     * null for rangeEnd, and the event doesn't have a COUNT or UNTIL field,
+     * If you want all of the events, pass Long.MAX_VALUE for rangeEndDateValue.  If you pass
+     * Long.MAX_VALUE for rangeEnd, and the event doesn't have a COUNT or UNTIL field,
      * you'll get a DateException.
      *
      * @param dtstart the dtstart date as defined in RFC2445.  This
@@ -623,12 +623,17 @@ byday:
         int count = 0;
 
         // add the dtstart instance to the recurrence, if within range.
+        // For example, if dtstart is Mar 1, 2010 and the range is Jan 1 - Apr 1,
+        // then add it here and increment count.  If the range is earlier or later,
+        // then don't add it here.  In that case, count will be incremented later
+        // inside  the loop.  It is important that count gets incremented exactly
+        // once here or in the loop for dtstart.
         if (add && dtstartDateValue >= rangeStartDateValue
                 && dtstartDateValue < rangeEndDateValue) {
             out.add(dtstartDateValue);
             ++count;
         }
-        
+
         Time iterator = mIterator;
         Time until = mUntil;
         StringBuilder sb = mStringBuilder;
@@ -738,8 +743,6 @@ byday:
 
             // go until the end of the range or we're done with this event
             boolean eventEnded = false;
-            int N, i, v;
-            int a[];
             int failsafe = 0; // Avoid infinite loops
             events: {
                 while (true) {
@@ -850,9 +853,19 @@ byday:
                                                 // as the first instance
                                                 // specified by the DTSTART
                                                 // (for RRULEs -- additive).
-                                                if (!add) {
-                                                    ++count;
-                                                } else if (dtstartDateValue != genDateValue) {
+                                                // This condition must be the complement of the
+                                                // condition for incrementing count at the
+                                                // beginning of the method, so if we don't
+                                                // increment count there, we increment it here.
+                                                // For example, if add is set and dtstartDateValue
+                                                // is inside the start/end range, then it was added
+                                                // and count was incremented at the beginning.
+                                                // If dtstartDateValue is outside the range or add
+                                                // is not set, then we must increment count here.
+                                                if (!(dtstartDateValue == genDateValue
+                                                        && add
+                                                        && dtstartDateValue >= rangeStartDateValue
+                                                        && dtstartDateValue < rangeEndDateValue)) {
                                                     ++count;
                                                 }
                                                 // one reason we can stop is that

@@ -1375,10 +1375,11 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
 
         Cursor cursor = mResolver.query(Calendar.Attendees.CONTENT_URI, null,
                 "event_id=" + eventId, null, null);
-        assertEquals(1, cursor.getCount());
+        assertEquals("Created event is missing", 1, cursor.getCount());
         cursor.close();
 
         cursor = mResolver.query(eventUri, null, null, null, null);
+        assertEquals("Created event is missing", 1, cursor.getCount());
         int selfColumn = cursor.getColumnIndex(Calendar.Events.SELF_ATTENDEE_STATUS);
         cursor.moveToNext();
         long selfAttendeeStatus = cursor.getInt(selfColumn);

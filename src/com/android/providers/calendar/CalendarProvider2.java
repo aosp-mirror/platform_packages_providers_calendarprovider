@@ -1527,10 +1527,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     duration = "P" + days + "D";
                     updatedValues.put(Events.DURATION, duration);
                     neededCorrection = true;
-                } else if (duration.charAt(0) != 'P' ||
-                        duration.charAt(len - 1) != 'D') {
-                    throw new IllegalArgumentException("duration is not formatted correctly. " +
-                            "Should be 'P<seconds>S' or 'P<days>D'.");
                 }
             }
 

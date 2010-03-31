@@ -31,6 +31,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Bundle;
 import android.provider.Calendar;
 import android.provider.ContactsContract;
+import android.provider.SyncStateContract;
 import android.text.format.Time;
 import android.util.Log;
 
@@ -53,6 +54,13 @@ import java.net.URLDecoder;
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
     private static final int DATABASE_VERSION = 66;
+
+    private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
+
+    // Copied from SyncStateContentProviderHelper.  Don't really want to make them public there.
+    private static final String SYNC_STATE_TABLE = "_sync_state";
+    private static final String SYNC_STATE_META_TABLE = "_sync_state_metadata";
+    private static final String SYNC_STATE_META_VERSION_COLUMN = "version";
 
     private final Context mContext;
     private final SyncStateContentProviderHelper mSyncState;
@@ -141,6 +149,48 @@ import java.net.URLDecoder;
         mCalendarAlertsInserter = new DatabaseUtils.InsertHelper(db, "CalendarAlerts");
         mExtendedPropertiesInserter =
                 new DatabaseUtils.InsertHelper(db, "ExtendedProperties");
+    }
+
+    /*
+     * Upgrade sync state table if necessary.  Note that the data bundle
+     * in the table is not upgraded.
+     *
+     * The sync state used to be stored with version 3, but now uses the
+     * same sync state code as contacts, which is version 1.  This code
+     * upgrades from 3 to 1 if necessary.  (Yes, the numbers are unfortunately
+     * backwards.)
+     *
+     * This code is only called when upgrading from an old calendar version,
+     * so there is no problem if sync state version 3 gets used again in the
+     * future.
+     */
+    private void upgradeSyncState(SQLiteDatabase db) {
+        long version = DatabaseUtils.longForQuery(db,
+                 "SELECT " + SYNC_STATE_META_VERSION_COLUMN
+                 + " FROM " + SYNC_STATE_META_TABLE,
+                 null);
+        if (version == PRE_FROYO_SYNC_STATE_VERSION) {
+            Log.i(TAG, "Upgrading calendar sync state table");
+            db.execSQL("CREATE TEMPORARY TABLE state_backup(_sync_account TEXT, "
+                    + "_sync_account_type TEXT, data TEXT);");
+            db.execSQL("INSERT INTO state_backup SELECT _sync_account, _sync_account_type, data"
+                    + " FROM "
+                    + SYNC_STATE_TABLE
+                    + " WHERE _sync_account is not NULL and _sync_account_type is not NULL;");
+            db.execSQL("DROP TABLE " + SYNC_STATE_TABLE + ";");
+            mSyncState.onDatabaseOpened(db);
+            db.execSQL("INSERT INTO " + SYNC_STATE_TABLE + "("
+                    + SyncStateContract.Columns.ACCOUNT_NAME + ","
+                    + SyncStateContract.Columns.ACCOUNT_TYPE + ","
+                    + SyncStateContract.Columns.DATA
+                    + ") SELECT _sync_account, _sync_account_type, data from state_backup;");
+            db.execSQL("DROP TABLE state_backup;");
+        } else {
+            // Wrong version to upgrade.
+            // Don't need to do anything more here because mSyncState.onDatabaseOpened() will blow
+            // away and recreate  the database (which will result in a resync).
+            Log.w(TAG, "upgradeSyncState: current version is " + version + ", skipping upgrade.");
+        }
     }
 
     @Override
@@ -619,6 +669,7 @@ import java.net.URLDecoder;
 
     private void upgradeToVersion60(SQLiteDatabase db) {
         // Switch to CalendarProvider2
+        upgradeSyncState(db);
         db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
         db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON Calendars " +
                 "BEGIN " +

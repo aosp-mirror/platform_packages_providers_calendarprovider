@@ -269,8 +269,23 @@ public class CalendarAppWidgetService extends Service implements Runnable {
             }
 
             result = getEventFlip(cursor, start, end, allDay);
+
+            // Update at midnight
+            long midnight = getNextMidnightTimeMillis();
+            result = Math.min(midnight, result);
         }
         return result;
+    }
+
+    private long getNextMidnightTimeMillis() {
+        Time time = new Time();
+        time.setToNow();
+        time.monthDay++;
+        time.hour = 0;
+        time.minute = 0;
+        time.second = 0;
+        long midnight = time.normalize(true);
+        return midnight;
     }
 
     /**

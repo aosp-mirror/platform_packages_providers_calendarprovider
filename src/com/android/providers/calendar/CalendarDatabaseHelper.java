@@ -53,7 +53,7 @@ import java.net.URLDecoder;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 66;
+    private static final int DATABASE_VERSION = 67;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -325,12 +325,7 @@ import java.net.URLDecoder;
                 Calendar.Instances.START_DAY +
                 ");");
 
-        db.execSQL("CREATE TABLE CalendarMetaData (" +
-                "_id INTEGER PRIMARY KEY," +
-                "localTimezone TEXT," +
-                "minInstance INTEGER," +      // UTC millis
-                "maxInstance INTEGER" +       // UTC millis
-                ");");
+        createCalendarMetaDataTable(db);
 
         createCalendarCacheTable(db);
 
@@ -407,6 +402,15 @@ import java.net.URLDecoder;
                 ContactsContract.AUTHORITY, new Bundle());
     }
 
+    private void createCalendarMetaDataTable(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE CalendarMetaData (" +
+                "_id INTEGER PRIMARY KEY," +
+                "localTimezone TEXT," +
+                "minInstance INTEGER," +      // UTC millis
+                "maxInstance INTEGER" +       // UTC millis
+                ");");
+    }
+
     private void createCalendarCacheTable(SQLiteDatabase db) {
         // This is a hack because versioning skipped version number 61 of schema
         // TODO after version 70 this can be removed
@@ -434,6 +438,14 @@ import java.net.URLDecoder;
             mSyncState.createDatabase(db);
             return; // this was lossy
         }
+
+        // From schema versions 59 to version 66, the CalendarMetaData table definition had lost
+        // the primary key leading to having the CalendarMetaData with multiple rows instead of
+        // only one. The Instance table was then corrupted (during Instance expansion we are using
+        // the localTimezone, minInstance and maxInstance from CalendarMetaData table.
+        // This boolean helps us tracking the need to recreate the CalendarMetaData table and
+        // clear the Instance table (and thus force an Instance expansion).
+        boolean recreateMetaDataAndInstances = false;
 
         try {
             if (oldVersion < 51) {
@@ -477,31 +489,43 @@ import java.net.URLDecoder;
                 oldVersion += 1;
             }
             if (oldVersion == 59) {
+                recreateMetaDataAndInstances = true;
                 upgradeToVersion60(db);
                 oldVersion += 1;
             }
             if (oldVersion == 60) {
+                recreateMetaDataAndInstances = true;
                 upgradeToVersion61(db);
                 oldVersion += 1;
             }
             if (oldVersion == 61) {
+                recreateMetaDataAndInstances = true;
                 upgradeToVersion62(db);
                 oldVersion += 1;
             }
             if (oldVersion == 62) {
+                recreateMetaDataAndInstances = true;
                 upgradeToVersion63(db);
                 oldVersion += 1;
             }
             if (oldVersion == 63) {
+                recreateMetaDataAndInstances = true;
                 upgradeToVersion64(db);
                 oldVersion += 1;
             }
             if (oldVersion == 64) {
+                recreateMetaDataAndInstances = true;
                 upgradeToVersion65(db);
                 oldVersion += 1;
             }
             if (oldVersion == 65) {
+                recreateMetaDataAndInstances = true;
                 upgradeToVersion66(db);
+                oldVersion += 1;
+            }
+            if (oldVersion == 66) {
+                recreateMetaDataAndInstances = true;
+                upgradeToVersion67(db, recreateMetaDataAndInstances);
                 oldVersion += 1;
             }
         } catch (SQLiteException e) {
@@ -512,63 +536,20 @@ import java.net.URLDecoder;
         }
     }
 
-    private void upgradeToVersion56(SQLiteDatabase db) {
-        db.execSQL("ALTER TABLE Calendars ADD COLUMN ownerAccount TEXT;");
-        db.execSQL("ALTER TABLE Events ADD COLUMN hasAttendeeData INTEGER;");
-        // Clear _sync_dirty to avoid a client-to-server sync that could blow away
-        // server attendees.
-        // Clear _sync_version to pull down the server's event (with attendees)
-        // Change the URLs from full-selfattendance to full
-        db.execSQL("UPDATE Events"
-                + " SET _sync_dirty=0,"
-                + " _sync_version=NULL,"
-                + " _sync_id="
-                + "REPLACE(_sync_id, '/private/full-selfattendance', '/private/full'),"
-                + " commentsUri ="
-                + "REPLACE(commentsUri, '/private/full-selfattendance', '/private/full');");
-        db.execSQL("UPDATE Calendars"
-                + " SET url="
-                + "REPLACE(url, '/private/full-selfattendance', '/private/full');");
+    /**
+     *
+     * @param db the database to apply the upgrade to
+     * @param recreateMetaDataAndInstances true if the user_version of the database if between 59
+     * and 66 (those versions has been deployed with no primary key for the CalendarMetaData table)
+     */
+    private void upgradeToVersion67(SQLiteDatabase db, boolean recreateMetaDataAndInstances) {
+        if (recreateMetaDataAndInstances) {
+            // Recreate the CalendarMetaData table with correct primary key
+            db.execSQL("DROP TABLE CalendarMetaData;");
+            createCalendarMetaDataTable(db);
 
-        // "cursor" iterates over all the calendars
-        Cursor cursor = db.rawQuery("SELECT _id, url FROM Calendars",
-                null /* selection args */);
-        // Add the owner column.
-        if (cursor != null) {
-            try {
-                while (cursor.moveToNext()) {
-                    Long id = cursor.getLong(0);
-                    String url = cursor.getString(1);
-                    String owner = calendarEmailAddressFromFeedUrl(url);
-                    db.execSQL("UPDATE Calendars SET ownerAccount=? WHERE _id=?",
-                            new Object[] {owner, id});
-                }
-            } finally {
-                cursor.close();
-            }
-        }
-    }
-
-    private void upgradeResync(SQLiteDatabase db) {
-        // Delete sync state, so all records will be re-synced.
-        db.execSQL("DELETE FROM _sync_state;");
-
-        // "cursor" iterates over all the calendars
-        Cursor cursor = db.rawQuery("SELECT _sync_account,_sync_account_type,url "
-                + "FROM Calendars",
-                null /* selection args */);
-        if (cursor != null) {
-            try {
-                while (cursor.moveToNext()) {
-                    String accountName = cursor.getString(0);
-                    String accountType = cursor.getString(1);
-                    final Account account = new Account(accountName, accountType);
-                    String calendarUrl = cursor.getString(2);
-                    scheduleSync(account, false /* two-way sync */, calendarUrl);
-                }
-            } finally {
-                cursor.close();
-            }
+            // Also clean the Instance table as this table may be corrupted
+            db.execSQL("DELETE FROM Instances;");
         }
     }
 
@@ -716,7 +697,7 @@ import java.net.URLDecoder;
         db.execSQL("INSERT INTO CalendarMetaData_Backup " +
                 "SELECT _id,localTimezone,minInstance,maxInstance FROM CalendarMetaData;");
         db.execSQL("DROP TABLE CalendarMetaData;");
-        db.execSQL("CREATE TABLE CalendarMetaData(_id,localTimezone,minInstance,maxInstance);");
+        createCalendarMetaDataTable(db);
         db.execSQL("INSERT INTO CalendarMetaData " +
                 "SELECT _id,localTimezone,minInstance,maxInstance FROM CalendarMetaData_Backup;");
         db.execSQL("DROP TABLE CalendarMetaData_Backup;");
@@ -734,6 +715,66 @@ import java.net.URLDecoder;
                 + "(SELECT attendeeEmail FROM Attendees WHERE "
                 + "Attendees.event_id = Events._id"
                 + " AND Attendees.attendeeRelationship=2);");
+    }
+
+    private void upgradeToVersion56(SQLiteDatabase db) {
+        db.execSQL("ALTER TABLE Calendars ADD COLUMN ownerAccount TEXT;");
+        db.execSQL("ALTER TABLE Events ADD COLUMN hasAttendeeData INTEGER;");
+        // Clear _sync_dirty to avoid a client-to-server sync that could blow away
+        // server attendees.
+        // Clear _sync_version to pull down the server's event (with attendees)
+        // Change the URLs from full-selfattendance to full
+        db.execSQL("UPDATE Events"
+                + " SET _sync_dirty=0,"
+                + " _sync_version=NULL,"
+                + " _sync_id="
+                + "REPLACE(_sync_id, '/private/full-selfattendance', '/private/full'),"
+                + " commentsUri ="
+                + "REPLACE(commentsUri, '/private/full-selfattendance', '/private/full');");
+        db.execSQL("UPDATE Calendars"
+                + " SET url="
+                + "REPLACE(url, '/private/full-selfattendance', '/private/full');");
+
+        // "cursor" iterates over all the calendars
+        Cursor cursor = db.rawQuery("SELECT _id, url FROM Calendars",
+                null /* selection args */);
+        // Add the owner column.
+        if (cursor != null) {
+            try {
+                while (cursor.moveToNext()) {
+                    Long id = cursor.getLong(0);
+                    String url = cursor.getString(1);
+                    String owner = calendarEmailAddressFromFeedUrl(url);
+                    db.execSQL("UPDATE Calendars SET ownerAccount=? WHERE _id=?",
+                            new Object[] {owner, id});
+                }
+            } finally {
+                cursor.close();
+            }
+        }
+    }
+
+    private void upgradeResync(SQLiteDatabase db) {
+        // Delete sync state, so all records will be re-synced.
+        db.execSQL("DELETE FROM _sync_state;");
+
+        // "cursor" iterates over all the calendars
+        Cursor cursor = db.rawQuery("SELECT _sync_account,_sync_account_type,url "
+                + "FROM Calendars",
+                null /* selection args */);
+        if (cursor != null) {
+            try {
+                while (cursor.moveToNext()) {
+                    String accountName = cursor.getString(0);
+                    String accountType = cursor.getString(1);
+                    final Account account = new Account(accountName, accountType);
+                    String calendarUrl = cursor.getString(2);
+                    scheduleSync(account, false /* two-way sync */, calendarUrl);
+                }
+            } finally {
+                cursor.close();
+            }
+        }
     }
 
     private void upgradeToVersion55(SQLiteDatabase db) {

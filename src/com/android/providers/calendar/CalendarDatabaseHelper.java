@@ -16,6 +16,8 @@
 
 package com.android.providers.calendar;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import com.android.internal.content.SyncStateContentProviderHelper;
 
 import android.accounts.Account;
@@ -32,6 +34,7 @@ import android.os.Bundle;
 import android.provider.Calendar;
 import android.provider.ContactsContract;
 import android.provider.SyncStateContract;
+import android.text.TextUtils;
 import android.text.format.Time;
 import android.util.Log;
 
@@ -47,13 +50,15 @@ import java.net.URLDecoder;
 
     private static final String DATABASE_NAME = "calendar.db";
 
+    private static final int DAY_IN_SECONDS = 24 * 60 * 60;
+
     // TODO: change the Calendar contract so these are defined there.
     static final String ACCOUNT_NAME = "_sync_account";
     static final String ACCOUNT_TYPE = "_sync_account_type";
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 67;
+    private static final int DATABASE_VERSION = 68;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -523,6 +528,10 @@ import java.net.URLDecoder;
             if (recreateMetaDataAndInstances) {
                 recreateMetaDataAndInstances(db);
             }
+            if(oldVersion == 67) {
+                upgradeToVersion68(db);
+                oldVersion += 1;
+            }
         } catch (SQLiteException e) {
             Log.e(TAG, "onUpgrade: SQLiteException, recreating db. " + e);
             dropTables(db);
@@ -542,6 +551,138 @@ import java.net.URLDecoder;
 
         // Also clean the Instance table as this table may be corrupted
         db.execSQL("DELETE FROM Instances;");
+    }
+
+    private static boolean fixAllDayTime(Time time, String timezone, Long timeInMillis) {
+        if (timezone == null) {
+            timezone = Time.TIMEZONE_UTC;
+        }
+        time.clear(timezone);
+        time.set(timeInMillis);
+        time.normalize(false);
+        if(time.hour != 0 || time.minute != 0 || time.second != 0) {
+            time.hour = 0;
+            time.minute = 0;
+            time.second = 0;
+            return true;
+        }
+        return false;
+    }
+
+    @VisibleForTesting
+    static void upgradeToVersion68(SQLiteDatabase db) {
+        // Clean up allDay events which could be in an invalid state from an earlier version
+        // Some allDay events had hour, min, sec not set to zero, which throws elsewhere. This
+        // will go through the allDay events and make sure they have proper values.
+        Cursor cursor = db.rawQuery("SELECT _id, dtstart, dtend, duration, dtstart2, dtend2, " +
+                "eventTimezone, eventTimezone2, rrule FROM Events WHERE allDay=?",
+                new String[] {"1"});
+        if (cursor != null) {
+            try {
+                String timezone;
+                String timezone2;
+                String duration;
+                Long dtstart;
+                Long dtstart2;
+                Long dtend;
+                Long dtend2;
+                Time time = new Time();
+                Long id;
+                while (cursor.moveToNext()) {
+                    String rrule = cursor.getString(8);
+                    id = cursor.getLong(0);
+                    dtstart = cursor.getLong(1);
+                    dtstart2 = null;
+                    timezone = cursor.getString(6);
+                    timezone2 = cursor.getString(7);
+                    duration = cursor.getString(3);
+
+                    if(TextUtils.isEmpty(rrule)) {
+                        // For non-recurring events dtstart and dtend should both have values
+                        // and duration should be null.
+                        dtend = cursor.getLong(2);
+                        dtend2 = null;
+                        // Since we made all three of these at the same time if timezone2 exists
+                        // so should dtstart2 and dtend2.
+                        if(!TextUtils.isEmpty(timezone2)) {
+                            dtstart2 = cursor.getLong(4);
+                            dtend2 = cursor.getLong(5);
+                        }
+
+                        boolean update = false;
+                        update = fixAllDayTime(time, timezone, dtstart);
+                        dtstart = time.normalize(false);
+                        update |= fixAllDayTime(time, timezone, dtend);
+                        dtend = time.normalize(false);
+
+                        if (dtstart2 != null) {
+                            update |= fixAllDayTime(time, timezone2, dtstart2);
+                            dtstart2 = time.normalize(false);
+                        }
+
+                        if (dtend2 != null) {
+                            update |= fixAllDayTime(time, timezone2, dtend2);
+                            dtend2 = time.normalize(false);
+                        }
+
+                        if (!TextUtils.isEmpty(duration)) {
+                            update = true;
+                        }
+
+                        if (update) {
+                            // enforce duration being null
+                            db.execSQL("UPDATE Events " +
+                                    "SET dtstart=?, dtend=?, dtstart2=?, dtend2=?, duration=? " +
+                                    "WHERE _id=?",
+                                    new Object[] {dtstart, dtend, dtstart2, dtend2, null, id});
+                        }
+
+                    } else {
+                        // For recurring events only dtstart and duration should be used.
+                        // We ignore dtend since it will be overwritten if the event changes to a
+                        // non-recurring event and won't be used otherwise.
+                        if(!TextUtils.isEmpty(timezone2)) {
+                            dtstart2 = cursor.getLong(4);
+                        }
+
+                        boolean update = false;
+                        update = fixAllDayTime(time, timezone, dtstart);
+                        dtstart = time.normalize(false);
+
+                        if (dtstart2 != null) {
+                            update |= fixAllDayTime(time, timezone2, dtstart2);
+                            dtstart2 = time.normalize(false);
+                        }
+
+                        if (TextUtils.isEmpty(duration)) {
+                            // If duration was missing assume a 1 day duration
+                            duration = "P1D";
+                            update = true;
+                        } else {
+                            int len = duration.length();
+                            // TODO fix durations in other formats as well
+                            if (duration.charAt(0) == 'P' &&
+                                    duration.charAt(len - 1) == 'S') {
+                                int seconds = Integer.parseInt(duration.substring(1, len - 1));
+                                int days = (seconds + DAY_IN_SECONDS - 1) / DAY_IN_SECONDS;
+                                duration = "P" + days + "D";
+                                update = true;
+                            }
+                        }
+
+                        if (update) {
+                            // If there were other problems also enforce dtend being null
+                            db.execSQL("UPDATE Events " +
+                                    "SET dtstart=?,dtend=?,dtstart2=?,dtend2=?,duration=? " +
+                                    "WHERE _id=?",
+                                    new Object[] {dtstart, null, dtstart2, null, duration, id});
+                        }
+                    }
+                }
+            } finally {
+                cursor.close();
+            }
+        }
     }
 
     private void upgradeToVersion66(SQLiteDatabase db) {

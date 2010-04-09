@@ -445,7 +445,7 @@ import java.net.URLDecoder;
         // the localTimezone, minInstance and maxInstance from CalendarMetaData table.
         // This boolean helps us tracking the need to recreate the CalendarMetaData table and
         // clear the Instance table (and thus force an Instance expansion).
-        boolean recreateMetaDataAndInstances = false;
+        boolean recreateMetaDataAndInstances = (oldVersion >= 59 && oldVersion <= 66);
 
         try {
             if (oldVersion < 51) {
@@ -489,44 +489,39 @@ import java.net.URLDecoder;
                 oldVersion += 1;
             }
             if (oldVersion == 59) {
-                recreateMetaDataAndInstances = true;
                 upgradeToVersion60(db);
                 oldVersion += 1;
             }
             if (oldVersion == 60) {
-                recreateMetaDataAndInstances = true;
                 upgradeToVersion61(db);
                 oldVersion += 1;
             }
             if (oldVersion == 61) {
-                recreateMetaDataAndInstances = true;
                 upgradeToVersion62(db);
                 oldVersion += 1;
             }
             if (oldVersion == 62) {
-                recreateMetaDataAndInstances = true;
                 upgradeToVersion63(db);
                 oldVersion += 1;
             }
             if (oldVersion == 63) {
-                recreateMetaDataAndInstances = true;
                 upgradeToVersion64(db);
                 oldVersion += 1;
             }
             if (oldVersion == 64) {
-                recreateMetaDataAndInstances = true;
                 upgradeToVersion65(db);
                 oldVersion += 1;
             }
             if (oldVersion == 65) {
-                recreateMetaDataAndInstances = true;
                 upgradeToVersion66(db);
                 oldVersion += 1;
             }
             if (oldVersion == 66) {
-                recreateMetaDataAndInstances = true;
-                upgradeToVersion67(db, recreateMetaDataAndInstances);
+                // Changes are done thru recreateMetaDataAndInstances() method
                 oldVersion += 1;
+            }
+            if (recreateMetaDataAndInstances) {
+                recreateMetaDataAndInstances(db);
             }
         } catch (SQLiteException e) {
             Log.e(TAG, "onUpgrade: SQLiteException, recreating db. " + e);
@@ -537,20 +532,16 @@ import java.net.URLDecoder;
     }
 
     /**
-     *
-     * @param db the database to apply the upgrade to
-     * @param recreateMetaDataAndInstances true if the user_version of the database if between 59
-     * and 66 (those versions has been deployed with no primary key for the CalendarMetaData table)
+     * If the user_version of the database if between 59 and 66 (those versions has been deployed
+     * with no primary key for the CalendarMetaData table)
      */
-    private void upgradeToVersion67(SQLiteDatabase db, boolean recreateMetaDataAndInstances) {
-        if (recreateMetaDataAndInstances) {
-            // Recreate the CalendarMetaData table with correct primary key
-            db.execSQL("DROP TABLE CalendarMetaData;");
-            createCalendarMetaDataTable(db);
+    private void recreateMetaDataAndInstances(SQLiteDatabase db) {
+        // Recreate the CalendarMetaData table with correct primary key
+        db.execSQL("DROP TABLE CalendarMetaData;");
+        createCalendarMetaDataTable(db);
 
-            // Also clean the Instance table as this table may be corrupted
-            db.execSQL("DELETE FROM Instances;");
-        }
+        // Also clean the Instance table as this table may be corrupted
+        db.execSQL("DELETE FROM Instances;");
     }
 
     private void upgradeToVersion66(SQLiteDatabase db) {

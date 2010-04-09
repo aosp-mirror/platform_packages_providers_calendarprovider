@@ -49,7 +49,8 @@ import java.util.ArrayList;
  * -e class com.android.providers.calendar.CalendarProvider2Test
  * com.android.providers.calendar.tests/android.test.InstrumentationTestRunner
  */
-@LargeTest
+// flaky test, add back to LargeTest when fixed - bug 2395696
+// @LargeTest
 public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2ForTesting> {
     static final String TAG = "calendar";
 

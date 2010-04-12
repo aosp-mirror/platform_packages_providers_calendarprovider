@@ -102,8 +102,8 @@ public class CalendarDatabaseHelperTest extends TestCase {
         // April 5th midnight to April 6th midnight, duration cleared
         mGoodDb.execSQL("INSERT INTO Events (_id,dtstart,dtend,duration,dtstart2,dtend2," +
                 "eventTimezone,eventTimezone2,allDay,calendar_id) " +
-                "VALUES (1,1270450800000,1270537200000,null," +
-                "1270450800000,1270537200000,'America/Los_Angeles','America/Los_Angeles',1,1);");
+                "VALUES (1,1270425600000,1270512000000,null," +
+                "1270450800000,1270537200000,'UTC','America/Los_Angeles',1,1);");
 
         // April 5th 1:01:01 AM to April 6th 1:01:01, recurring weekly (We only check for the
         // existence of an rrule so it doesn't matter if the day is correct)
@@ -118,8 +118,8 @@ public class CalendarDatabaseHelperTest extends TestCase {
         mGoodDb.execSQL("INSERT INTO Events (" +
                 "_id,dtstart,dtend,duration,dtstart2,dtend2," +
                 "eventTimezone,eventTimezone2,allDay,rrule,calendar_id)" +
-                "VALUES (2,1270450800000,null,'P1D',1270450800000,null," +
-                "'America/Los_Angeles','America/Los_Angeles',1," +
+                "VALUES (2,1270425600000,null,'P1D',1270450800000,null," +
+                "'UTC','America/Los_Angeles',1," +
                 "'WEEKLY:MON',1);");
 
         assertEquals(mBadDb.rawQuery("SELECT _id FROM Events;", null).getCount(), 2);
@@ -127,14 +127,14 @@ public class CalendarDatabaseHelperTest extends TestCase {
     }
 
     @MediumTest
-    public void testUpgradeToVersion68() {
+    public void testUpgradeToVersion69() {
         // Create event tables
         createVersion67EventsTable(mBadDb);
         createVersion67EventsTable(mGoodDb);
         // Fill in good and bad events
         addVersion67Events();
         // Run the upgrade on the bad events
-        CalendarDatabaseHelper.upgradeToVersion68(mBadDb);
+        CalendarDatabaseHelper.upgradeToVersion69(mBadDb);
         Cursor badCursor = null;
         Cursor goodCursor = null;
         try {

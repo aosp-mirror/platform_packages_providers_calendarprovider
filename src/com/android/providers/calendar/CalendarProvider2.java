@@ -541,11 +541,21 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         time.hour = 0;
         time.minute = 0;
         time.second = 0;
+
         long begin = time.normalize(true);
         long end = begin + MINIMUM_EXPANSION_SPAN;
-        SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
-        handleInstanceQuery(qb, begin, end, new String[] { Instances._ID },
-                null /* selection */, null /* sort */, false /* searchByDayInsteadOfMillis */);
+
+        Cursor cursor = null;
+        try {
+            cursor = handleInstanceQuery(new SQLiteQueryBuilder(),
+                    begin, end,
+                    new String[] { Instances._ID },
+                    null /* selection */, null /* sort */, false /* searchByDayInsteadOfMillis */);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
 
         rescheduleMissedAlarms();
     }

@@ -58,7 +58,7 @@ import java.net.URLDecoder;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 68;
+    private static final int DATABASE_VERSION = 69;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -528,9 +528,9 @@ import java.net.URLDecoder;
             if (recreateMetaDataAndInstances) {
                 recreateMetaDataAndInstances(db);
             }
-            if(oldVersion == 67) {
-                upgradeToVersion68(db);
-                oldVersion += 1;
+            if(oldVersion == 67 || oldVersion == 68) {
+                upgradeToVersion69(db);
+                oldVersion = 69;
             }
         } catch (SQLiteException e) {
             Log.e(TAG, "onUpgrade: SQLiteException, recreating db. " + e);
@@ -554,12 +554,7 @@ import java.net.URLDecoder;
     }
 
     private static boolean fixAllDayTime(Time time, String timezone, Long timeInMillis) {
-        if (timezone == null) {
-            timezone = Time.TIMEZONE_UTC;
-        }
-        time.clear(timezone);
         time.set(timeInMillis);
-        time.normalize(false);
         if(time.hour != 0 || time.minute != 0 || time.second != 0) {
             time.hour = 0;
             time.minute = 0;
@@ -570,10 +565,13 @@ import java.net.URLDecoder;
     }
 
     @VisibleForTesting
-    static void upgradeToVersion68(SQLiteDatabase db) {
+    static void upgradeToVersion69(SQLiteDatabase db) {
         // Clean up allDay events which could be in an invalid state from an earlier version
         // Some allDay events had hour, min, sec not set to zero, which throws elsewhere. This
-        // will go through the allDay events and make sure they have proper values.
+        // will go through the allDay events and make sure they have proper values and are in the
+        // correct timezone. Verifies that dtstart and dtend are in UTC and at midnight, that
+        // eventTimezone is set to UTC, tries to make sure duration is in days, and that dtstart2
+        // and dtend2 are at midnight in their timezone.
         Cursor cursor = db.rawQuery("SELECT _id, dtstart, dtend, duration, dtstart2, dtend2, " +
                 "eventTimezone, eventTimezone2, rrule FROM Events WHERE allDay=?",
                 new String[] {"1"});
@@ -588,6 +586,8 @@ import java.net.URLDecoder;
                 Long dtend2;
                 Time time = new Time();
                 Long id;
+                // some things need to be in utc so we call this frequently, cache to make faster
+                final String utc = Time.TIMEZONE_UTC;
                 while (cursor.moveToNext()) {
                     String rrule = cursor.getString(8);
                     id = cursor.getLong(0);
@@ -597,7 +597,7 @@ import java.net.URLDecoder;
                     timezone2 = cursor.getString(7);
                     duration = cursor.getString(3);
 
-                    if(TextUtils.isEmpty(rrule)) {
+                    if (TextUtils.isEmpty(rrule)) {
                         // For non-recurring events dtstart and dtend should both have values
                         // and duration should be null.
                         dtend = cursor.getLong(2);
@@ -610,17 +610,27 @@ import java.net.URLDecoder;
                         }
 
                         boolean update = false;
-                        update = fixAllDayTime(time, timezone, dtstart);
+                        if (!TextUtils.equals(timezone, utc)) {
+                            update = true;
+                            timezone = utc;
+                        }
+
+                        time.clear(timezone);
+                        update |= fixAllDayTime(time, timezone, dtstart);
                         dtstart = time.normalize(false);
+
+                        time.clear(timezone);
                         update |= fixAllDayTime(time, timezone, dtend);
                         dtend = time.normalize(false);
 
                         if (dtstart2 != null) {
+                            time.clear(timezone2);
                             update |= fixAllDayTime(time, timezone2, dtstart2);
                             dtstart2 = time.normalize(false);
                         }
 
                         if (dtend2 != null) {
+                            time.clear(timezone2);
                             update |= fixAllDayTime(time, timezone2, dtend2);
                             dtend2 = time.normalize(false);
                         }
@@ -632,9 +642,10 @@ import java.net.URLDecoder;
                         if (update) {
                             // enforce duration being null
                             db.execSQL("UPDATE Events " +
-                                    "SET dtstart=?, dtend=?, dtstart2=?, dtend2=?, duration=? " +
-                                    "WHERE _id=?",
-                                    new Object[] {dtstart, dtend, dtstart2, dtend2, null, id});
+                                    "SET dtstart=?, dtend=?, dtstart2=?, dtend2=?, duration=?, " +
+                                    "eventTimezone=?, eventTimezone2=? WHERE _id=?",
+                                    new Object[] {dtstart, dtend, dtstart2, dtend2, null, timezone,
+                                            timezone2, id});
                         }
 
                     } else {
@@ -646,10 +657,17 @@ import java.net.URLDecoder;
                         }
 
                         boolean update = false;
-                        update = fixAllDayTime(time, timezone, dtstart);
+                        if (!TextUtils.equals(timezone, utc)) {
+                            update = true;
+                            timezone = utc;
+                        }
+
+                        time.clear(timezone);
+                        update |= fixAllDayTime(time, timezone, dtstart);
                         dtstart = time.normalize(false);
 
                         if (dtstart2 != null) {
+                            time.clear(timezone2);
                             update |= fixAllDayTime(time, timezone2, dtstart2);
                             dtstart2 = time.normalize(false);
                         }
@@ -673,9 +691,10 @@ import java.net.URLDecoder;
                         if (update) {
                             // If there were other problems also enforce dtend being null
                             db.execSQL("UPDATE Events " +
-                                    "SET dtstart=?,dtend=?,dtstart2=?,dtend2=?,duration=? " +
-                                    "WHERE _id=?",
-                                    new Object[] {dtstart, null, dtstart2, null, duration, id});
+                                    "SET dtstart=?,dtend=?,dtstart2=?,dtend2=?,duration=?," +
+                                    "eventTimezone=?, eventTimezone2=? WHERE _id=?",
+                                    new Object[] {dtstart, null, dtstart2, null, duration,
+                                            timezone, timezone2, id});
                         }
                     }
                 }

@@ -935,7 +935,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Events.ALL_DAY,
             Events.ORIGINAL_EVENT,
             Events.ORIGINAL_INSTANCE_TIME,
-            Events.CALENDAR_ID
+            Events.CALENDAR_ID,
+            Events.DELETED
     };
 
     /**
@@ -1042,6 +1043,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         int originalEventColumn = entries.getColumnIndex(Events.ORIGINAL_EVENT);
         int originalInstanceTimeColumn = entries.getColumnIndex(Events.ORIGINAL_INSTANCE_TIME);
         int calendarIdColumn = entries.getColumnIndex(Events.CALENDAR_ID);
+        int deletedColumn = entries.getColumnIndex(Events.DELETED);
 
         ContentValues initialValues;
         EventInstancesMap instancesMap = new EventInstancesMap();
@@ -1105,6 +1107,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     originalInstanceTimeMillis= entries.getLong(originalInstanceTimeColumn);
                 }
                 int status = entries.getInt(statusColumn);
+                boolean deleted = (entries.getInt(deletedColumn) != 0);
 
                 String rruleStr = entries.getString(rruleColumn);
                 String rdateStr = entries.getString(rdateColumn);
@@ -1235,9 +1238,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     }
 
                     initialValues.put(Instances.EVENT_ID, eventId);
-                    initialValues.put(Instances.BEGIN, dtstartMillis);
 
+                    initialValues.put(Instances.BEGIN, dtstartMillis);
                     initialValues.put(Instances.END, dtendMillis);
+
+                    // we temporarily store the DELETED status (will be cleaned later)
+                    initialValues.put(Events.DELETED, deleted);
 
                     if (allDay) {
                         eventTime.timezone = Time.TIMEZONE_UTC;
@@ -1333,12 +1339,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             InstancesList list = instancesMap.get(syncIdKey);
             for (ContentValues values : list) {
 
-                // If this instance was cancelled then don't create a new
+                // If this instance was cancelled or deleted then don't create a new
                 // instance.
                 Integer status = values.getAsInteger(Events.STATUS);
-                if (status != null && status == Events.STATUS_CANCELED) {
+                boolean deleted = values.containsKey(Events.DELETED) ?
+                        values.getAsBoolean(Events.DELETED) : false;
+                if ((status != null && status == Events.STATUS_CANCELED) || deleted) {
                     continue;
                 }
+
+                // We remove this useless key (not valid in the context of Instances table)
+                values.remove(Events.DELETED);
 
                 // Remove these fields before inserting a new instance
                 values.remove(ORIGINAL_EVENT_AND_CALENDAR);

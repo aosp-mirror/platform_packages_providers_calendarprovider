@@ -2296,8 +2296,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 try {
                     while (cursor.moveToNext()) {
                         long id = cursor.getLong(0);
-                        result += deleteEventInternal(id, callerIsSyncAdapter);
+                        result += deleteEventInternal(id, callerIsSyncAdapter, true /* isBatch */);
                     }
+                    scheduleNextAlarm(false /* do not remove alarms */);
+                    triggerAppWidgetUpdate(-1 /* changedEventId */);
                 } finally {
                     cursor.close();
                     cursor = null;
@@ -2312,7 +2314,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                             + "doesn't support selection based deletion for type "
                             + match);
                 }
-                return deleteEventInternal(id, callerIsSyncAdapter);
+                return deleteEventInternal(id, callerIsSyncAdapter, false /* isBatch */);
             }
             case ATTENDEES:
             {
@@ -2420,7 +2422,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     }
 
-    private int deleteEventInternal(long id, boolean callerIsSyncAdapter) {
+    private int deleteEventInternal(long id, boolean callerIsSyncAdapter, boolean isBatch) {
         int result = 0;
         String selectionArgs[] = new String[] {String.valueOf(id)};
 
@@ -2471,8 +2473,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             cursor = null;
         }
 
-        scheduleNextAlarm(false /* do not remove alarms */);
-        triggerAppWidgetUpdate(-1);
+        if (!isBatch) {
+            scheduleNextAlarm(false /* do not remove alarms */);
+            triggerAppWidgetUpdate(-1 /* changedEventId */);
+        }
 
         // Delete associated data; attendees, however, are deleted with the actual event so
         // that the sync adapter is able to notify attendees of the cancellation.

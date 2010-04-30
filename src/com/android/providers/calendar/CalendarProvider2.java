@@ -2456,12 +2456,19 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // or if the event is local (no syncId)
                 if (callerIsSyncAdapter || emptySyncId) {
                     mDb.delete("Events", "_id=?", selectionArgs);
-                    mDb.delete("Attendees", "event_id=?", selectionArgs);
                 } else {
                     ContentValues values = new ContentValues();
                     values.put(Events.DELETED, 1);
                     values.put(Events._SYNC_DIRTY, 1);
                     mDb.update("Events", values, "_id=?", selectionArgs);
+
+                    // Delete associated data; attendees, however, are deleted with the actual event so
+                    // that the sync adapter is able to notify attendees of the cancellation.
+                    mDb.delete("Instances", "event_id=?", selectionArgs);
+                    mDb.delete("EventsRawTimes", "event_id=?", selectionArgs);
+                    mDb.delete("Reminders", "event_id=?", selectionArgs);
+                    mDb.delete("CalendarAlerts", "event_id=?", selectionArgs);
+                    mDb.delete("ExtendedProperties", "event_id=?", selectionArgs);
                 }
             }
         } finally {
@@ -2473,14 +2480,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             scheduleNextAlarm(false /* do not remove alarms */);
             triggerAppWidgetUpdate(-1 /* changedEventId */);
         }
-
-        // Delete associated data; attendees, however, are deleted with the actual event so
-        // that the sync adapter is able to notify attendees of the cancellation.
-        mDb.delete("Instances", "event_id=?", selectionArgs);
-        mDb.delete("EventsRawTimes", "event_id=?", selectionArgs);
-        mDb.delete("Reminders", "event_id=?", selectionArgs);
-        mDb.delete("CalendarAlerts", "event_id=?", selectionArgs);
-        mDb.delete("ExtendedProperties", "event_id=?", selectionArgs);
         return result;
     }
 

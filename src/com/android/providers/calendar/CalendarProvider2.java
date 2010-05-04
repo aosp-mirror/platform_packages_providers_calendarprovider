@@ -292,9 +292,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     @Override
     public boolean onCreate() {
         super.onCreate();
-        mDbHelper = (CalendarDatabaseHelper)getDatabaseHelper();
+        try {
+            return initialize();
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Cannot start provider", e);
+            return false;
+        }
+    }
 
-        verifyAccounts();
+    private boolean initialize() {
+        mDbHelper = (CalendarDatabaseHelper)getDatabaseHelper();
+        mDb = mDbHelper.getWritableDatabase();
 
         // Register for Intent broadcasts
         IntentFilter filter = new IntentFilter();
@@ -313,9 +321,25 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         mMetaData = new MetaData(mDbHelper);
         mCalendarCache = new CalendarCache(mDbHelper);
 
-        updateTimezoneDependentFields();
+        postInitialize();
 
         return true;
+    }
+
+    protected void postInitialize() {
+        Thread thread = new PostInitializeThread();
+        thread.start();
+    }
+
+    private class PostInitializeThread extends Thread {
+        @Override
+        public void run() {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+
+            verifyAccounts();
+
+            doUpdateTimezoneDependentFields();
+        }
     }
 
     /**
@@ -332,18 +356,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         @Override
         public void run() {
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
-            try {
-                doUpdateTimezoneDependentFields();
-            } catch (SQLException e) {
-                Log.e(TAG, "doUpdateTimezoneDependentFields() failed", e);
-                try {
-                    // Clear at least the in-memory data (and if possible the
-                    // database fields) to force a re-computation of Instances.
-                    mMetaData.clearInstanceRange();
-                } catch (SQLException e2) {
-                    Log.e(TAG, "clearInstanceRange() also failed: " + e2);
-                }
-            }
+            doUpdateTimezoneDependentFields();
         }
     }
 
@@ -352,29 +365,33 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * then the Instances table will be regenerated.
      */
     private void doUpdateTimezoneDependentFields() {
-        if (! isSameTimezoneDatabaseVersion()) {
-            doProcessEventRawTimes(null  /* default current timezone*/,
-            TimeUtils.getTimeZoneDatabaseVersion());
+        try {
+            if (! isSameTimezoneDatabaseVersion()) {
+                doProcessEventRawTimes(null  /* default current timezone*/,
+                TimeUtils.getTimeZoneDatabaseVersion());
+            }
+            if (isSameTimezone()) {
+                // Even if the timezone hasn't changed, check for missed alarms.
+                // This code executes when the CalendarProvider2 is created and
+                // helps to catch missed alarms when the Calendar process is
+                // killed (because of low-memory conditions) and then restarted.
+                rescheduleMissedAlarms();
+                return;
+            }
+            regenerateInstancesTable();
+        } catch (SQLException e) {
+            Log.e(TAG, "doUpdateTimezoneDependentFields() failed", e);
+            try {
+                // Clear at least the in-memory data (and if possible the
+                // database fields) to force a re-computation of Instances.
+                mMetaData.clearInstanceRange();
+            } catch (SQLException e2) {
+                Log.e(TAG, "clearInstanceRange() also failed: " + e2);
+            }
         }
-        if (isSameTimezone()) {
-            // Even if the timezone hasn't changed, check for missed alarms.
-            // This code executes when the CalendarProvider2 is created and
-            // helps to catch missed alarms when the Calendar process is
-            // killed (because of low-memory conditions) and then restarted.
-            rescheduleMissedAlarms();
-            return;
-        }
-        regenerateInstancesTable();
     }
 
     protected void doProcessEventRawTimes(String timezone, String timeZoneDatabaseVersion) {
-        mDb = mDbHelper.getWritableDatabase();
-        if (mDb == null) {
-            if (Log.isLoggable(TAG, Log.VERBOSE)) {
-                Log.v(TAG, "Cannot update Events table from EventsRawTimes table");
-            }
-            return;
-        }
         mDb.beginTransaction();
         try {
             updateEventsStartEndFromEventRawTimesLocked(timezone);
@@ -3393,8 +3410,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * syncable.  TODO: update comment, make sure deletes don't get synced.
      */
     public void onAccountsUpdated(Account[] accounts) {
-        mDb = mDbHelper.getWritableDatabase();
-        if (mDb == null) return;
+        if (mDb == null) {
+            mDb = mDbHelper.getWritableDatabase();
+        }
+        if (mDb == null) {
+            return;
+        }
 
         HashMap<Account, Boolean> accountHasCalendar = new HashMap<Account, Boolean>();
         HashSet<Account> validAccounts = new HashSet<Account>();
@@ -3408,7 +3429,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         try {
 
             for (String table : new String[]{"Calendars"}) {
-                // Find all the accounts the contacts DB knows about, mark the ones that aren't
+                // Find all the accounts the calendar DB knows about, mark the ones that aren't
                 // in the valid set for deletion.
                 Cursor c = mDb.rawQuery("SELECT DISTINCT " +
                                             Calendar.SyncColumns._SYNC_ACCOUNT +

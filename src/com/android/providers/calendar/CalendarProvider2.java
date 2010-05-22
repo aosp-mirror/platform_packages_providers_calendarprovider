@@ -633,10 +633,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 break;
 
             case CALENDARS:
+            case CALENDAR_ENTITIES:
                 qb.setTables("Calendars");
                 appendAccountFromParameter(qb, uri);
                 break;
             case CALENDARS_ID:
+            case CALENDAR_ENTITIES_ID:
                 qb.setTables("Calendars");
                 selectionArgs = insertSelectionArg(selectionArgs, uri.getPathSegments().get(1));
                 qb.appendWhere("_id=?");
@@ -936,7 +938,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Events.ORIGINAL_EVENT,
             Events.ORIGINAL_INSTANCE_TIME,
             Events.CALENDAR_ID,
-            Events.DELETED
+            Calendar.EventsColumns.DELETED
     };
 
     /**
@@ -1043,7 +1045,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         int originalEventColumn = entries.getColumnIndex(Events.ORIGINAL_EVENT);
         int originalInstanceTimeColumn = entries.getColumnIndex(Events.ORIGINAL_INSTANCE_TIME);
         int calendarIdColumn = entries.getColumnIndex(Events.CALENDAR_ID);
-        int deletedColumn = entries.getColumnIndex(Events.DELETED);
+        int deletedColumn = entries.getColumnIndex(Calendar.EventsColumns.DELETED);
 
         ContentValues initialValues;
         EventInstancesMap instancesMap = new EventInstancesMap();
@@ -1243,7 +1245,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     initialValues.put(Instances.END, dtendMillis);
 
                     // we temporarily store the DELETED status (will be cleaned later)
-                    initialValues.put(Events.DELETED, deleted);
+                    initialValues.put(Calendar.EventsColumns.DELETED, deleted);
 
                     if (allDay) {
                         eventTime.timezone = Time.TIMEZONE_UTC;
@@ -1342,14 +1344,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // If this instance was cancelled or deleted then don't create a new
                 // instance.
                 Integer status = values.getAsInteger(Events.STATUS);
-                boolean deleted = values.containsKey(Events.DELETED) ?
-                        values.getAsBoolean(Events.DELETED) : false;
+                boolean deleted = values.containsKey(Calendar.EventsColumns.DELETED) ?
+                        values.getAsBoolean(Calendar.EventsColumns.DELETED) : false;
                 if ((status != null && status == Events.STATUS_CANCELED) || deleted) {
                     continue;
                 }
 
                 // We remove this useless key (not valid in the context of Instances table)
-                values.remove(Events.DELETED);
+                values.remove(Calendar.EventsColumns.DELETED);
 
                 // Remove these fields before inserting a new instance
                 values.remove(ORIGINAL_EVENT_AND_CALENDAR);
@@ -2458,12 +2460,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     mDb.delete("Events", "_id=?", selectionArgs);
                 } else {
                     ContentValues values = new ContentValues();
-                    values.put(Events.DELETED, 1);
+                    values.put(Calendar.EventsColumns.DELETED, 1);
                     values.put(Events._SYNC_DIRTY, 1);
                     mDb.update("Events", values, "_id=?", selectionArgs);
 
-                    // Delete associated data; attendees, however, are deleted with the actual event so
-                    // that the sync adapter is able to notify attendees of the cancellation.
+                    // Delete associated data; attendees, however, are deleted with the actual event
+                    //  so that the sync adapter is able to notify attendees of the cancellation.
                     mDb.delete("Instances", "event_id=?", selectionArgs);
                     mDb.delete("EventsRawTimes", "event_id=?", selectionArgs);
                     mDb.delete("Reminders", "event_id=?", selectionArgs);
@@ -2579,7 +2581,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 readBooleanQueryParameter(uri, Calendar.CALLER_IS_SYNCADAPTER, false);
 
         // TODO: remove this restriction
-        if (!TextUtils.isEmpty(selection) && match != CALENDAR_ALERTS && match != EVENTS) {
+        if (!TextUtils.isEmpty(selection) && match != CALENDAR_ALERTS
+                && match != EVENTS && match != CALENDARS) {
             throw new IllegalArgumentException(
                     "WHERE based updates not supported");
         }
@@ -2598,12 +2601,33 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 return mDbHelper.getSyncState().update(mDb, values, selectionWithId, selectionArgs);
             }
 
+            case CALENDARS:
             case CALENDARS_ID:
             {
-                if (selection != null) {
-                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
+                long id;
+                if (match == CALENDARS_ID) {
+                    if (selection != null) {
+                        throw new UnsupportedOperationException("Selection not permitted for "
+                                + uri);
+                    }
+                    id = ContentUris.parseId(uri);
+                } else {
+                    // TODO: for supporting other sync adapters, we will need to
+                    // be able to deal with the following cases:
+                    // 1) selection to "_id=?" and pass in a selectionArgs
+                    // 2) selection to "_id IN (1, 2, 3)"
+                    // 3) selection to "delete=0 AND _id=1"
+                    if (selection != null && selection.startsWith("_id=")) {
+                        // The ContentProviderOperation generates an _id=n string instead of
+                        // adding the id to the URL, so parse that out here.
+                        id = Long.parseLong(selection.substring(4));
+                    } else {
+                        return mDb.update("Calendars", values, selection, selectionArgs);
+                    }
                 }
-                long id = ContentUris.parseId(uri);
+                if (!callerIsSyncAdapter) {
+                    values.put(Calendars._SYNC_DIRTY, 1);
+                }
                 Integer syncEvents = values.getAsInteger(Calendars.SYNC_EVENTS);
                 if (syncEvents != null) {
                     modifyCalendarSubscription(id, syncEvents == 1);
@@ -2621,6 +2645,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 if (match == EVENTS_ID) {
                     id = ContentUris.parseId(uri);
                 } else if (callerIsSyncAdapter) {
+                    // TODO: same remark as for CALENDARS/CALENDARS_ID case as this is not
+                    // sufficient to deal with all the "_id" case in selection
                     if (selection != null && selection.startsWith("_id=")) {
                         // The ContentProviderOperation generates an _id=n string instead of
                         // adding the id to the URL, so parse that out here.
@@ -3206,6 +3232,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final int SCHEDULE_ALARM = 22;
     private static final int SCHEDULE_ALARM_REMOVE = 23;
     private static final int TIME = 24;
+    private static final int CALENDAR_ENTITIES = 25;
+    private static final int CALENDAR_ENTITIES_ID = 26;
 
     private static final UriMatcher sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
     private static final HashMap<String, String> sInstancesProjectionMap;
@@ -3225,6 +3253,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sUriMatcher.addURI(Calendar.AUTHORITY, "event_entities/#", EVENT_ENTITIES_ID);
         sUriMatcher.addURI(Calendar.AUTHORITY, "calendars", CALENDARS);
         sUriMatcher.addURI(Calendar.AUTHORITY, "calendars/#", CALENDARS_ID);
+        sUriMatcher.addURI(Calendar.AUTHORITY, "calendar_entities", CALENDAR_ENTITIES);
+        sUriMatcher.addURI(Calendar.AUTHORITY, "calendar_entities/#", CALENDAR_ENTITIES_ID);
         sUriMatcher.addURI(Calendar.AUTHORITY, "deleted_events", DELETED_EVENTS);
         sUriMatcher.addURI(Calendar.AUTHORITY, "attendees", ATTENDEES);
         sUriMatcher.addURI(Calendar.AUTHORITY, "attendees/#", ATTENDEES_ID);
@@ -3275,7 +3305,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Events.GUESTS_CAN_MODIFY, "guestsCanModify");
         sEventsProjectionMap.put(Events.GUESTS_CAN_SEE_GUESTS, "guestsCanSeeGuests");
         sEventsProjectionMap.put(Events.ORGANIZER, "organizer");
-        sEventsProjectionMap.put(Events.DELETED, "deleted");
+        sEventsProjectionMap.put(Calendar.EventsColumns.DELETED, "deleted");
 
         // Put the shared items into the Attendees, Reminders projection map
         sAttendeesProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
@@ -3336,7 +3366,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_MODIFY, "guestsCanModify");
         sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_SEE_GUESTS, "guestsCanSeeGuests");
         sEventEntitiesProjectionMap.put(Events.ORGANIZER, "organizer");
-        sEventEntitiesProjectionMap.put(Events.DELETED, "deleted");
+        sEventEntitiesProjectionMap.put(Calendar.EventsColumns.DELETED, "deleted");
         sEventEntitiesProjectionMap.put(Events._ID, Events._ID);
         sEventEntitiesProjectionMap.put(Events._SYNC_ID, Events._SYNC_ID);
         sEventEntitiesProjectionMap.put(Events._SYNC_DATA, Events._SYNC_DATA);

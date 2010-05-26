@@ -85,6 +85,15 @@
             </intent-filter>
        </receiver>
 
+       <!-- Handles database upgrades after OTAs, then disables itself -->
+       <receiver android:name="CalendarUpgradeReceiver">
+           <!-- This broadcast is sent after the core system has finished
+                booting, before the home app is launched or BOOT_COMPLETED
+                is sent. -->
+           <intent-filter>
+               <action android:name="android.intent.action.PRE_BOOT_COMPLETED"/>
+           </intent-filter>
+       </receiver>
 
     </application>
 </manifest>

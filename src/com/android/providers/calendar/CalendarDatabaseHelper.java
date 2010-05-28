@@ -58,7 +58,7 @@ import java.net.URLDecoder;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    private static final int DATABASE_VERSION = 69;
+    static final int DATABASE_VERSION = 69;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 

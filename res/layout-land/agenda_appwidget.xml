@@ -4,9 +4,9 @@
      Licensed under the Apache License, Version 2.0 (the "License");
      you may not use this file except in compliance with the License.
      You may obtain a copy of the License at
-  
+
           http://www.apache.org/licenses/LICENSE-2.0
-  
+
      Unless required by applicable law or agreed to in writing, software
      distributed under the License is distributed on an "AS IS" BASIS,
      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,128 +14,100 @@
      limitations under the License.
 -->
 
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/agenda_appwidget"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
     android:background="@drawable/appwidget_background"
     android:focusable="true"
     android:clickable="true">
 
-    <ImageView
-        android:id="@+id/divider"
+    <!-- Header -->
+    <LinearLayout
+        android:id="@+id/header"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_alignParentTop="true"
-        android:layout_alignParentLeft="true"
-        android:background="@drawable/appwidget_calendar_bgtop_blue"
-        android:visibility="gone"
-        />
-        
+        android:layout_height="40dip"
+        android:orientation="horizontal"
+        android:background="@drawable/appwidget_calendar_bgtop_blue">
+
+        <TextView
+            android:id="@+id/day_of_week"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:layout_marginLeft="7dip"
+            android:layout_marginRight="7dip"
+            android:layout_marginBottom="5dip"
+            android:textColor="@color/appwidget_date"
+            android:textSize="18sp"
+            android:gravity="left|bottom"
+            android:singleLine="true" />
+
+        <TextView
+            android:id="@+id/day_of_month"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginLeft="7dip"
+            android:layout_marginRight="7dip"
+            android:layout_marginBottom="5dip"
+            android:gravity="right|bottom"
+            android:textColor="@color/appwidget_date"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:singleLine="true" />
+    </LinearLayout>
+
+    <!-- No Event -->
     <TextView
         android:id="@+id/no_events"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:padding="10dip"
+        android:layout_marginBottom="10dip"
+        android:padding="7dip"
         android:gravity="center"
         android:textSize="14sp"
         android:textStyle="bold"
         android:textColor="@color/appwidget_no_events"
-        android:text="@string/gadget_no_events"
-        />
-        
+        android:text="@string/gadget_no_events" />
+
+    <!-- Event #1 -->
     <TextView
-        android:id="@+id/day_of_month"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignParentTop="true"
-        android:layout_alignParentRight="true"
-        android:layout_marginRight="10dip"
-        android:layout_marginTop="8dip"
-        android:textSize="30sp"
-        android:textStyle="bold"
-        android:textColor="@color/appwidget_date"
-        android:singleLine="true"
-        android:visibility="gone"
-        />
+        android:id="@+id/when1"
+        style="@style/TextAppearance.widget_when" />
 
     <TextView
-        android:id="@+id/day_of_week"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignParentLeft="true"
-        android:layout_toLeftOf="@id/day_of_month"
-        android:layout_alignBottom="@id/day_of_month"
-        android:layout_alignBaseline="@id/day_of_month"
-        android:layout_marginLeft="10dip"
-        android:textSize="17sp"
-        android:textStyle="bold"
-        android:textColor="@color/appwidget_date"
-        android:singleLine="true"
-        android:visibility="gone"
-        />
+        android:id="@+id/where1"
+        style="@style/TextAppearance.widget_where" />
 
     <TextView
-        android:id="@+id/when"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/divider"
-        android:layout_marginTop="6dip"
-        android:layout_marginLeft="10dip"
-        android:layout_marginRight="10dip"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:textColor="@color/appwidget_when"
-        android:singleLine="true"
-        android:visibility="gone"
-        />
+        android:id="@+id/title1"
+        android:layout_marginBottom="-3dip"
+        style="@style/TextAppearance.widget_title" />
+
+    <!-- Conflict banner -->
+    <TextView
+        android:id="@+id/conflict_landscape"
+        style="@style/TextAppearance.widget_conflict" />
+
+    <!-- These fields are not visible in landscape mode but required to avoid exceptions -->
+    <TextView
+        android:id="@+id/when2"
+        android:layout_width="0px"
+        android:layout_height="0px" />
+    <TextView
+        android:id="@+id/where2"
+        android:layout_width="0px"
+        android:layout_height="0px" />
+    <TextView
+        android:id="@+id/title2"
+        android:layout_width="0px"
+        android:layout_height="0px" />
 
     <TextView
-        android:id="@+id/where"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:paddingBottom="6dip"
-        android:layout_marginLeft="10dip"
-        android:layout_marginRight="10dip"
-        android:textSize="11sp"
-        android:textColor="@color/appwidget_where"
-        android:singleLine="true"
-        android:visibility="gone"
-        />
+        android:id="@+id/conflict_portrait"
+        android:layout_width="0px"
+        android:layout_height="0px" />
 
-    <TextView
-        android:id="@+id/conflict"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/divider"
-        android:layout_toRightOf="@+id/when"
-        android:layout_alignParentRight="true"
-        android:layout_marginTop="5dip"
-        android:layout_marginLeft="10dip"
-        android:layout_marginRight="10dip"
-        android:gravity="right"
-        android:textSize="11sp"
-        android:textColor="@color/appwidget_conflict"
-        android:singleLine="true"
-        android:visibility="gone"
-        />
-
-    <TextView
-        android:id="@+id/title"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/when"
-        android:layout_above="@id/where"
-        android:layout_alignWithParentIfMissing="true"
-        android:layout_marginTop="3dip"
-        android:layout_marginLeft="10dip"
-        android:layout_marginRight="10dip"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:textColor="@color/appwidget_title"
-        android:singleLine="true"
-        android:visibility="gone"
-        />
-
-</RelativeLayout>
+</LinearLayout>

@@ -16,6 +16,8 @@
 
 package com.android.providers.calendar;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.app.Service;
@@ -24,14 +26,14 @@ import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.res.Resources;
+import android.content.res.Resources.NotFoundException;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.IBinder;
-import android.provider.Calendar;
 import android.provider.Calendar.Attendees;
 import android.provider.Calendar.Calendars;
 import android.provider.Calendar.Instances;
+import android.text.TextUtils;
 import android.text.format.DateFormat;
 import android.text.format.DateUtils;
 import android.text.format.Time;
@@ -39,47 +41,261 @@ import android.util.Log;
 import android.view.View;
 import android.widget.RemoteViews;
 
+import java.util.Arrays;
 import java.util.Set;
 import java.util.TimeZone;
 
 
 public class CalendarAppWidgetService extends Service implements Runnable {
-    static final String TAG = "CalendarAppWidgetService";
-    static final boolean LOGD = false;
+    private static final String TAG = "CalendarAppWidgetService";
+    private static final boolean LOGD = false;
 
-    static final String EVENT_SORT_ORDER = "startDay ASC, allDay DESC, begin ASC";
+    private static final String EVENT_SORT_ORDER = "startDay ASC, startMinute ASC, endMinute ASC, "
+            + "calendar_id ASC" + " LIMIT 10";
+
+    private static final String EVENT_SELECTION = Calendars.SELECTED + "=1 AND "
+            + Instances.SELF_ATTENDEE_STATUS + "!=" + Attendees.ATTENDEE_STATUS_DECLINED;
 
     static final String[] EVENT_PROJECTION = new String[] {
         Instances.ALL_DAY,
         Instances.BEGIN,
         Instances.END,
-        Instances.COLOR,
         Instances.TITLE,
-        Instances.RRULE,
-        Instances.HAS_ALARM,
         Instances.EVENT_LOCATION,
-        Instances.CALENDAR_ID,
         Instances.EVENT_ID,
     };
 
     static final int INDEX_ALL_DAY = 0;
     static final int INDEX_BEGIN = 1;
     static final int INDEX_END = 2;
-    static final int INDEX_COLOR = 3;
-    static final int INDEX_TITLE = 4;
-    static final int INDEX_RRULE = 5;
-    static final int INDEX_HAS_ALARM = 6;
-    static final int INDEX_EVENT_LOCATION = 7;
-    static final int INDEX_CALENDAR_ID = 8;
-    static final int INDEX_EVENT_ID = 9;
+    static final int INDEX_TITLE = 3;
+    static final int INDEX_EVENT_LOCATION = 4;
+    static final int INDEX_EVENT_ID = 5;
 
-    static final long SEARCH_DURATION = DateUtils.WEEK_IN_MILLIS;
+    private static final long SEARCH_DURATION = DateUtils.WEEK_IN_MILLIS;
 
-    static final long UPDATE_NO_EVENTS = DateUtils.HOUR_IN_MILLIS * 6;
+    private static final long UPDATE_NO_EVENTS = DateUtils.HOUR_IN_MILLIS * 6;
 
-    static final String ACTION_PACKAGE = "com.google.android.calendar";
-    static final String ACTION_CLASS = "com.android.calendar.LaunchActivity";
-    static final String KEY_DETAIL_VIEW = "DETAIL_VIEW";
+    private static final String KEY_DETAIL_VIEW = "DETAIL_VIEW";
+
+    static class CalendarAppWidgetModel {
+        String dayOfWeek;
+        String dayOfMonth;
+        /*
+         * TODO Refactor this so this class is used in the case of "no event"
+         * So for now, this field is always View.GONE
+         */
+        int visibNoEvents;
+
+        EventInfo[] eventInfos;
+
+        int visibConflictPortrait; // Visibility value for conflictPortrait textview
+        String conflictPortrait;
+        int visibConflictLandscape; // Visibility value for conflictLandscape textview
+        String conflictLandscape;
+
+        public CalendarAppWidgetModel() {
+            eventInfos = new EventInfo[2];
+            eventInfos[0] = new EventInfo();
+            eventInfos[1] = new EventInfo();
+
+            visibNoEvents = View.GONE;
+            visibConflictPortrait = View.GONE;
+            visibConflictLandscape = View.GONE;
+        }
+
+        class EventInfo {
+            int visibWhen; // Visibility value for When textview (View.GONE or View.VISIBLE)
+            String when;
+            int visibWhere; // Visibility value for Where textview (View.GONE or View.VISIBLE)
+            String where;
+            int visibTitle; // Visibility value for Title textview (View.GONE or View.VISIBLE)
+            String title;
+
+            public EventInfo() {
+                visibWhen = View.GONE;
+                visibWhere = View.GONE;
+                visibTitle = View.GONE;
+            }
+
+            @Override
+            public String toString() {
+                StringBuilder builder = new StringBuilder();
+                builder.append("EventInfo [visibTitle=");
+                builder.append(visibTitle);
+                builder.append(", title=");
+                builder.append(title);
+                builder.append(", visibWhen=");
+                builder.append(visibWhen);
+                builder.append(", when=");
+                builder.append(when);
+                builder.append(", visibWhere=");
+                builder.append(visibWhere);
+                builder.append(", where=");
+                builder.append(where);
+                builder.append("]");
+                return builder.toString();
+            }
+
+            @Override
+            public int hashCode() {
+                final int prime = 31;
+                int result = 1;
+                result = prime * result + getOuterType().hashCode();
+                result = prime * result + ((title == null) ? 0 : title.hashCode());
+                result = prime * result + visibTitle;
+                result = prime * result + visibWhen;
+                result = prime * result + visibWhere;
+                result = prime * result + ((when == null) ? 0 : when.hashCode());
+                result = prime * result + ((where == null) ? 0 : where.hashCode());
+                return result;
+            }
+
+            @Override
+            public boolean equals(Object obj) {
+                if (this == obj) {
+                    return true;
+                }
+                if (obj == null) {
+                    return false;
+                }
+                if (getClass() != obj.getClass()) {
+                    return false;
+                }
+                EventInfo other = (EventInfo) obj;
+                if (title == null) {
+                    if (other.title != null) {
+                        return false;
+                    }
+                } else if (!title.equals(other.title)) {
+                    return false;
+                }
+                if (visibTitle != other.visibTitle) {
+                    return false;
+                }
+                if (visibWhen != other.visibWhen) {
+                    return false;
+                }
+                if (visibWhere != other.visibWhere) {
+                    return false;
+                }
+                if (when == null) {
+                    if (other.when != null) {
+                        return false;
+                    }
+                } else if (!when.equals(other.when)) {
+                    return false;
+                }
+                if (where == null) {
+                    if (other.where != null) {
+                        return false;
+                    }
+                } else if (!where.equals(other.where)) {
+                    return false;
+                }
+                return true;
+            }
+
+            private CalendarAppWidgetModel getOuterType() {
+                return CalendarAppWidgetModel.this;
+            }
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder builder = new StringBuilder();
+            builder.append("\nCalendarAppWidgetModel [eventInfos=");
+            builder.append(Arrays.toString(eventInfos));
+            builder.append(", visibConflictLandscape=");
+            builder.append(visibConflictLandscape);
+            builder.append(", conflictLandscape=");
+            builder.append(conflictLandscape);
+            builder.append(", visibConflictPortrait=");
+            builder.append(visibConflictPortrait);
+            builder.append(", conflictPortrait=");
+            builder.append(conflictPortrait);
+            builder.append(", visibNoEvents=");
+            builder.append(visibNoEvents);
+            builder.append(", dayOfMonth=");
+            builder.append(dayOfMonth);
+            builder.append(", dayOfWeek=");
+            builder.append(dayOfWeek);
+            builder.append("]");
+            return builder.toString();
+        }
+
+        @Override
+        public int hashCode() {
+            final int prime = 31;
+            int result = 1;
+            result = prime * result
+                    + ((conflictLandscape == null) ? 0 : conflictLandscape.hashCode());
+            result = prime * result
+                    + ((conflictPortrait == null) ? 0 : conflictPortrait.hashCode());
+            result = prime * result + ((dayOfMonth == null) ? 0 : dayOfMonth.hashCode());
+            result = prime * result + ((dayOfWeek == null) ? 0 : dayOfWeek.hashCode());
+            result = prime * result + Arrays.hashCode(eventInfos);
+            result = prime * result + visibConflictLandscape;
+            result = prime * result + visibConflictPortrait;
+            result = prime * result + visibNoEvents;
+            return result;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null) {
+                return false;
+            }
+            if (getClass() != obj.getClass()) {
+                return false;
+            }
+            CalendarAppWidgetModel other = (CalendarAppWidgetModel) obj;
+            if (conflictLandscape == null) {
+                if (other.conflictLandscape != null) {
+                    return false;
+                }
+            } else if (!conflictLandscape.equals(other.conflictLandscape)) {
+                return false;
+            }
+            if (conflictPortrait == null) {
+                if (other.conflictPortrait != null) {
+                    return false;
+                }
+            } else if (!conflictPortrait.equals(other.conflictPortrait)) {
+                return false;
+            }
+            if (dayOfMonth == null) {
+                if (other.dayOfMonth != null) {
+                    return false;
+                }
+            } else if (!dayOfMonth.equals(other.dayOfMonth)) {
+                return false;
+            }
+            if (dayOfWeek == null) {
+                if (other.dayOfWeek != null) {
+                    return false;
+                }
+            } else if (!dayOfWeek.equals(other.dayOfWeek)) {
+                return false;
+            }
+            if (!Arrays.equals(eventInfos, other.eventInfos)) {
+                return false;
+            }
+            if (visibConflictLandscape != other.visibConflictLandscape) {
+                return false;
+            }
+            if (visibConflictPortrait != other.visibConflictPortrait) {
+                return false;
+            }
+            if (visibNoEvents != other.visibNoEvents) {
+                return false;
+            }
+            return true;
+        }
+    }
 
     @Override
     public void onStart(Intent intent, int startId) {
@@ -216,7 +432,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
      * @param now Current system time from {@link System#currentTimeMillis()}
      *            for calculating time difference.
      */
-    private String formatDebugTime(long unixTime, long now) {
+    static private String formatDebugTime(long unixTime, long now) {
         Time time = new Time();
         time.set(unixTime);
 
@@ -236,7 +452,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
      * @param recycle Time object to recycle, otherwise null.
      * @param utcTime Time to convert, in UTC.
      */
-    private long convertUtcToLocal(Time recycle, long utcTime) {
+    static private long convertUtcToLocal(Time recycle, long utcTime) {
         if (recycle == null) {
             recycle = new Time();
         }
@@ -290,21 +506,15 @@ public class CalendarAppWidgetService extends Service implements Runnable {
 
     /**
      * Calculate flipping point for the given event; when we should hide this
-     * event and show the next one. This is usually half-way through the event.
-     * <p>
-     * Events with duration longer than one day as treated as all-day events
-     * when computing the flipping point.
+     * event and show the next one. This is 15 minutes into the event or half
+     * way into the event whichever is earlier.
      *
      * @param start Event start time in local timezone.
      * @param end Event end time in local timezone.
      */
-    private long getEventFlip(Cursor cursor, long start, long end, boolean allDay) {
+    static private long getEventFlip(Cursor cursor, long start, long end, boolean allDay) {
         long duration = end - start;
-        if (allDay || duration > DateUtils.DAY_IN_MILLIS) {
-            return start;
-        } else {
-            return (start + end) / 2;
-        }
+        return start + Math.min(DateUtils.MINUTE_IN_MILLIS * 15, duration / 2);
     }
 
     /**
@@ -317,18 +527,14 @@ public class CalendarAppWidgetService extends Service implements Runnable {
     private void setNoEventsVisible(RemoteViews views, boolean noEvents) {
         views.setViewVisibility(R.id.no_events, noEvents ? View.VISIBLE : View.GONE);
 
-        int otherViews = noEvents ? View.GONE : View.VISIBLE;
-        views.setViewVisibility(R.id.day_of_month, otherViews);
-        views.setViewVisibility(R.id.day_of_week, otherViews);
-        views.setViewVisibility(R.id.divider, otherViews);
-        views.setViewVisibility(R.id.when, otherViews);
-        views.setViewVisibility(R.id.title, otherViews);
-
-        // Don't force-show views that are handled elsewhere
-        if (noEvents) {
-            views.setViewVisibility(R.id.conflict, otherViews);
-            views.setViewVisibility(R.id.where, otherViews);
-        }
+        views.setViewVisibility(R.id.when1, View.GONE);
+        views.setViewVisibility(R.id.where1, View.GONE);
+        views.setViewVisibility(R.id.title1, View.GONE);
+        views.setViewVisibility(R.id.when2, View.GONE);
+        views.setViewVisibility(R.id.where2, View.GONE);
+        views.setViewVisibility(R.id.title2, View.GONE);
+        views.setViewVisibility(R.id.conflict_landscape, View.GONE);
+        views.setViewVisibility(R.id.conflict_portrait, View.GONE);
     }
 
     /**
@@ -339,98 +545,209 @@ public class CalendarAppWidgetService extends Service implements Runnable {
      * @param events {@link MarkedEvents} parsed from the cursor
      */
     private RemoteViews getAppWidgetUpdate(Context context, Cursor cursor, MarkedEvents events) {
-        Resources res = context.getResources();
-        ContentResolver resolver = context.getContentResolver();
-
         RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.agenda_appwidget);
         setNoEventsVisible(views, false);
 
+        long currentTime = System.currentTimeMillis();
+        CalendarAppWidgetModel model = getAppWidgetModel(context, cursor, events, currentTime);
+
+        applyModelToView(model, views);
+
+        // Clicking on the widget launches Calendar
+        long startTime;
+        if (events.primaryAllDay) {
+            startTime = currentTime;
+        } else {
+            startTime = events.primaryTime;
+        }
+
+        PendingIntent pendingIntent = getLaunchPendingIntent(context, startTime);
+        views.setOnClickPendingIntent(R.id.agenda_appwidget, pendingIntent);
+
+        return views;
+    }
+
+    private void applyModelToView(CalendarAppWidgetModel model, RemoteViews views) {
+        views.setTextViewText(R.id.day_of_week, model.dayOfWeek);
+        views.setTextViewText(R.id.day_of_month, model.dayOfMonth);
+        views.setViewVisibility(R.id.no_events, model.visibNoEvents);
+        if (model.visibNoEvents == View.GONE) {
+            updateTextView(views, R.id.when1, model.eventInfos[0].visibWhen,
+                    model.eventInfos[0].when);
+            updateTextView(views, R.id.where1, model.eventInfos[0].visibWhere,
+                    model.eventInfos[0].where);
+            updateTextView(views, R.id.title1, model.eventInfos[0].visibTitle,
+                    model.eventInfos[0].title);
+            updateTextView(views, R.id.when2, model.eventInfos[1].visibWhen,
+                    model.eventInfos[1].when);
+            updateTextView(views, R.id.where2, model.eventInfos[1].visibWhere,
+                    model.eventInfos[1].where);
+            updateTextView(views, R.id.title2, model.eventInfos[1].visibTitle,
+                    model.eventInfos[1].title);
+
+            updateTextView(views, R.id.conflict_portrait, model.visibConflictPortrait,
+                    model.conflictPortrait);
+            updateTextView(views, R.id.conflict_landscape, model.visibConflictLandscape,
+                    model.conflictLandscape);
+        }
+    }
+
+    static void updateTextView(RemoteViews views, int id, int visibility, String string) {
+        views.setViewVisibility(id, visibility);
+        if (visibility == View.VISIBLE) {
+            views.setTextViewText(id, string);
+        }
+    }
+
+    static CalendarAppWidgetModel getAppWidgetModel(Context context, Cursor cursor,
+            MarkedEvents events, long currentTime) {
+        CalendarAppWidgetModel model = new CalendarAppWidgetModel();
         Time time = new Time();
-        time.setToNow();
-        int yearDay = time.yearDay;
-        int dateNumber = time.monthDay;
+        time.set(currentTime);
+        time.monthDay++;
+        time.hour = 0;
+        time.minute = 0;
+        time.second = 0;
+        long startOfNextDay = time.normalize(true);
+
+        time.set(currentTime);
 
         // Calendar header
-        String dayOfWeek = DateUtils.getDayOfWeekString(time.weekDay + 1,
-                DateUtils.LENGTH_MEDIUM).toUpperCase();
+        String dayOfWeek = DateUtils.getDayOfWeekString(time.weekDay + 1, DateUtils.LENGTH_MEDIUM)
+                .toUpperCase();
 
-        views.setTextViewText(R.id.day_of_week, dayOfWeek);
-        views.setTextViewText(R.id.day_of_month, Integer.toString(time.monthDay));
+        model.dayOfWeek = dayOfWeek;
+        model.dayOfMonth = Integer.toString(time.monthDay);
 
         // Fill primary event details
         cursor.moveToPosition(events.primaryRow);
-
-        // Color stripe
-        /*
-        int colorFilter = cursor.getInt(INDEX_COLOR);
-        views.setTextColor(R.id.when, colorFilter);
-        views.setTextColor(R.id.title, colorFilter);
-        views.setTextColor(R.id.where, colorFilter);
-        */
-
-        // When
-        long start = cursor.getLong(INDEX_BEGIN);
         boolean allDay = cursor.getInt(INDEX_ALL_DAY) != 0;
-
-        int flags;
-        String whenString;
-        if (allDay) {
-            flags = DateUtils.FORMAT_ABBREV_ALL | DateUtils.FORMAT_UTC
-                    | DateUtils.FORMAT_SHOW_DATE;
-        } else {
-            flags = DateUtils.FORMAT_ABBREV_ALL | DateUtils.FORMAT_SHOW_TIME;
-
-            // Show date if different from today
-            time.set(start);
-            if (yearDay != time.yearDay) {
-                flags = flags | DateUtils.FORMAT_SHOW_DATE;
-            }
-        }
-        if (DateFormat.is24HourFormat(context)) {
-            flags |= DateUtils.FORMAT_24HOUR;
-        }
-        whenString = DateUtils.formatDateRange(context, start, start, flags);
-        views.setTextViewText(R.id.when, whenString);
-
-        // Clicking on the widget launches Calendar
-        PendingIntent pendingIntent = getLaunchPendingIntent(context, start);
-        views.setOnClickPendingIntent(R.id.agenda_appwidget, pendingIntent);
-
-       // What
-        String titleString = cursor.getString(INDEX_TITLE);
-        if (titleString == null || titleString.length() == 0) {
-            titleString = context.getString(R.string.no_title_label);
-        }
-        views.setTextViewText(R.id.title, titleString);
+        populateEvent(context, cursor, model, time, 0, true, startOfNextDay);
 
         // Conflicts
-        int titleLines = 4;
-        if (events.primaryCount > 1) {
-            int count = events.primaryCount - 1;
-            String conflictString = String.format(res.getQuantityString(
-                    R.plurals.gadget_more_events, count), count);
-            views.setTextViewText(R.id.conflict, conflictString);
-            views.setViewVisibility(R.id.conflict, View.VISIBLE);
-            titleLines -= 1;
+        int conflictCountLandscape = events.primaryCount - 1;
+        if (conflictCountLandscape > 0) {
+            model.conflictLandscape = getConflictString(context, conflictCountLandscape);
+            model.visibConflictLandscape = View.VISIBLE;
         } else {
-            views.setViewVisibility(R.id.conflict, View.GONE);
+            model.visibConflictLandscape = View.GONE;
         }
 
-        // Where
-        String whereString = cursor.getString(INDEX_EVENT_LOCATION);
-        if (whereString != null && whereString.length() > 0) {
-            views.setViewVisibility(R.id.where, View.VISIBLE);
-            views.setTextViewText(R.id.where, whereString);
-            titleLines -= 1;
-        } else {
-            views.setViewVisibility(R.id.where, View.GONE);
+        int conflictCountPortrait = 0;
+        if (events.primaryCount > 2) {
+            conflictCountPortrait = events.primaryCount - 1;
+        } else if (events.primaryCount == 1 && events.secondaryCount > 1
+                && cursor.moveToPosition(events.secondaryRow)) {
+            // Show conflict string for the secondary time slot if there is only one event
+            // in the primary time slot.
+            populateEvent(context, cursor, model, time, 1, false, startOfNextDay);
+            conflictCountPortrait = events.secondaryCount;
         }
 
-        // Trim title lines based on details shown. In landscape we're using
-        // singleLine which means this value is ignored.
-        views.setInt(R.id.title, "setMaxLines", titleLines);
+        if (conflictCountPortrait != 0) {
+            model.conflictPortrait = getConflictString(context, conflictCountPortrait);
+            model.visibConflictPortrait = View.VISIBLE;
+        } else {
+            model.visibConflictPortrait = View.GONE;
 
-        return views;
+            // Fill secondary event details
+            int secondaryRow = -1;
+            if (events.primaryCount == 2) {
+                secondaryRow = events.primaryConflictRow;
+            } else if (events.primaryCount == 1) {
+                secondaryRow = events.secondaryRow;
+            }
+
+            if (secondaryRow != -1 && cursor.moveToPosition(secondaryRow)) {
+                populateEvent(context, cursor, model, time, 1, true, startOfNextDay);
+            }
+        }
+        return model;
+    }
+
+    static private String getConflictString(Context context, int conflictCount) {
+        String conflictString;
+        try {
+            conflictString = context.getResources().getQuantityString(R.plurals.gadget_more_events,
+                    conflictCount, conflictCount);
+        } catch (NotFoundException e) {
+            // Mainly for testing
+            if (conflictCount == 1) {
+                conflictString = "1 more event";
+            } else {
+                conflictString = String.format("%d more events", conflictCount);
+            }
+        }
+        return conflictString;
+    }
+
+    static private void populateEvent(Context context, Cursor cursor, CalendarAppWidgetModel model,
+            Time recycle, int eventIndex, boolean showTitleLocation, long startOfNextDay) {
+
+        // When
+        boolean allDay = cursor.getInt(INDEX_ALL_DAY) != 0;
+        long start = cursor.getLong(INDEX_BEGIN);
+        if (allDay) {
+            start = convertUtcToLocal(recycle, start);
+        }
+
+        boolean eventIsToday = start < startOfNextDay;
+        boolean eventIsTomorrow = !eventIsToday
+                && (start < (startOfNextDay + DateUtils.DAY_IN_MILLIS));
+
+        String whenString = "";
+
+        if (!(allDay && eventIsTomorrow)) {
+            int flags = DateUtils.FORMAT_ABBREV_ALL;
+
+            if (allDay) {
+                flags |= DateUtils.FORMAT_UTC;
+                if (!eventIsTomorrow) {
+                    flags |= DateUtils.FORMAT_SHOW_WEEKDAY;
+                }
+            } else {
+                flags |= DateUtils.FORMAT_SHOW_TIME;
+
+                if (DateFormat.is24HourFormat(context)) {
+                    flags |= DateUtils.FORMAT_24HOUR;
+                }
+
+                // Show day or week if different from today
+                if (!eventIsTomorrow && !eventIsToday) {
+                    flags |= DateUtils.FORMAT_SHOW_WEEKDAY;
+                }
+            }
+            whenString = DateUtils.formatDateRange(context, start, start, flags);
+        }
+
+        if (eventIsTomorrow) {
+            if (!allDay) {
+                whenString += (", ");
+            }
+            whenString += context.getString(R.string.tomorrow);
+        }
+        model.eventInfos[eventIndex].when = whenString;
+        model.eventInfos[eventIndex].visibWhen = View.VISIBLE;
+
+        if (showTitleLocation) {
+            // What
+            String titleString = cursor.getString(INDEX_TITLE);
+            if (TextUtils.isEmpty(titleString)) {
+                titleString = context.getString(R.string.no_title_label);
+            }
+            model.eventInfos[eventIndex].title = titleString;
+            model.eventInfos[eventIndex].visibTitle = View.VISIBLE;
+
+            // Where
+            String whereString = cursor.getString(INDEX_EVENT_LOCATION);
+            if (!TextUtils.isEmpty(whereString)) {
+                model.eventInfos[eventIndex].visibWhere = View.VISIBLE;
+                model.eventInfos[eventIndex].where = whereString;
+            } else {
+                model.eventInfos[eventIndex].visibWhere = View.GONE;
+            }
+            if (LOGD) Log.d(TAG, " Title:" + titleString + " Where:" + whereString);
+        }
     }
 
     /**
@@ -439,6 +756,14 @@ public class CalendarAppWidgetService extends Service implements Runnable {
     private RemoteViews getAppWidgetNoEvents(Context context) {
         RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.agenda_appwidget);
         setNoEventsVisible(views, true);
+
+        // Calendar header
+        Time time = new Time();
+        time.setToNow();
+        String dayOfWeek = DateUtils.getDayOfWeekString(time.weekDay + 1, DateUtils.LENGTH_MEDIUM)
+                .toUpperCase();
+        views.setTextViewText(R.id.day_of_week, dayOfWeek);
+        views.setTextViewText(R.id.day_of_month, Integer.toString(time.monthDay));
 
         // Clicking on widget launches the agenda view in Calendar
         PendingIntent pendingIntent = getLaunchPendingIntent(context, 0);
@@ -470,14 +795,15 @@ public class CalendarAppWidgetService extends Service implements Runnable {
                 launchIntent, PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
-    private class MarkedEvents {
+    static class MarkedEvents {
         long primaryTime = -1;
         int primaryRow = -1;
         int primaryConflictRow = -1;
-        int primaryCount = 0;
+        int primaryCount = 0; // Number of events with same start time as the primary evt.
+        boolean primaryAllDay = false;
         long secondaryTime = -1;
         int secondaryRow = -1;
-        int secondaryCount = 0;
+        int secondaryCount = 0; // Number of events with same start time as the secondary evt.
         boolean watchFound = false;
     }
 
@@ -492,7 +818,8 @@ public class CalendarAppWidgetService extends Service implements Runnable {
      * @param now Current system time to use for this update, possibly from
      *            {@link System#currentTimeMillis()}
      */
-    private MarkedEvents buildMarkedEvents(Cursor cursor, Set<Long> watchEventIds, long now) {
+    @VisibleForTesting
+    static MarkedEvents buildMarkedEvents(Cursor cursor, Set<Long> watchEventIds, long now) {
         MarkedEvents events = new MarkedEvents();
         final Time recycle = new Time();
 
@@ -503,6 +830,11 @@ public class CalendarAppWidgetService extends Service implements Runnable {
             long start = cursor.getLong(INDEX_BEGIN);
             long end = cursor.getLong(INDEX_END);
             boolean allDay = cursor.getInt(INDEX_ALL_DAY) != 0;
+
+            if (LOGD) {
+                Log.d(TAG, "Row #" + row + " allDay:" + allDay + " start:" + start + " end:" + end
+                        + " eventId:" + eventId);
+            }
 
             // Adjust all-day times into local timezone
             if (allDay) {
@@ -518,7 +850,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
             }
 
             // Mark if we've encountered the watched event
-            if (watchEventIds.contains(eventId)) {
+            if (watchEventIds != null && watchEventIds.contains(eventId)) {
                 events.watchFound = true;
             }
 
@@ -526,6 +858,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
                 // Found first event
                 events.primaryRow = row;
                 events.primaryTime = start;
+                events.primaryAllDay = allDay;
                 events.primaryCount = 1;
             } else if (events.primaryTime == start) {
                 // Found conflicting primary event
@@ -568,11 +901,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         Uri uri = Uri.withAppendedPath(Instances.CONTENT_URI,
                 String.format("%d/%d", now, end));
 
-        String selection = String.format("%s=1 AND %s!=%d",
-                Calendars.SELECTED, Instances.SELF_ATTENDEE_STATUS,
-                Attendees.ATTENDEE_STATUS_DECLINED);
-
-        return resolver.query(uri, EVENT_PROJECTION, selection, null,
+        return resolver.query(uri, EVENT_PROJECTION, EVENT_SELECTION, null,
                 EVENT_SORT_ORDER);
     }
 }

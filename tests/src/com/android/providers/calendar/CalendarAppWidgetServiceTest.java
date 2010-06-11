@@ -38,7 +38,7 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
     final String title = "Title";
     final String location = "Location";
 
-//    Disabled test since this CalendarAppWidgetModel is not used for the no event case
+//    TODO Disabled test since this CalendarAppWidgetModel is not used for the no event case
 //
 //    @SmallTest
 //    public void testGetAppWidgetModel_noEvents() throws Exception {
@@ -55,7 +55,7 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
 //        CalendarAppWidgetModel actual = CalendarAppWidgetService.getAppWidgetModel(
 //                getTestContext(), cursor, events, now);
 //
-//        assertEquals(expected, actual);
+//        assertEquals(expected.toString(), actual.toString());
 //    }
 
     @SmallTest
@@ -80,10 +80,10 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
 
         // Test
         MarkedEvents events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
-        CalendarAppWidgetModel actual = CalendarAppWidgetService.getAppWidgetModel(
+        CalendarAppWidgetModel actual = CalendarAppWidgetService.buildAppWidgetModel(
                 getTestContext(), cursor, events, now);
 
-        assertEquals(expected, actual);
+        assertEquals(expected.toString(), actual.toString());
     }
 
     @SmallTest
@@ -123,10 +123,10 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
 
         // Test
         MarkedEvents events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
-        CalendarAppWidgetModel actual = CalendarAppWidgetService.getAppWidgetModel(
+        CalendarAppWidgetModel actual = CalendarAppWidgetService.buildAppWidgetModel(
                 getTestContext(), cursor, events, now);
 
-        assertEquals(expected, actual);
+        assertEquals(expected.toString(), actual.toString());
 
         // Secondary test - Add two more afterwards
         cursor.addRow(getRow(0, sunday + ONE_HOUR, sunday + TWO_HOURS, title + i, location + i, 0));
@@ -135,9 +135,9 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
 
         // Test again
         events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
-        actual = CalendarAppWidgetService.getAppWidgetModel(getTestContext(), cursor, events, now);
+        actual = CalendarAppWidgetService.buildAppWidgetModel(getTestContext(), cursor, events, now);
 
-        assertEquals(expected, actual);
+        assertEquals(expected.toString(), actual.toString());
     }
 
     @SmallTest
@@ -178,10 +178,10 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
 
         // Test
         MarkedEvents events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
-        CalendarAppWidgetModel actual = CalendarAppWidgetService.getAppWidgetModel(
+        CalendarAppWidgetModel actual = CalendarAppWidgetService.buildAppWidgetModel(
                 getTestContext(), cursor, events, now);
 
-        assertEquals(expected, actual);
+        assertEquals(expected.toString(), actual.toString());
 
         // Secondary test - Add two more afterwards
         cursor.addRow(getRow(0, now + TWO_HOURS, now + TWO_HOURS + 1, title + i, location + i, 0));
@@ -190,9 +190,9 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
 
         // Test again
         events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
-        actual = CalendarAppWidgetService.getAppWidgetModel(getTestContext(), cursor, events, now);
+        actual = CalendarAppWidgetService.buildAppWidgetModel(getTestContext(), cursor, events, now);
 
-        assertEquals(expected, actual);
+        assertEquals(expected.toString(), actual.toString());
     }
 
     @SmallTest
@@ -230,10 +230,10 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
 
         // Test
         MarkedEvents events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
-        CalendarAppWidgetModel actual = CalendarAppWidgetService.getAppWidgetModel(
+        CalendarAppWidgetModel actual = CalendarAppWidgetService.buildAppWidgetModel(
                 getTestContext(), cursor, events, now);
 
-        assertEquals(expected, actual);
+        assertEquals(expected.toString(), actual.toString());
     }
 
     @SmallTest
@@ -272,10 +272,10 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
 
         // Test
         MarkedEvents events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
-        CalendarAppWidgetModel actual = CalendarAppWidgetService.getAppWidgetModel(
+        CalendarAppWidgetModel actual = CalendarAppWidgetService.buildAppWidgetModel(
                 getTestContext(), cursor, events, now);
 
-        assertEquals(expected, actual);
+        assertEquals(expected.toString(), actual.toString());
 
         // Secondary test - Add two more afterwards
         cursor.addRow(getRow(0, now + TWO_HOURS, now + TWO_HOURS + 1, title + i, location + i, 0));
@@ -284,9 +284,9 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
 
         // Test again
         events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
-        actual = CalendarAppWidgetService.getAppWidgetModel(getTestContext(), cursor, events, now);
+        actual = CalendarAppWidgetService.buildAppWidgetModel(getTestContext(), cursor, events, now);
 
-        assertEquals(expected, actual);
+        assertEquals(expected.toString(), actual.toString());
     }
 
     private Object[] getRow(int allDay, long begin, long end, String title, String location,

@@ -20,7 +20,7 @@
     <style name="TextAppearance" parent="android:TextAppearance">
     </style>
 
-    <style name="TextAppearance.widget_when">
+    <style name="TextAppearance.WidgetWhen">
         <item name="android:visibility">gone</item>
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
@@ -34,7 +34,7 @@
         <item name="android:singleLine">true</item>
     </style>
 
-    <style name="TextAppearance.widget_where">
+    <style name="TextAppearance.WidgetWhere">
         <item name="android:visibility">gone</item>
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
@@ -47,7 +47,7 @@
         <item name="android:singleLine">true</item>
     </style>
 
-    <style name="TextAppearance.widget_title">
+    <style name="TextAppearance.WidgetTitle">
         <item name="android:visibility">gone</item>
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
@@ -60,7 +60,7 @@
         <item name="android:maxLines">2</item>
     </style>
 
-    <style name="TextAppearance.widget_conflict">
+    <style name="TextAppearance.WidgetConflict">
         <item name="android:visibility">gone</item>
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

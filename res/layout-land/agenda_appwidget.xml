@@ -75,39 +75,43 @@
     <!-- Event #1 -->
     <TextView
         android:id="@+id/when1"
-        style="@style/TextAppearance.widget_when" />
+        style="@style/TextAppearance.WidgetWhen" />
 
     <TextView
         android:id="@+id/where1"
-        style="@style/TextAppearance.widget_where" />
+        style="@style/TextAppearance.WidgetWhere" />
 
     <TextView
         android:id="@+id/title1"
         android:layout_marginBottom="-3dip"
-        style="@style/TextAppearance.widget_title" />
+        style="@style/TextAppearance.WidgetTitle" />
 
     <!-- Conflict banner -->
     <TextView
         android:id="@+id/conflict_landscape"
-        style="@style/TextAppearance.widget_conflict" />
+        style="@style/TextAppearance.WidgetConflict" />
 
     <!-- These fields are not visible in landscape mode but required to avoid exceptions -->
     <TextView
         android:id="@+id/when2"
-        android:layout_width="0px"
-        android:layout_height="0px" />
+        android:visibility="gone"
+        android:layout_width="0dp"
+        android:layout_height="0dp" />
     <TextView
         android:id="@+id/where2"
-        android:layout_width="0px"
-        android:layout_height="0px" />
+        android:visibility="gone"
+        android:layout_width="0dp"
+        android:layout_height="0dp" />
     <TextView
         android:id="@+id/title2"
-        android:layout_width="0px"
-        android:layout_height="0px" />
+        android:visibility="gone"
+        android:layout_width="0dp"
+        android:layout_height="0dp" />
 
     <TextView
         android:id="@+id/conflict_portrait"
-        android:layout_width="0px"
-        android:layout_height="0px" />
+        android:visibility="gone"
+        android:layout_width="0dp"
+        android:layout_height="0dp" />
 
 </LinearLayout>

@@ -26,7 +26,6 @@ import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.res.Resources.NotFoundException;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.IBinder;
@@ -50,9 +49,11 @@ public class CalendarAppWidgetService extends Service implements Runnable {
     private static final String TAG = "CalendarAppWidgetService";
     private static final boolean LOGD = false;
 
-    private static final String EVENT_SORT_ORDER = "startDay ASC, startMinute ASC, endMinute ASC, "
-            + "calendar_id ASC" + " LIMIT 10";
+    private static final String EVENT_SORT_ORDER = Instances.START_DAY + " ASC, "
+            + Instances.START_MINUTE + " ASC, " + Instances.END_DAY + " ASC, "
+            + Instances.END_MINUTE + " ASC LIMIT 10";
 
+    // TODO can't use parameter here because provider is dropping them
     private static final String EVENT_SELECTION = Calendars.SELECTED + "=1 AND "
             + Instances.SELF_ATTENDEE_STATUS + "!=" + Attendees.ATTENDEE_STATUS_DECLINED;
 
@@ -74,6 +75,8 @@ public class CalendarAppWidgetService extends Service implements Runnable {
 
     private static final long SEARCH_DURATION = DateUtils.WEEK_IN_MILLIS;
 
+    // If no next-update calculated, or bad trigger time in past, schedule
+    // update about six hours from now.
     private static final long UPDATE_NO_EVENTS = DateUtils.HOUR_IN_MILLIS * 6;
 
     private static final String KEY_DETAIL_VIEW = "DETAIL_VIEW";
@@ -222,78 +225,6 @@ public class CalendarAppWidgetService extends Service implements Runnable {
             builder.append(dayOfWeek);
             builder.append("]");
             return builder.toString();
-        }
-
-        @Override
-        public int hashCode() {
-            final int prime = 31;
-            int result = 1;
-            result = prime * result
-                    + ((conflictLandscape == null) ? 0 : conflictLandscape.hashCode());
-            result = prime * result
-                    + ((conflictPortrait == null) ? 0 : conflictPortrait.hashCode());
-            result = prime * result + ((dayOfMonth == null) ? 0 : dayOfMonth.hashCode());
-            result = prime * result + ((dayOfWeek == null) ? 0 : dayOfWeek.hashCode());
-            result = prime * result + Arrays.hashCode(eventInfos);
-            result = prime * result + visibConflictLandscape;
-            result = prime * result + visibConflictPortrait;
-            result = prime * result + visibNoEvents;
-            return result;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
-            }
-            if (obj == null) {
-                return false;
-            }
-            if (getClass() != obj.getClass()) {
-                return false;
-            }
-            CalendarAppWidgetModel other = (CalendarAppWidgetModel) obj;
-            if (conflictLandscape == null) {
-                if (other.conflictLandscape != null) {
-                    return false;
-                }
-            } else if (!conflictLandscape.equals(other.conflictLandscape)) {
-                return false;
-            }
-            if (conflictPortrait == null) {
-                if (other.conflictPortrait != null) {
-                    return false;
-                }
-            } else if (!conflictPortrait.equals(other.conflictPortrait)) {
-                return false;
-            }
-            if (dayOfMonth == null) {
-                if (other.dayOfMonth != null) {
-                    return false;
-                }
-            } else if (!dayOfMonth.equals(other.dayOfMonth)) {
-                return false;
-            }
-            if (dayOfWeek == null) {
-                if (other.dayOfWeek != null) {
-                    return false;
-                }
-            } else if (!dayOfWeek.equals(other.dayOfWeek)) {
-                return false;
-            }
-            if (!Arrays.equals(eventInfos, other.eventInfos)) {
-                return false;
-            }
-            if (visibConflictLandscape != other.visibConflictLandscape) {
-                return false;
-            }
-            if (visibConflictPortrait != other.visibConflictPortrait) {
-                return false;
-            }
-            if (visibNoEvents != other.visibNoEvents) {
-                return false;
-            }
-            return true;
         }
     }
 
@@ -486,7 +417,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
 
             result = getEventFlip(cursor, start, end, allDay);
 
-            // Update at midnight
+            // Make sure an update happens at midnight or earlier
             long midnight = getNextMidnightTimeMillis();
             result = Math.min(midnight, result);
         }
@@ -549,7 +480,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         setNoEventsVisible(views, false);
 
         long currentTime = System.currentTimeMillis();
-        CalendarAppWidgetModel model = getAppWidgetModel(context, cursor, events, currentTime);
+        CalendarAppWidgetModel model = buildAppWidgetModel(context, cursor, events, currentTime);
 
         applyModelToView(model, views);
 
@@ -599,7 +530,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         }
     }
 
-    static CalendarAppWidgetModel getAppWidgetModel(Context context, Cursor cursor,
+    static CalendarAppWidgetModel buildAppWidgetModel(Context context, Cursor cursor,
             MarkedEvents events, long currentTime) {
         CalendarAppWidgetModel model = new CalendarAppWidgetModel();
         Time time = new Time();
@@ -627,7 +558,8 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         // Conflicts
         int conflictCountLandscape = events.primaryCount - 1;
         if (conflictCountLandscape > 0) {
-            model.conflictLandscape = getConflictString(context, conflictCountLandscape);
+            model.conflictLandscape = context.getResources().getQuantityString(
+                    R.plurals.gadget_more_events, conflictCountLandscape, conflictCountLandscape);
             model.visibConflictLandscape = View.VISIBLE;
         } else {
             model.visibConflictLandscape = View.GONE;
@@ -645,7 +577,8 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         }
 
         if (conflictCountPortrait != 0) {
-            model.conflictPortrait = getConflictString(context, conflictCountPortrait);
+            model.conflictPortrait = context.getResources().getQuantityString(
+                    R.plurals.gadget_more_events, conflictCountPortrait, conflictCountPortrait);
             model.visibConflictPortrait = View.VISIBLE;
         } else {
             model.visibConflictPortrait = View.GONE;
@@ -663,22 +596,6 @@ public class CalendarAppWidgetService extends Service implements Runnable {
             }
         }
         return model;
-    }
-
-    static private String getConflictString(Context context, int conflictCount) {
-        String conflictString;
-        try {
-            conflictString = context.getResources().getQuantityString(R.plurals.gadget_more_events,
-                    conflictCount, conflictCount);
-        } catch (NotFoundException e) {
-            // Mainly for testing
-            if (conflictCount == 1) {
-                conflictString = "1 more event";
-            } else {
-                conflictString = String.format("%d more events", conflictCount);
-            }
-        }
-        return conflictString;
     }
 
     static private void populateEvent(Context context, Cursor cursor, CalendarAppWidgetModel model,

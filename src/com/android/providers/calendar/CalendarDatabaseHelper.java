@@ -58,7 +58,7 @@ import java.net.URLDecoder;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    static final int DATABASE_VERSION = 69;
+    static final int DATABASE_VERSION = 70;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -229,7 +229,15 @@ import java.net.URLDecoder;
                 "location TEXT," +
                 "timezone TEXT," +
                 "ownerAccount TEXT, " +
-                "organizerCanRespond INTEGER NOT NULL DEFAULT 1" +
+                "organizerCanRespond INTEGER NOT NULL DEFAULT 1," +
+                "deleted INTEGER NOT NULL DEFAULT 0," +
+                "selfUrl TEXT," +
+                "editUrl TEXT," +
+                "eventsUrl TEXT" +
+                ");");
+
+        db.execSQL("CREATE INDEX calendarsUrlIndex ON Calendars ("
+                + Calendar.Calendars.URL +
                 ");");
 
         // Trigger to remove a calendar's events when we delete the calendar
@@ -528,9 +536,13 @@ import java.net.URLDecoder;
             if (recreateMetaDataAndInstances) {
                 recreateMetaDataAndInstances(db);
             }
-            if(oldVersion == 67 || oldVersion == 68) {
+            if (oldVersion == 67 || oldVersion == 68) {
                 upgradeToVersion69(db);
                 oldVersion = 69;
+            }
+            if (oldVersion == 69) {
+                upgradeToVersion70(db);
+                oldVersion += 1;
             }
         } catch (SQLiteException e) {
             Log.e(TAG, "onUpgrade: SQLiteException, recreating db. " + e);
@@ -562,6 +574,27 @@ import java.net.URLDecoder;
             return true;
         }
         return false;
+    }
+
+    @VisibleForTesting
+    void upgradeToVersion70(SQLiteDatabase db) {
+        // Add deleted column
+        db.execSQL("ALTER TABLE Calendars ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0;");
+
+        // Add selfUrl, editUrl and eventsUrl
+        // Population of the new columns will be done by the SyncAdapter itself
+        db.execSQL("ALTER TABLE Calendars ADD COLUMN selfUrl TEXT");
+        db.execSQL("ALTER TABLE Calendars ADD COLUMN editUrl TEXT");
+        db.execSQL("ALTER TABLE Calendars ADD COLUMN eventsUrl TEXT");
+
+        // Create index on Url column
+        db.execSQL("CREATE INDEX calendarsUrlIndex ON Calendars ("
+                + Calendar.Calendars.URL +
+                ");");
+
+        // Recreate the Events Views as column "deleted" is now ambiguous
+        // ("deleted" is now defined in both Calendars and Events tables)
+        createEventsView(db);
     }
 
     @VisibleForTesting
@@ -1112,11 +1145,11 @@ import java.net.URLDecoder;
                 + Calendar.Events.EVENT_TIMEZONE + ","
                 + Calendar.Events.ALL_DAY + ","
                 + Calendar.Events.VISIBILITY + ","
-                + Calendar.Events.TIMEZONE + ","
-                + Calendar.Events.SELECTED + ","
-                + Calendar.Events.ACCESS_LEVEL + ","
+                + Calendar.Calendars.TIMEZONE + ","
+                + Calendar.Calendars.SELECTED + ","
+                + Calendar.Calendars.ACCESS_LEVEL + ","
                 + Calendar.Events.TRANSPARENCY + ","
-                + Calendar.Events.COLOR + ","
+                + Calendar.Calendars.COLOR + ","
                 + Calendar.Events.HAS_ALARM + ","
                 + Calendar.Events.HAS_EXTENDED_PROPERTIES + ","
                 + Calendar.Events.RRULE + ","
@@ -1133,7 +1166,8 @@ import java.net.URLDecoder;
                 + Calendar.Events.GUESTS_CAN_MODIFY + ","
                 + Calendar.Events.GUESTS_CAN_SEE_GUESTS + ","
                 + Calendar.Events.ORGANIZER + ","
-                + Calendar.Events.DELETED + ","
+                + Tables.EVENTS + "." + Calendar.Events.DELETED
+                + " AS " + Calendar.EventsColumns.DELETED + ","
                 + Tables.EVENTS + "." + Calendar.Events._SYNC_ID
                 + " AS " + Calendar.Events._SYNC_ID + ","
                 + Tables.EVENTS + "." + Calendar.Events._SYNC_VERSION

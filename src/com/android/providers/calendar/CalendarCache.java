@@ -34,9 +34,9 @@ public class CalendarCache {
     public static final String KEY_TIMEZONE_DATABASE_VERSION = "timezoneDatabaseVersion";
     public static final String DEFAULT_TIMEZONE_DATABASE_VERSION = "2009s";
 
-    private static final String COLUMN_NAME_ID = "_id";
-    private static final String COLUMN_NAME_KEY = "key";
-    private static final String COLUMN_NAME_VALUE = "value";
+    public static final String COLUMN_NAME_ID = "_id";
+    public static final String COLUMN_NAME_KEY = "key";
+    public static final String COLUMN_NAME_VALUE = "value";
 
     private static final String[] sProjection = {
         COLUMN_NAME_KEY,

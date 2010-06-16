@@ -17,6 +17,8 @@
 
 package com.android.providers.calendar;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.accounts.OnAccountsUpdateListener;
@@ -55,7 +57,6 @@ import android.util.Config;
 import android.util.Log;
 import android.util.TimeFormatException;
 import android.util.TimeUtils;
-import com.google.common.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1133,6 +1134,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         // should not happen!
                         Log.e(TAG, "Found canceled recurring event in "
                                 + "Events table.  Ignoring.");
+                        continue;
+                    }
+                    if (deleted) {
+                        // Don't expand deleted recurring events
                         continue;
                     }
 
@@ -2433,14 +2438,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             if (cursor.moveToNext()) {
                 result = 1;
                 String syncId = cursor.getString(EVENTS_SYNC_ID_INDEX);
+                String rRule = cursor.getString(EVENTS_RRULE_INDEX);
+                boolean emptyRRule = TextUtils.isEmpty(rRule);
                 boolean emptySyncId = TextUtils.isEmpty(syncId);
-                if (!emptySyncId) {
-
-                    // TODO: we may also want to delete exception
-                    // events for this event (in case this was a
-                    // recurring event).  We can do that with the
-                    // following code:
-                    // mDb.delete("Events", "originalEvent=?", new String[] {syncId});
+                if (!emptySyncId && !emptyRRule) {
+                    // Delete exceptions to this event as well.
+                    mDb.delete("Events", "originalEvent=?", new String[] {syncId});
                 }
 
                 // If this was a recurring event or a recurrence

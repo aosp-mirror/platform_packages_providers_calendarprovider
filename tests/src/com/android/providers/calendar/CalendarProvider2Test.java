@@ -910,7 +910,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         m.put(Calendars.COLOR, "0xff123456");
         m.put(Calendars.TIMEZONE, timezone);
         m.put(Calendars.SELECTED, 1);
-        m.put(Calendars.URL, CALENDAR_URL);
+        m.put(Calendars.EVENTS_URL, CALENDAR_URL);
         m.put(Calendars.OWNER_ACCOUNT, account);
         m.put(Calendars._SYNC_ACCOUNT,  account);
         m.put(Calendars._SYNC_ACCOUNT_TYPE,  "com.google");
@@ -1233,7 +1233,7 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
             while (ei.hasNext()) {
                 Entity entity = ei.next();
                 ContentValues values = entity.getEntityValues();
-                assertEquals(CALENDAR_URL, values.getAsString(Calendars.URL));
+                assertEquals(CALENDAR_URL, values.getAsString(Calendars.EVENTS_URL));
                 ArrayList<Entity.NamedContentValues> subvalues = entity.getSubValues();
                 switch (values.getAsInteger("_id")) {
                     case 1:

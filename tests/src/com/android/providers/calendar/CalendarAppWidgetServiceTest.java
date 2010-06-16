@@ -33,8 +33,11 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
     private static final String TAG = "CalendarAppWidgetService";
 
     final long now = 1262340000000L; // Fri Jan 01 2010 02:00:00 GMT-0800 (PST)
-    final long ONE_HOUR = 3600000;
-    final long TWO_HOURS = 7200000;
+    final long ONE_MINUTE = 60000;
+    final long ONE_HOUR = 60 * ONE_MINUTE;
+    final long HALF_HOUR = ONE_HOUR / 2;
+    final long TWO_HOURS = ONE_HOUR * 2;
+
     final String title = "Title";
     final String location = "Location";
 
@@ -60,8 +63,9 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
 
     @SmallTest
     public void testGetAppWidgetModel_1Event() throws Exception {
-        MatrixCursor cursor = new MatrixCursor(CalendarAppWidgetService.EVENT_PROJECTION, 0);
         CalendarAppWidgetModel expected = new CalendarAppWidgetModel();
+        MatrixCursor cursor = new MatrixCursor(CalendarAppWidgetService.EVENT_PROJECTION, 0);
+
 
         // Input
         // allDay, begin, end, title, location, eventId
@@ -81,15 +85,15 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
         // Test
         MarkedEvents events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
         CalendarAppWidgetModel actual = CalendarAppWidgetService.buildAppWidgetModel(
-                getTestContext(), cursor, events, now);
+                getContext(), cursor, events, now);
 
         assertEquals(expected.toString(), actual.toString());
     }
 
     @SmallTest
     public void testGetAppWidgetModel_2StaggeredEvents() throws Exception {
-        MatrixCursor cursor = new MatrixCursor(CalendarAppWidgetService.EVENT_PROJECTION, 0);
         CalendarAppWidgetModel expected = new CalendarAppWidgetModel();
+        MatrixCursor cursor = new MatrixCursor(CalendarAppWidgetService.EVENT_PROJECTION, 0);
 
         int i = 0;
         long tomorrow = now + DateUtils.DAY_IN_MILLIS;
@@ -124,7 +128,7 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
         // Test
         MarkedEvents events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
         CalendarAppWidgetModel actual = CalendarAppWidgetService.buildAppWidgetModel(
-                getTestContext(), cursor, events, now);
+                getContext(), cursor, events, now);
 
         assertEquals(expected.toString(), actual.toString());
 
@@ -135,15 +139,15 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
 
         // Test again
         events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
-        actual = CalendarAppWidgetService.buildAppWidgetModel(getTestContext(), cursor, events, now);
+        actual = CalendarAppWidgetService.buildAppWidgetModel(getContext(), cursor, events, now);
 
         assertEquals(expected.toString(), actual.toString());
     }
 
     @SmallTest
     public void testGetAppWidgetModel_2SameStartTimeEvents() throws Exception {
-        MatrixCursor cursor = new MatrixCursor(CalendarAppWidgetService.EVENT_PROJECTION, 0);
         CalendarAppWidgetModel expected = new CalendarAppWidgetModel();
+        MatrixCursor cursor = new MatrixCursor(CalendarAppWidgetService.EVENT_PROJECTION, 0);
 
         int i = 0;
         // Expected Output
@@ -164,9 +168,6 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
         expected.eventInfos[1].where = location + i;
         expected.eventInfos[1].title = title + i;
 
-        expected.conflictPortrait = null;
-        expected.conflictLandscape = "1 more event";
-        expected.visibConflictLandscape = View.VISIBLE;
 
         // Input
         // allDay, begin, end, title, location, eventId
@@ -179,7 +180,7 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
         // Test
         MarkedEvents events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
         CalendarAppWidgetModel actual = CalendarAppWidgetService.buildAppWidgetModel(
-                getTestContext(), cursor, events, now);
+                getContext(), cursor, events, now);
 
         assertEquals(expected.toString(), actual.toString());
 
@@ -190,15 +191,15 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
 
         // Test again
         events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
-        actual = CalendarAppWidgetService.buildAppWidgetModel(getTestContext(), cursor, events, now);
+        actual = CalendarAppWidgetService.buildAppWidgetModel(getContext(), cursor, events, now);
 
         assertEquals(expected.toString(), actual.toString());
     }
 
     @SmallTest
     public void testGetAppWidgetModel_1EventThen2SameStartTimeEvents() throws Exception {
+        CalendarAppWidgetModel expected = new CalendarAppWidgetModel(3);
         MatrixCursor cursor = new MatrixCursor(CalendarAppWidgetService.EVENT_PROJECTION, 0);
-        CalendarAppWidgetModel expected = new CalendarAppWidgetModel();
 
         // Input
         int i = 0;
@@ -214,24 +215,31 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
         expected.dayOfWeek = "FRI";
         i = 0;
         expected.visibNoEvents = View.GONE;
-        expected.eventInfos[0].visibWhen = View.VISIBLE;
-        expected.eventInfos[0].visibWhere = View.VISIBLE;
-        expected.eventInfos[0].visibTitle = View.VISIBLE;
-        expected.eventInfos[0].when = "2am";
-        expected.eventInfos[0].where = location + i;
-        expected.eventInfos[0].title = title + i;
-
-        expected.eventInfos[1].visibWhen = View.VISIBLE;
-        expected.eventInfos[1].when = "3am";
-
-        expected.visibConflictPortrait = View.VISIBLE;
-        expected.conflictPortrait = "2 more events";
-        expected.conflictLandscape = null;
+        expected.eventInfos[i].visibWhen = View.VISIBLE;
+        expected.eventInfos[i].visibWhere = View.VISIBLE;
+        expected.eventInfos[i].visibTitle = View.VISIBLE;
+        expected.eventInfos[i].when = "2am (in progress)";
+        expected.eventInfos[i].where = location + i;
+        expected.eventInfos[i].title = title + i;
+        i++;
+        expected.eventInfos[i].visibWhen = View.VISIBLE;
+        expected.eventInfos[i].visibWhere = View.VISIBLE;
+        expected.eventInfos[i].visibTitle = View.VISIBLE;
+        expected.eventInfos[i].when = "3am";
+        expected.eventInfos[i].where = location + i;
+        expected.eventInfos[i].title = title + i;
+        i++;
+        expected.eventInfos[i].visibWhen = View.VISIBLE;
+        expected.eventInfos[i].visibWhere = View.VISIBLE;
+        expected.eventInfos[i].visibTitle = View.VISIBLE;
+        expected.eventInfos[i].when = "3am";
+        expected.eventInfos[i].where = location + i;
+        expected.eventInfos[i].title = title + i;
 
         // Test
         MarkedEvents events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
         CalendarAppWidgetModel actual = CalendarAppWidgetService.buildAppWidgetModel(
-                getTestContext(), cursor, events, now);
+                getContext(), cursor, events, now);
 
         assertEquals(expected.toString(), actual.toString());
     }
@@ -239,8 +247,8 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
     @SmallTest
     public void testGetAppWidgetModel_3SameStartTimeEvents() throws Exception {
         final long now = 1262340000000L; // Fri Jan 01 2010 01:00:00 GMT-0700 (PDT)
+        CalendarAppWidgetModel expected = new CalendarAppWidgetModel(3);
         MatrixCursor cursor = new MatrixCursor(CalendarAppWidgetService.EVENT_PROJECTION, 0);
-        CalendarAppWidgetModel expected = new CalendarAppWidgetModel();
 
         int i = 0;
 
@@ -248,17 +256,29 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
         expected.dayOfMonth = "1";
         expected.dayOfWeek = "FRI";
         expected.visibNoEvents = View.GONE;
-        expected.eventInfos[0].visibWhen = View.VISIBLE;
-        expected.eventInfos[0].visibWhere = View.VISIBLE;
-        expected.eventInfos[0].visibTitle = View.VISIBLE;
-        expected.eventInfos[0].when = "3am";
-        expected.eventInfos[0].where = location + i;
-        expected.eventInfos[0].title = title + i;
+        expected.eventInfos[i].visibWhen = View.VISIBLE;
+        expected.eventInfos[i].visibWhere = View.VISIBLE;
+        expected.eventInfos[i].visibTitle = View.VISIBLE;
+        expected.eventInfos[i].when = "3am";
+        expected.eventInfos[i].where = location + i;
+        expected.eventInfos[i].title = title + i;
 
-        expected.visibConflictPortrait = View.VISIBLE;
-        expected.visibConflictLandscape = View.VISIBLE;
-        expected.conflictPortrait = "2 more events";
-        expected.conflictLandscape = "2 more events";
+        i++;
+        expected.eventInfos[i].visibWhen = View.VISIBLE;
+        expected.eventInfos[i].visibWhere = View.VISIBLE;
+        expected.eventInfos[i].visibTitle = View.VISIBLE;
+        expected.eventInfos[i].when = "3am";
+        expected.eventInfos[i].where = location + i;
+        expected.eventInfos[i].title = title + i;
+
+        i++;
+        expected.eventInfos[i].visibWhen = View.VISIBLE;
+        expected.eventInfos[i].visibWhere = View.VISIBLE;
+        expected.eventInfos[i].visibTitle = View.VISIBLE;
+        expected.eventInfos[i].when = "3am";
+        expected.eventInfos[i].where = location + i;
+        expected.eventInfos[i].title = title + i;
+
 
         // Input
         // allDay, begin, end, title, location, eventId
@@ -273,18 +293,201 @@ public class CalendarAppWidgetServiceTest extends AndroidTestCase {
         // Test
         MarkedEvents events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
         CalendarAppWidgetModel actual = CalendarAppWidgetService.buildAppWidgetModel(
-                getTestContext(), cursor, events, now);
+                getContext(), cursor, events, now);
 
         assertEquals(expected.toString(), actual.toString());
 
-        // Secondary test - Add two more afterwards
-        cursor.addRow(getRow(0, now + TWO_HOURS, now + TWO_HOURS + 1, title + i, location + i, 0));
-        ++i;
+        // Secondary test - Add one more afterwards
         cursor.addRow(getRow(0, now + TWO_HOURS, now + TWO_HOURS + 1, title + i, location + i, 0));
 
-        // Test again
+        // Test again, nothing should have changed, same expected result
         events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
-        actual = CalendarAppWidgetService.buildAppWidgetModel(getTestContext(), cursor, events, now);
+        actual = CalendarAppWidgetService.buildAppWidgetModel(getContext(), cursor, events, now);
+
+        assertEquals(expected.toString(), actual.toString());
+    }
+
+    @SmallTest
+    public void testGetAppWidgetModel_2InProgress2After() throws Exception {
+        final long now = 1262340000000L + HALF_HOUR; // Fri Jan 01 2010 01:30:00 GMT-0700 (PDT)
+        CalendarAppWidgetModel expected = new CalendarAppWidgetModel(4);
+        MatrixCursor cursor = new MatrixCursor(CalendarAppWidgetService.EVENT_PROJECTION, 0);
+
+        int i = 0;
+
+        // Expected Output
+        expected.dayOfMonth = "1";
+        expected.dayOfWeek = "FRI";
+        expected.visibNoEvents = View.GONE;
+        expected.eventInfos[i].visibWhen = View.VISIBLE;
+        expected.eventInfos[i].visibWhere = View.VISIBLE;
+        expected.eventInfos[i].visibTitle = View.VISIBLE;
+        expected.eventInfos[i].when = "2am (in progress)";
+        expected.eventInfos[i].where = location + i;
+        expected.eventInfos[i].title = title + i;
+
+        i++;
+        expected.eventInfos[i].visibWhen = View.VISIBLE;
+        expected.eventInfos[i].visibWhere = View.VISIBLE;
+        expected.eventInfos[i].visibTitle = View.VISIBLE;
+        expected.eventInfos[i].when = "2am (in progress)";
+        expected.eventInfos[i].where = location + i;
+        expected.eventInfos[i].title = title + i;
+
+        i++;
+        expected.eventInfos[i].visibWhen = View.VISIBLE;
+        expected.eventInfos[i].visibWhere = View.VISIBLE;
+        expected.eventInfos[i].visibTitle = View.VISIBLE;
+        expected.eventInfos[i].when = "4:30am";
+        expected.eventInfos[i].where = location + i;
+        expected.eventInfos[i].title = title + i;
+
+        i++;
+        expected.eventInfos[i].visibWhen = View.VISIBLE;
+        expected.eventInfos[i].visibWhere = View.VISIBLE;
+        expected.eventInfos[i].visibTitle = View.VISIBLE;
+        expected.eventInfos[i].when = "4:30am";
+        expected.eventInfos[i].where = location + i;
+        expected.eventInfos[i].title = title + i;
+
+
+        // Input
+        // allDay, begin, end, title, location, eventId
+        i = 0;
+        cursor.addRow(getRow(0, now - HALF_HOUR, now + HALF_HOUR, title + i, location + i, 0));
+        ++i;
+        cursor.addRow(getRow(0, now - HALF_HOUR, now + HALF_HOUR, title + i, location + i, 0));
+        ++i;
+        cursor.addRow(getRow(0, now + TWO_HOURS, now + 3 * ONE_HOUR, title + i, location + i, 0));
+        ++i;
+        cursor.addRow(getRow(0, now + TWO_HOURS, now + 4 * ONE_HOUR, title + i, location + i, 0));
+
+        // Test
+        MarkedEvents events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
+        CalendarAppWidgetModel actual = CalendarAppWidgetService.buildAppWidgetModel(
+                getContext(), cursor, events, now);
+
+        assertEquals(expected.toString(), actual.toString());
+    }
+
+    @SmallTest
+    public void testGetAppWidgetModel_AllDayEventToday() throws Exception {
+        final long now = 1262340000000L; // Fri Jan 01 2010 01:00:00 GMT-0700 (PDT)
+        CalendarAppWidgetModel expected = new CalendarAppWidgetModel(2);
+        MatrixCursor cursor = new MatrixCursor(CalendarAppWidgetService.EVENT_PROJECTION, 0);
+
+        int i = 0;
+
+        // Expected Output
+        expected.dayOfMonth = "1";
+        expected.dayOfWeek = "FRI";
+        expected.visibNoEvents = View.GONE;
+        expected.eventInfos[i].visibWhen = View.VISIBLE;
+        expected.eventInfos[i].visibWhere = View.VISIBLE;
+        expected.eventInfos[i].visibTitle = View.VISIBLE;
+        expected.eventInfos[i].when = "Today";
+        expected.eventInfos[i].where = location + i;
+        expected.eventInfos[i].title = title + i;
+
+        i++;
+        expected.eventInfos[i].visibWhen = View.VISIBLE;
+        expected.eventInfos[i].visibWhere = View.VISIBLE;
+        expected.eventInfos[i].visibTitle = View.VISIBLE;
+        expected.eventInfos[i].when = "3am";
+        expected.eventInfos[i].where = location + i;
+        expected.eventInfos[i].title = title + i;
+
+        i = 0;
+        cursor.addRow(getRow(1, 1262304000000L, 1262390400000L, title + i, location + i, 0));
+        ++i;
+        cursor.addRow(getRow(0, now + ONE_HOUR, now + TWO_HOURS, title + i, location + i, 0));
+
+        // Test
+        MarkedEvents events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
+        CalendarAppWidgetModel actual = CalendarAppWidgetService.buildAppWidgetModel(
+                getContext(), cursor, events, now);
+
+        assertEquals(expected.toString(), actual.toString());
+    }
+
+    @SmallTest
+    public void testGetAppWidgetModel_AllDayEventTomorrow() throws Exception {
+        final long now = 1262340000000L; // Fri Jan 01 2010 01:00:00 GMT-0700 (PDT)
+        CalendarAppWidgetModel expected = new CalendarAppWidgetModel(2);
+        MatrixCursor cursor = new MatrixCursor(CalendarAppWidgetService.EVENT_PROJECTION, 0);
+
+        int i = 0;
+
+        // Expected Output
+        expected.dayOfMonth = "1";
+        expected.dayOfWeek = "FRI";
+        expected.visibNoEvents = View.GONE;
+
+        expected.eventInfos[i].visibWhen = View.VISIBLE;
+        expected.eventInfos[i].visibWhere = View.VISIBLE;
+        expected.eventInfos[i].visibTitle = View.VISIBLE;
+        expected.eventInfos[i].when = "3am";
+        expected.eventInfos[i].where = location + i;
+        expected.eventInfos[i].title = title + i;
+
+        i++;
+        expected.eventInfos[i].visibWhen = View.VISIBLE;
+        expected.eventInfos[i].visibWhere = View.VISIBLE;
+        expected.eventInfos[i].visibTitle = View.VISIBLE;
+        expected.eventInfos[i].when = "Tomorrow";
+        expected.eventInfos[i].where = location + i;
+        expected.eventInfos[i].title = title + i;
+
+        i = 0;
+        cursor.addRow(getRow(0, now + ONE_HOUR, now + TWO_HOURS, title + i, location + i, 0));
+        ++i;
+        cursor.addRow(getRow(1, 1262390400000L, 1262476800000L, title + i, location + i, 0));
+
+        // Test
+        MarkedEvents events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
+        CalendarAppWidgetModel actual = CalendarAppWidgetService.buildAppWidgetModel(
+                getContext(), cursor, events, now);
+
+        assertEquals(expected.toString(), actual.toString());
+    }
+
+    @SmallTest
+    public void testGetAppWidgetModel_AllDayEventLater() throws Exception {
+        final long now = 1262340000000L; // Fri Jan 01 2010 01:00:00 GMT-0700 (PDT)
+        CalendarAppWidgetModel expected = new CalendarAppWidgetModel(2);
+        MatrixCursor cursor = new MatrixCursor(CalendarAppWidgetService.EVENT_PROJECTION, 0);
+
+        int i = 0;
+
+        // Expected Output
+        expected.dayOfMonth = "1";
+        expected.dayOfWeek = "FRI";
+        expected.visibNoEvents = View.GONE;
+
+        expected.eventInfos[i].visibWhen = View.VISIBLE;
+        expected.eventInfos[i].visibWhere = View.VISIBLE;
+        expected.eventInfos[i].visibTitle = View.VISIBLE;
+        expected.eventInfos[i].when = "3am";
+        expected.eventInfos[i].where = location + i;
+        expected.eventInfos[i].title = title + i;
+
+        i++;
+        expected.eventInfos[i].visibWhen = View.VISIBLE;
+        expected.eventInfos[i].visibWhere = View.VISIBLE;
+        expected.eventInfos[i].visibTitle = View.VISIBLE;
+        expected.eventInfos[i].when = "Sun";
+        expected.eventInfos[i].where = location + i;
+        expected.eventInfos[i].title = title + i;
+
+        i = 0;
+        cursor.addRow(getRow(0, now + ONE_HOUR, now + TWO_HOURS, title + i, location + i, 0));
+        ++i;
+        cursor.addRow(getRow(1, 1262476800000L, 1262563200000L, title + i, location + i, 0));
+
+        // Test
+        MarkedEvents events = CalendarAppWidgetService.buildMarkedEvents(cursor, null, now);
+        CalendarAppWidgetModel actual = CalendarAppWidgetService.buildAppWidgetModel(
+                getContext(), cursor, events, now);
 
         assertEquals(expected.toString(), actual.toString());
     }

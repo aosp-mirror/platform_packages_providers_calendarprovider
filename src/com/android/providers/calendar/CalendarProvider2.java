@@ -1607,6 +1607,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     mDbHelper.scheduleSync(account, false /* two-way sync */, calendarUrl);
                 }
                 id = mDbHelper.calendarsInsert(values);
+                triggerAppWidgetUpdate(id);
                 break;
             case ATTENDEES:
                 if (!values.containsKey(Attendees.EVENT_ID)) {
@@ -2604,6 +2605,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 int result = mDb.update("Calendars", values, "_id=?",
                         new String[] {String.valueOf(id)});
 
+                if (result > 0) {
+                    // update the widget
+                    triggerAppWidgetUpdate(-1 /* changedEventId */);
+                }
+
                 return result;
             }
             case EVENTS:
@@ -2682,9 +2688,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                             Log.d(TAG, "updateInternal() changing event");
                         }
                         scheduleNextAlarm(false /* do not remove alarms */);
-                        triggerAppWidgetUpdate(id);
                     }
+
+                    triggerAppWidgetUpdate(id);
                 }
+
                 return result;
             }
             case ATTENDEES_ID: {
@@ -3431,6 +3439,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         } finally {
             mDb.endTransaction();
         }
+
+        // make sure the widget reflects the account changes
+        triggerAppWidgetUpdate(-1 /* changedEventId */);
     }
 
     /* package */ static boolean readBooleanQueryParameter(Uri uri, String name,

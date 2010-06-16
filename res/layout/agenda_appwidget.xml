@@ -59,6 +59,25 @@
             android:singleLine="true" />
     </LinearLayout>
 
+    <!-- Container to show only a single page -->
+    <FrameLayout
+        android:id="@+id/single_page"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+    </FrameLayout>
+
+    <!-- Flipper for event pages -->
+    <ViewFlipper
+        android:id="@+id/page_flipper"
+        android:autoStart="true"
+        android:flipInterval="@integer/flip_interval"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:inAnimation="@anim/slide_in"
+        android:outAnimation="@anim/slide_out"
+        android:animateFirstView="false">
+    </ViewFlipper>
+
     <!-- No Event -->
     <TextView
         android:id="@+id/no_events"
@@ -72,43 +91,6 @@
         android:textColor="@color/appwidget_no_events"
         android:text="@string/gadget_no_events" />
 
-    <!-- Event #1 -->
-    <TextView
-        android:id="@+id/when1"
-        style="@style/TextAppearance.WidgetWhen" />
 
-    <TextView
-        android:id="@+id/where1"
-        style="@style/TextAppearance.WidgetWhere" />
 
-    <TextView
-        android:id="@+id/title1"
-        android:layout_marginBottom="6dip"
-        style="@style/TextAppearance.WidgetTitle" />
-
-    <!-- Event #2 -->
-    <TextView
-        android:id="@+id/when2"
-        style="@style/TextAppearance.WidgetWhen" />
-
-    <TextView
-        android:id="@+id/where2"
-        style="@style/TextAppearance.WidgetWhere" />
-
-    <TextView
-        android:id="@+id/title2"
-        android:layout_marginBottom="6dip"
-        style="@style/TextAppearance.WidgetTitle" />
-
-    <!-- Conflict banner -->
-    <TextView
-        android:id="@+id/conflict_portrait"
-        android:textStyle="bold"
-        style="@style/TextAppearance.WidgetConflict" />
-
-    <TextView
-        android:id="@+id/conflict_landscape"
-        android:visibility="gone"
-        android:layout_width="0dp"
-        android:layout_height="0dp" />
 </LinearLayout>

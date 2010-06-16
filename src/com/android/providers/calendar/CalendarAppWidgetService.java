@@ -18,6 +18,8 @@ package com.android.providers.calendar;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import com.android.providers.calendar.CalendarAppWidgetService.CalendarAppWidgetModel.EventInfo;
+
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.app.Service;
@@ -40,7 +42,9 @@ import android.util.Log;
 import android.view.View;
 import android.widget.RemoteViews;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
 import java.util.TimeZone;
 
@@ -49,6 +53,10 @@ public class CalendarAppWidgetService extends Service implements Runnable {
     private static final String TAG = "CalendarAppWidgetService";
     private static final boolean LOGD = false;
 
+    /* TODO query doesn't handle all-day events properly, we should fix this in
+     * the provider in a manner similar to how it is handled in Event.loadEvents
+     * in the Calendar application.
+     */
     private static final String EVENT_SORT_ORDER = Instances.START_DAY + " ASC, "
             + Instances.START_MINUTE + " ASC, " + Instances.END_DAY + " ASC, "
             + Instances.END_MINUTE + " ASC LIMIT 10";
@@ -92,19 +100,17 @@ public class CalendarAppWidgetService extends Service implements Runnable {
 
         EventInfo[] eventInfos;
 
-        int visibConflictPortrait; // Visibility value for conflictPortrait textview
-        String conflictPortrait;
-        int visibConflictLandscape; // Visibility value for conflictLandscape textview
-        String conflictLandscape;
-
         public CalendarAppWidgetModel() {
-            eventInfos = new EventInfo[2];
-            eventInfos[0] = new EventInfo();
-            eventInfos[1] = new EventInfo();
+            this(2);
+        }
 
+        public CalendarAppWidgetModel(int size) {
+            // we round up to the nearest even integer
+            eventInfos = new EventInfo[2 * ((size + 1) / 2)];
+            for (int i = 0; i < eventInfos.length; i++) {
+                eventInfos[i] = new EventInfo();
+            }
             visibNoEvents = View.GONE;
-            visibConflictPortrait = View.GONE;
-            visibConflictLandscape = View.GONE;
         }
 
         class EventInfo {
@@ -209,14 +215,6 @@ public class CalendarAppWidgetService extends Service implements Runnable {
             StringBuilder builder = new StringBuilder();
             builder.append("\nCalendarAppWidgetModel [eventInfos=");
             builder.append(Arrays.toString(eventInfos));
-            builder.append(", visibConflictLandscape=");
-            builder.append(visibConflictLandscape);
-            builder.append(", conflictLandscape=");
-            builder.append(conflictLandscape);
-            builder.append(", visibConflictPortrait=");
-            builder.append(visibConflictPortrait);
-            builder.append(", conflictPortrait=");
-            builder.append(conflictPortrait);
             builder.append(", visibNoEvents=");
             builder.append(visibNoEvents);
             builder.append(", dayOfMonth=");
@@ -307,7 +305,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
                     shouldUpdate = events.watchFound;
                 }
 
-                if (events.primaryCount == 0) {
+                if (events.markedIds.isEmpty()) {
                     views = getAppWidgetNoEvents(context);
                 } else if (shouldUpdate) {
                     views = getAppWidgetUpdate(context, cursor, events);
@@ -402,8 +400,8 @@ public class CalendarAppWidgetService extends Service implements Runnable {
      */
     private long calculateUpdateTime(Cursor cursor, MarkedEvents events) {
         long result = -1;
-        if (events.primaryRow != -1) {
-            cursor.moveToPosition(events.primaryRow);
+        if (!events.markedIds.isEmpty()) {
+            cursor.moveToPosition(events.markedIds.get(0));
             long start = cursor.getLong(INDEX_BEGIN);
             long end = cursor.getLong(INDEX_END);
             boolean allDay = cursor.getInt(INDEX_ALL_DAY) != 0;
@@ -437,15 +435,14 @@ public class CalendarAppWidgetService extends Service implements Runnable {
 
     /**
      * Calculate flipping point for the given event; when we should hide this
-     * event and show the next one. This is 15 minutes into the event or half
-     * way into the event whichever is earlier.
+     * event and show the next one. This is defined as the end time of the
+     * event.
      *
      * @param start Event start time in local timezone.
      * @param end Event end time in local timezone.
      */
     static private long getEventFlip(Cursor cursor, long start, long end, boolean allDay) {
-        long duration = end - start;
-        return start + Math.min(DateUtils.MINUTE_IN_MILLIS * 15, duration / 2);
+        return end;
     }
 
     /**
@@ -457,15 +454,8 @@ public class CalendarAppWidgetService extends Service implements Runnable {
      */
     private void setNoEventsVisible(RemoteViews views, boolean noEvents) {
         views.setViewVisibility(R.id.no_events, noEvents ? View.VISIBLE : View.GONE);
-
-        views.setViewVisibility(R.id.when1, View.GONE);
-        views.setViewVisibility(R.id.where1, View.GONE);
-        views.setViewVisibility(R.id.title1, View.GONE);
-        views.setViewVisibility(R.id.when2, View.GONE);
-        views.setViewVisibility(R.id.where2, View.GONE);
-        views.setViewVisibility(R.id.title2, View.GONE);
-        views.setViewVisibility(R.id.conflict_landscape, View.GONE);
-        views.setViewVisibility(R.id.conflict_portrait, View.GONE);
+        views.setViewVisibility(R.id.page_flipper, View.GONE);
+        views.setViewVisibility(R.id.single_page, View.GONE);
     }
 
     /**
@@ -482,15 +472,10 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         long currentTime = System.currentTimeMillis();
         CalendarAppWidgetModel model = buildAppWidgetModel(context, cursor, events, currentTime);
 
-        applyModelToView(model, views);
+        applyModelToView(context, model, views);
 
         // Clicking on the widget launches Calendar
-        long startTime;
-        if (events.primaryAllDay) {
-            startTime = currentTime;
-        } else {
-            startTime = events.primaryTime;
-        }
+        long startTime = Math.max(currentTime, events.firstTime);
 
         PendingIntent pendingIntent = getLaunchPendingIntent(context, startTime);
         views.setOnClickPendingIntent(R.id.agenda_appwidget, pendingIntent);
@@ -498,29 +483,62 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         return views;
     }
 
-    private void applyModelToView(CalendarAppWidgetModel model, RemoteViews views) {
+    private void applyModelToView(Context context, CalendarAppWidgetModel model, RemoteViews views) {
         views.setTextViewText(R.id.day_of_week, model.dayOfWeek);
         views.setTextViewText(R.id.day_of_month, model.dayOfMonth);
         views.setViewVisibility(R.id.no_events, model.visibNoEvents);
-        if (model.visibNoEvents == View.GONE) {
-            updateTextView(views, R.id.when1, model.eventInfos[0].visibWhen,
-                    model.eventInfos[0].when);
-            updateTextView(views, R.id.where1, model.eventInfos[0].visibWhere,
-                    model.eventInfos[0].where);
-            updateTextView(views, R.id.title1, model.eventInfos[0].visibTitle,
-                    model.eventInfos[0].title);
-            updateTextView(views, R.id.when2, model.eventInfos[1].visibWhen,
-                    model.eventInfos[1].when);
-            updateTextView(views, R.id.where2, model.eventInfos[1].visibWhere,
-                    model.eventInfos[1].where);
-            updateTextView(views, R.id.title2, model.eventInfos[1].visibTitle,
-                    model.eventInfos[1].title);
 
-            updateTextView(views, R.id.conflict_portrait, model.visibConflictPortrait,
-                    model.conflictPortrait);
-            updateTextView(views, R.id.conflict_landscape, model.visibConflictLandscape,
-                    model.conflictLandscape);
+        // Make sure we have a clean slate first
+        views.removeAllViews(R.id.page_flipper);
+        views.removeAllViews(R.id.single_page);
+
+        // If we don't have any events, just hide the relevant views and return
+        if (model.visibNoEvents != View.GONE) {
+            views.setViewVisibility(R.id.page_flipper, View.GONE);
+            views.setViewVisibility(R.id.single_page, View.GONE);
+            return;
         }
+
+        // Luckily, length of this array is guaranteed to be even
+        int pages = model.eventInfos.length / 2;
+
+        // We use a separate container for the case of only one page to prevent
+        // a ViewFlipper from repeatedly animating one view
+        if (pages > 1) {
+            views.setViewVisibility(R.id.page_flipper, View.VISIBLE);
+            views.setViewVisibility(R.id.single_page, View.GONE);
+        } else {
+            views.setViewVisibility(R.id.single_page, View.VISIBLE);
+            views.setViewVisibility(R.id.page_flipper, View.GONE);
+        }
+
+        // Iterate two at a time through the events and populate the views
+        for (int i = 0; i < model.eventInfos.length; i += 2) {
+            RemoteViews pageViews = new RemoteViews(context.getPackageName(),
+                    R.layout.page_appwidget);
+            EventInfo e1 = model.eventInfos[i];
+            EventInfo e2 = model.eventInfos[i + 1];
+
+            updateTextView(pageViews, R.id.when1, e1.visibWhen, e1.when);
+            updateTextView(pageViews, R.id.where1, e1.visibWhere, e1.where);
+            updateTextView(pageViews, R.id.title1, e1.visibTitle, e1.title);
+            updateTextView(pageViews, R.id.when2, e2.visibWhen, e2.when);
+            updateTextView(pageViews, R.id.where2, e2.visibWhere, e2.where);
+            updateTextView(pageViews, R.id.title2, e2.visibTitle, e2.title);
+
+            if (pages > 1) {
+                views.addView(R.id.page_flipper, pageViews);
+                updateTextView(pageViews, R.id.page_count, View.VISIBLE,
+                        makePageCount((i / 2) + 1, pages));
+            } else {
+                views.addView(R.id.single_page, pageViews);
+            }
+        }
+
+    }
+
+    static String makePageCount(int current, int total) {
+        return Integer.toString(current) + " / " + Integer.toString(total);
     }
 
     static void updateTextView(RemoteViews views, int id, int visibility, String string) {
@@ -532,7 +550,8 @@ public class CalendarAppWidgetService extends Service implements Runnable {
 
     static CalendarAppWidgetModel buildAppWidgetModel(Context context, Cursor cursor,
             MarkedEvents events, long currentTime) {
-        CalendarAppWidgetModel model = new CalendarAppWidgetModel();
+        int eventCount = events.markedIds.size();
+        CalendarAppWidgetModel model = new CalendarAppWidgetModel(eventCount);
         Time time = new Time();
         time.set(currentTime);
         time.monthDay++;
@@ -550,99 +569,81 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         model.dayOfWeek = dayOfWeek;
         model.dayOfMonth = Integer.toString(time.monthDay);
 
-        // Fill primary event details
-        cursor.moveToPosition(events.primaryRow);
-        boolean allDay = cursor.getInt(INDEX_ALL_DAY) != 0;
-        populateEvent(context, cursor, model, time, 0, true, startOfNextDay);
-
-        // Conflicts
-        int conflictCountLandscape = events.primaryCount - 1;
-        if (conflictCountLandscape > 0) {
-            model.conflictLandscape = context.getResources().getQuantityString(
-                    R.plurals.gadget_more_events, conflictCountLandscape, conflictCountLandscape);
-            model.visibConflictLandscape = View.VISIBLE;
-        } else {
-            model.visibConflictLandscape = View.GONE;
+        int i = 0;
+        for (Integer id : events.markedIds) {
+            populateEvent(context, cursor, id, model, time, i, true, startOfNextDay, currentTime);
+            i++;
         }
 
-        int conflictCountPortrait = 0;
-        if (events.primaryCount > 2) {
-            conflictCountPortrait = events.primaryCount - 1;
-        } else if (events.primaryCount == 1 && events.secondaryCount > 1
-                && cursor.moveToPosition(events.secondaryRow)) {
-            // Show conflict string for the secondary time slot if there is only one event
-            // in the primary time slot.
-            populateEvent(context, cursor, model, time, 1, false, startOfNextDay);
-            conflictCountPortrait = events.secondaryCount;
-        }
-
-        if (conflictCountPortrait != 0) {
-            model.conflictPortrait = context.getResources().getQuantityString(
-                    R.plurals.gadget_more_events, conflictCountPortrait, conflictCountPortrait);
-            model.visibConflictPortrait = View.VISIBLE;
-        } else {
-            model.visibConflictPortrait = View.GONE;
-
-            // Fill secondary event details
-            int secondaryRow = -1;
-            if (events.primaryCount == 2) {
-                secondaryRow = events.primaryConflictRow;
-            } else if (events.primaryCount == 1) {
-                secondaryRow = events.secondaryRow;
-            }
-
-            if (secondaryRow != -1 && cursor.moveToPosition(secondaryRow)) {
-                populateEvent(context, cursor, model, time, 1, true, startOfNextDay);
-            }
-        }
         return model;
     }
 
-    static private void populateEvent(Context context, Cursor cursor, CalendarAppWidgetModel model,
-            Time recycle, int eventIndex, boolean showTitleLocation, long startOfNextDay) {
+    /**
+     * Pulls the information for a single event from the cursor and populates
+     * the corresponding model object with the data.
+     *
+     * @param context a Context to use for accessing resources
+     * @param cursor the cursor to retrieve the data from
+     * @param rowId the ID of the row to retrieve
+     * @param model the model object to populate
+     * @param recycle a Time instance to recycle
+     * @param eventIndex which event index in the model to populate
+     * @param showTitleLocation whether or not to show the title and location
+     * @param startOfNextDay the beginning of the next day
+     * @param currentTime the current time
+     */
+    static private void populateEvent(Context context, Cursor cursor, int rowId,
+            CalendarAppWidgetModel model, Time recycle, int eventIndex,
+            boolean showTitleLocation, long startOfNextDay, long currentTime) {
+        cursor.moveToPosition(rowId);
 
         // When
         boolean allDay = cursor.getInt(INDEX_ALL_DAY) != 0;
         long start = cursor.getLong(INDEX_BEGIN);
+        long end = cursor.getLong(INDEX_END);
         if (allDay) {
             start = convertUtcToLocal(recycle, start);
+            end = convertUtcToLocal(recycle, end);
         }
 
+        boolean eventIsInProgress = start <= currentTime && end > currentTime;
         boolean eventIsToday = start < startOfNextDay;
-        boolean eventIsTomorrow = !eventIsToday
+        boolean eventIsTomorrow = !eventIsToday && !eventIsInProgress
                 && (start < (startOfNextDay + DateUtils.DAY_IN_MILLIS));
 
-        String whenString = "";
-
-        if (!(allDay && eventIsTomorrow)) {
+        // Compute a human-readable string for the start time of the event
+        String whenString;
+        if (eventIsInProgress && allDay) {
+            // All day events for the current day display as just "Today"
+            whenString = context.getString(R.string.today);
+        } else if (eventIsTomorrow && allDay) {
+            // All day events for the next day display as just "Tomorrow"
+            whenString = context.getString(R.string.tomorrow);
+        } else {
             int flags = DateUtils.FORMAT_ABBREV_ALL;
-
             if (allDay) {
                 flags |= DateUtils.FORMAT_UTC;
-                if (!eventIsTomorrow) {
-                    flags |= DateUtils.FORMAT_SHOW_WEEKDAY;
-                }
             } else {
                 flags |= DateUtils.FORMAT_SHOW_TIME;
-
                 if (DateFormat.is24HourFormat(context)) {
                     flags |= DateUtils.FORMAT_24HOUR;
                 }
-
-                // Show day or week if different from today
-                if (!eventIsTomorrow && !eventIsToday) {
-                    flags |= DateUtils.FORMAT_SHOW_WEEKDAY;
-                }
+            }
+            // Show day of the week if not today or tomorrow
+            if (!eventIsTomorrow && !eventIsToday) {
+                flags |= DateUtils.FORMAT_SHOW_WEEKDAY;
             }
             whenString = DateUtils.formatDateRange(context, start, start, flags);
+            if (eventIsTomorrow) {
+                whenString += (", ");
+                whenString += context.getString(R.string.tomorrow);
+            } else if (eventIsInProgress) {
+                whenString += " (";
+                whenString += context.getString(R.string.in_progress);
+                whenString += ")";
+            }
         }
 
-        if (eventIsTomorrow) {
-            if (!allDay) {
-                whenString += (", ");
-            }
-            whenString += context.getString(R.string.tomorrow);
-        }
         model.eventInfos[eventIndex].when = whenString;
         model.eventInfos[eventIndex].visibWhen = View.VISIBLE;
 
@@ -713,14 +714,38 @@ public class CalendarAppWidgetService extends Service implements Runnable {
     }
 
     static class MarkedEvents {
+
+        /**
+         * The row IDs of all events marked for display
+         */
+        List<Integer> markedIds = new ArrayList<Integer>(10);
+
+        /**
+         * The start time of the first marked event
+         */
+        long firstTime = -1;
+
+        /** The number of events currently in progress */
+        int inProgressCount = 0; // Number of events with same start time as the primary evt.
+
+        /** The start time of the next upcoming event */
         long primaryTime = -1;
-        int primaryRow = -1;
-        int primaryConflictRow = -1;
-        int primaryCount = 0; // Number of events with same start time as the primary evt.
-        boolean primaryAllDay = false;
-        long secondaryTime = -1;
-        int secondaryRow = -1;
-        int secondaryCount = 0; // Number of events with same start time as the secondary evt.
+
+        /**
+         * The number of events that share the same start time as the next
+         * upcoming event
+         */
+        int primaryCount = 0; // Number of events with same start time as the secondary evt.
+
+        /** The start time of the next next upcoming event */
+        long secondaryTime = 1;
+
+        /**
+         * The number of events that share the same start time as the next next
+         * upcoming event.
+         */
+        int secondaryCount = 0;
+
         boolean watchFound = false;
     }
 
@@ -746,6 +771,7 @@ public class CalendarAppWidgetService extends Service implements Runnable {
             long eventId = cursor.getLong(INDEX_EVENT_ID);
             long start = cursor.getLong(INDEX_BEGIN);
             long end = cursor.getLong(INDEX_END);
+
             boolean allDay = cursor.getInt(INDEX_ALL_DAY) != 0;
 
             if (LOGD) {
@@ -759,6 +785,8 @@ public class CalendarAppWidgetService extends Service implements Runnable {
                 end = convertUtcToLocal(recycle, end);
             }
 
+            boolean inProgress = now < end && now > start;
+
             // Skip events that have already passed their flip times
             long eventFlip = getEventFlip(cursor, start, end, allDay);
             if (LOGD) Log.d(TAG, "Calculated flip time " + formatDebugTime(eventFlip, now));
@@ -771,29 +799,52 @@ public class CalendarAppWidgetService extends Service implements Runnable {
                 events.watchFound = true;
             }
 
-            if (events.primaryRow == -1) {
-                // Found first event
-                events.primaryRow = row;
-                events.primaryTime = start;
-                events.primaryAllDay = allDay;
-                events.primaryCount = 1;
-            } else if (events.primaryTime == start) {
-                // Found conflicting primary event
-                if (events.primaryConflictRow == -1) {
-                    events.primaryConflictRow = row;
+            /* Scan through the events with the following logic:
+             *   Rule #1 Show A) all the events that are in progress including
+             *     all day events and B) the next upcoming event and any events
+             *     with the same start time.
+             *
+             *   Rule #2 If there are no events in progress, show A) the next
+             *     upcoming event and B) any events with the same start time.
+             *
+             *   Rule #3 If no events start at the same time at A in rule 2,
+             *     show A) the next upcoming event and B) the following upcoming
+             *     event + any events with the same start time.
+             */
+            if (inProgress) {
+                // events for part A of Rule #1
+                events.markedIds.add(row);
+                events.inProgressCount++;
+                if (events.firstTime == -1) {
+                    events.firstTime = start;
                 }
-                events.primaryCount += 1;
-            } else if (events.secondaryRow == -1) {
-                // Found second event
-                events.secondaryRow = row;
-                events.secondaryTime = start;
-                events.secondaryCount = 1;
-            } else if (events.secondaryTime == start) {
-                // Found conflicting secondary event
-                events.secondaryCount += 1;
             } else {
-                // Nothing interesting about this event, so bail out
-                break;
+                if (events.primaryCount == 0) {
+                    // first upcoming event
+                    events.markedIds.add(row);
+                    events.primaryTime = start;
+                    events.primaryCount++;
+                    if (events.firstTime == -1) {
+                        events.firstTime = start;
+                    }
+                } else if (events.primaryTime == start) {
+                    // any events with same start time as first upcoming event
+                    events.markedIds.add(row);
+                    events.primaryCount++;
+                } else if (events.markedIds.size() == 1) {
+                    // only one upcoming event, so we take the next upcoming
+                    events.markedIds.add(row);
+                    events.secondaryTime = start;
+                    events.secondaryCount++;
+                } else if (events.secondaryCount > 0
+                        && events.secondaryTime == start) {
+                    // any events with same start time as next upcoming
+                    events.markedIds.add(row);
+                    events.secondaryCount++;
+                } else {
+                    // looks like we're done
+                    break;
+                }
             }
         }
         return events;

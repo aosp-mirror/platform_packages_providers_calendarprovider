@@ -91,7 +91,7 @@ import java.net.URLDecoder;
             "   WHERE " + Tables.CALENDARS + "." + Calendar.Calendars._ID +
                         "=new." + Calendar.Events.CALENDAR_ID + ") " +
             "WHERE " + Tables.EVENTS + "." + Calendar.Events._ID +
-                    "=new." + Calendar.Events._ID;
+                    "=new." + Calendar.Events._ID + ";";
 
     // This needs to be done when all the tables are already created
     private static final String EVENTS_CLEANUP_TRIGGER_SQL =

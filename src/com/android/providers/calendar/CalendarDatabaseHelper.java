@@ -54,7 +54,7 @@ import java.net.URLDecoder;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    static final int DATABASE_VERSION = 71;
+    static final int DATABASE_VERSION = 72;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -117,6 +117,9 @@ import java.net.URLDecoder;
     private static final String CALENDAR_CLEANUP_TRIGGER_SQL = "DELETE FROM " + Tables.EVENTS +
             " WHERE " + Calendar.Events.CALENDAR_ID + "=" +
                 "old." + Calendar.Events._ID + ";";
+
+    private static final String SCHEMA_HTTPS = "https://";
+    private static final String SCHEMA_HTTP = "http://";
 
     private final Context mContext;
     private final SyncStateContentProviderHelper mSyncState;
@@ -259,43 +262,7 @@ import java.net.URLDecoder;
 
         mSyncState.createDatabase(db);
 
-        db.execSQL("CREATE TABLE " + Tables.CALENDARS + " (" +
-                Calendar.Calendars._ID + " INTEGER PRIMARY KEY," +
-                Calendar.Calendars._SYNC_ACCOUNT + " TEXT," +
-                Calendar.Calendars._SYNC_ACCOUNT_TYPE + " TEXT," +
-                Calendar.Calendars._SYNC_ID + " TEXT," +
-                Calendar.Calendars._SYNC_VERSION + " TEXT," +
-                Calendar.Calendars._SYNC_TIME + " TEXT," +  // UTC
-                Calendar.Calendars._SYNC_DATA + " INTEGER," +
-                Calendar.Calendars._SYNC_DIRTY + " INTEGER," +
-                Calendar.Calendars._SYNC_MARK + " INTEGER," + // Used to filter out new rows
-                Calendar.Calendars.URL + " TEXT," +
-                Calendar.Calendars.NAME + " TEXT," +
-                Calendar.Calendars.DISPLAY_NAME + " TEXT," +
-                Calendar.Calendars.HIDDEN + " INTEGER NOT NULL DEFAULT 0," +
-                Calendar.Calendars.COLOR + " INTEGER," +
-                Calendar.Calendars.ACCESS_LEVEL + " INTEGER," +
-                Calendar.Calendars.SELECTED + " INTEGER NOT NULL DEFAULT 1," +
-                Calendar.Calendars.SYNC_EVENTS + " INTEGER NOT NULL DEFAULT 0," +
-                Calendar.Calendars.LOCATION + " TEXT," +
-                Calendar.Calendars.TIMEZONE + " TEXT," +
-                Calendar.Calendars.OWNER_ACCOUNT + " TEXT, " +
-                Calendar.Calendars.ORGANIZER_CAN_RESPOND + " INTEGER NOT NULL DEFAULT 1," +
-                Calendar.Calendars.DELETED + " INTEGER NOT NULL DEFAULT 0," +
-                Calendar.Calendars.SELF_URL + " TEXT," +
-                Calendar.Calendars.EDIT_URL + " TEXT," +
-                Calendar.Calendars.EVENTS_URL + " TEXT" +
-                ");");
-
-        db.execSQL("CREATE INDEX calendarsUrlIndex ON " + Tables.CALENDARS + "("
-                + Calendar.Calendars.URL +
-                ");");
-
-        // Trigger to remove a calendar's events when we delete the calendar
-        db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON " + Tables.CALENDARS + " " +
-                "BEGIN " +
-                CALENDAR_CLEANUP_TRIGGER_SQL +
-                "END");
+        createCalendarsTable(db);
 
         // TODO: do we need both dtend and duration?
         db.execSQL("CREATE TABLE " + Tables.EVENTS + " (" +
@@ -478,6 +445,41 @@ import java.net.URLDecoder;
                 ContactsContract.AUTHORITY, new Bundle());
     }
 
+    private void createCalendarsTable(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE " + Tables.CALENDARS + " (" +
+                Calendar.Calendars._ID + " INTEGER PRIMARY KEY," +
+                Calendar.Calendars._SYNC_ACCOUNT + " TEXT," +
+                Calendar.Calendars._SYNC_ACCOUNT_TYPE + " TEXT," +
+                Calendar.Calendars._SYNC_ID + " TEXT," +
+                Calendar.Calendars._SYNC_VERSION + " TEXT," +
+                Calendar.Calendars._SYNC_TIME + " TEXT," +  // UTC
+                Calendar.Calendars._SYNC_DATA + " INTEGER," +
+                Calendar.Calendars._SYNC_DIRTY + " INTEGER," +
+                Calendar.Calendars._SYNC_MARK + " INTEGER," + // Used to filter out new rows
+                Calendar.Calendars.NAME + " TEXT," +
+                Calendar.Calendars.DISPLAY_NAME + " TEXT," +
+                Calendar.Calendars.HIDDEN + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Calendars.COLOR + " INTEGER," +
+                Calendar.Calendars.ACCESS_LEVEL + " INTEGER," +
+                Calendar.Calendars.SELECTED + " INTEGER NOT NULL DEFAULT 1," +
+                Calendar.Calendars.SYNC_EVENTS + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Calendars.LOCATION + " TEXT," +
+                Calendar.Calendars.TIMEZONE + " TEXT," +
+                Calendar.Calendars.OWNER_ACCOUNT + " TEXT, " +
+                Calendar.Calendars.ORGANIZER_CAN_RESPOND + " INTEGER NOT NULL DEFAULT 1," +
+                Calendar.Calendars.DELETED + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Calendars.SYNC1 + " TEXT," +
+                Calendar.Calendars.SYNC2 + " TEXT," +
+                Calendar.Calendars.SYNC3 + " TEXT" +
+                ");");
+
+        // Trigger to remove a calendar's events when we delete the calendar
+        db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON " + Tables.CALENDARS + " " +
+                "BEGIN " +
+                CALENDAR_CLEANUP_TRIGGER_SQL +
+                "END");
+    }
+
     private void createCalendarMetaDataTable(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE " + Tables.CALENDAR_META_DATA + " (" +
                 Calendar.CalendarMetaData._ID + " INTEGER PRIMARY KEY," +
@@ -604,12 +606,15 @@ import java.net.URLDecoder;
                 oldVersion = 69;
             }
             if (oldVersion == 69) {
-                upgradeToVersion70(db);
-                oldVersion += 1;
+                upgradeToVersion72(db);
+                oldVersion = 72;
             }
-            if (oldVersion == 70) {
-                upgradeToVersion71(db);
-                oldVersion += 1;
+            // we are not supporting versions 70 nor 71 and we just go from 69 to 72 by recreating
+            // the schema in case we had some users with 70 or 71
+            if (oldVersion == 70 || oldVersion == 71) {
+                dropTables(db);
+                bootstrapDB(db);
+                oldVersion = 72;
             }
         } catch (SQLiteException e) {
             Log.e(TAG, "onUpgrade: SQLiteException, recreating db. " + e);
@@ -644,30 +649,100 @@ import java.net.URLDecoder;
     }
 
     @VisibleForTesting
-    void upgradeToVersion71(SQLiteDatabase db) {
-        // Recreate the Events Views as we are deprecating Calendars "url" column
-        createEventsView(db);
-    }
+    void upgradeToVersion72(SQLiteDatabase db) {
+        // we cannot use here a Calendar.Calendars,URL constant for "url" as we are trying to make
+        // it disappear so we are keeping the hardcoded name "url" in all the SQLs
+        db.execSQL("ALTER TABLE " + Tables.CALENDARS +" RENAME TO " +
+                Tables.CALENDARS + "_Backup;");
 
-    @VisibleForTesting
-    void upgradeToVersion70(SQLiteDatabase db) {
-        // Add deleted column
-        db.execSQL("ALTER TABLE " + Tables.CALENDARS +" ADD COLUMN " +
-                Calendar.Calendars.DELETED + " INTEGER NOT NULL DEFAULT 0;");
+        createCalendarsTable(db);
 
-        // Add selfUrl, editUrl and eventsUrl
-        // Population of the new columns will be done by the SyncAdapter itself
-        db.execSQL("ALTER TABLE " + Tables.CALENDARS + " ADD COLUMN " +
-                Calendar.Calendars.SELF_URL + " TEXT");
-        db.execSQL("ALTER TABLE " + Tables.CALENDARS + " ADD COLUMN " +
-                Calendar.Calendars.EDIT_URL + " TEXT");
-        db.execSQL("ALTER TABLE " + Tables.CALENDARS + " ADD COLUMN " +
-                Calendar.Calendars.EVENTS_URL + " TEXT");
+        // Populate the new Calendars table except the SYNC2 / SYNC3 columns
+        db.execSQL("INSERT INTO " + Tables.CALENDARS + " (" +
+                Calendar.Calendars._ID + ", " +
+                Calendar.Calendars._SYNC_ACCOUNT + ", " +
+                Calendar.Calendars._SYNC_ACCOUNT_TYPE + ", " +
+                Calendar.Calendars._SYNC_ID + ", " +
+                Calendar.Calendars._SYNC_VERSION + ", " +
+                Calendar.Calendars._SYNC_TIME + ", " +
+                Calendar.Calendars._SYNC_DATA + ", " +
+                Calendar.Calendars._SYNC_DIRTY + ", " +
+                Calendar.Calendars._SYNC_MARK + ", " +
+                Calendar.Calendars.NAME + ", " +
+                Calendar.Calendars.DISPLAY_NAME + ", " +
+                Calendar.Calendars.HIDDEN + ", " +
+                Calendar.Calendars.COLOR + ", " +
+                Calendar.Calendars.ACCESS_LEVEL + ", " +
+                Calendar.Calendars.SELECTED + ", " +
+                Calendar.Calendars.SYNC_EVENTS + ", " +
+                Calendar.Calendars.LOCATION + ", " +
+                Calendar.Calendars.TIMEZONE + ", " +
+                Calendar.Calendars.OWNER_ACCOUNT + ", " +
+                Calendar.Calendars.ORGANIZER_CAN_RESPOND + ", " +
+                Calendar.Calendars.DELETED + ", " +
+                Calendar.Calendars.SYNC1 + ") " +
+                "SELECT " +
+                Calendar.Calendars._ID + ", " +
+                Calendar.Calendars._SYNC_ACCOUNT + ", " +
+                Calendar.Calendars._SYNC_ACCOUNT_TYPE + ", " +
+                Calendar.Calendars._SYNC_ID + ", " +
+                Calendar.Calendars._SYNC_VERSION + ", " +
+                Calendar.Calendars._SYNC_TIME + ", " +
+                Calendar.Calendars._SYNC_DATA + ", " +
+                Calendar.Calendars._SYNC_DIRTY + ", " +
+                Calendar.Calendars._SYNC_MARK + ", " +
+                Calendar.Calendars.NAME + ", " +
+                Calendar.Calendars.DISPLAY_NAME + ", " +
+                Calendar.Calendars.HIDDEN + ", " +
+                Calendar.Calendars.COLOR + ", " +
+                Calendar.Calendars.ACCESS_LEVEL + ", " +
+                Calendar.Calendars.SELECTED + ", " +
+                Calendar.Calendars.SYNC_EVENTS + ", " +
+                Calendar.Calendars.LOCATION + ", " +
+                Calendar.Calendars.TIMEZONE + ", " +
+                Calendar.Calendars.OWNER_ACCOUNT + ", " +
+                Calendar.Calendars.ORGANIZER_CAN_RESPOND + ", " +
+                "0" + ", " +
+                "url" + " " +
+                "FROM " + Tables.CALENDARS + "_Backup" + ";"
+        );
 
-        // Create index on Url column
-        db.execSQL("CREATE INDEX calendarsUrlIndex ON " + Tables.CALENDARS + " (" +
-                Calendar.Calendars.URL +
-                ");");
+        // Populate SYNC2 and SYNC3 columns - SYNC1 represent the old "url" column
+        // We will need to iterate over all the "com.google" type of calendars
+        String selectSql = "SELECT " + Calendar.Calendars._ID + ", " + "url" +
+                " FROM " + Tables.CALENDARS + "_Backup" +
+                " WHERE " + Calendar.Calendars._SYNC_ACCOUNT_TYPE  + "='com.google'" +
+                " AND url IS NOT NULL;";
+
+        String updateSql = "UPDATE " + Tables.CALENDARS + " SET " +
+                Calendar.Calendars.SYNC2 + "=?, " + // edit Url
+                Calendar.Calendars.SYNC3 + "=? " + // self Url
+                "WHERE " + Calendar.Calendars._ID + "=?;";
+
+        Cursor cursor = db.rawQuery(selectSql, null /* selection args */);
+        if (cursor != null && cursor.getCount() > 0) {
+            try {
+                Object[] bindArgs = new Object[3];
+
+                while (cursor.moveToNext()) {
+                    Long id = cursor.getLong(0);
+                    String url = cursor.getString(1);
+                    String selfUrl = getSelfUrlFromEventsUrl(url);
+                    String editUrl = getEditUrlFromEventsUrl(url);
+
+                    bindArgs[0] = editUrl;
+                    bindArgs[1] = selfUrl;
+                    bindArgs[2] = id;
+
+                    db.execSQL(updateSql, bindArgs);
+                }
+            } finally {
+                cursor.close();
+            }
+        }
+
+        // Drop the backup table
+        db.execSQL("DROP TABLE " + Tables.CALENDARS + "_Backup;");
 
         // Recreate the Events Views as column "deleted" is now ambiguous
         // ("deleted" is now defined in both Calendars and Events tables)
@@ -1069,9 +1144,8 @@ import java.net.URLDecoder;
                     "'/private/full-selfattendance', '/private/full');");
 
         db.execSQL("UPDATE " + Tables.CALENDARS
-                + " SET " + Calendar.Calendars.URL + "="
-                + "REPLACE(" + Calendar.Calendars.URL + ", " +
-                    "'/private/full-selfattendance', '/private/full');");
+                + " SET " + "url="
+                + "REPLACE(" + "url, " + "'/private/full-selfattendance', '/private/full');");
 
         // "cursor" iterates over all the calendars
         Cursor cursor = db.rawQuery("SELECT " + Calendar.Calendars._ID + ", " +
@@ -1101,9 +1175,7 @@ import java.net.URLDecoder;
 
         // "cursor" iterates over all the calendars
         Cursor cursor = db.rawQuery("SELECT " + Calendar.Calendars._SYNC_ACCOUNT + "," +
-                Calendar.Calendars._SYNC_ACCOUNT_TYPE + "," +
-                Calendar.Calendars.URL
-                + " FROM " + Tables.CALENDARS,
+                Calendar.Calendars._SYNC_ACCOUNT_TYPE + ",url FROM " + Tables.CALENDARS,
                 null /* selection args */);
         if (cursor != null) {
             try {
@@ -1347,7 +1419,7 @@ import java.net.URLDecoder;
                 + " AS " + Calendar.Events._SYNC_DATA + ","
                 + Tables.EVENTS + "." + Calendar.Events._SYNC_MARK
                 + " AS " + Calendar.Events._SYNC_MARK + ","
-                + Calendar.Calendars.EVENTS_URL + ","
+                + Calendar.Calendars.SYNC1 + ","
                 + Calendar.Calendars.OWNER_ACCOUNT + ","
                 + Calendar.Calendars.SYNC_EVENTS
                 + " FROM " + Tables.EVENTS + " JOIN " + Tables.CALENDARS
@@ -1380,5 +1452,82 @@ import java.net.URLDecoder;
 
         Log.e(TAG, "unable to find the email address in calendar " + feed);
         return null;
+    }
+
+    /**
+     * Get a "allcalendars" url from a "private/full" or "private/free-busy" url
+     * @param url
+     * @return the rewritten Url
+     *
+     * For example:
+     *
+     *      http://www.google.com/calendar/feeds/joe%40joe.com/private/full
+     *      http://www.google.com/calendar/feeds/joe%40joe.com/private/free-busy
+     *
+     * will be rewriten into:
+     *
+     *      http://www.google.com/calendar/feeds/default/allcalendars/full/joe%40joe.com
+     *      http://www.google.com/calendar/feeds/default/allcalendars/full/joe%40joe.com
+     */
+    @VisibleForTesting
+    private static String getAllCalendarsUrlFromEventsUrl(String url) {
+        if (url == null) {
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "Cannot get AllCalendars url from a NULL url");
+            }
+            return null;
+        }
+        if (url.contains("/private/full")) {
+            return url.replace("/private/full", "").
+                    replace("/calendar/feeds", "/calendar/feeds/default/allcalendars/full");
+        }
+        if (url.contains("/private/free-busy")) {
+            return url.replace("/private/free-busy", "").
+                    replace("/calendar/feeds", "/calendar/feeds/default/allcalendars/full");
+        }
+        // Just log as we dont recognize the provided Url
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "Cannot get AllCalendars url from the following url: " + url);
+        }
+        return null;
+    }
+
+    /**
+     * Get "selfUrl" from "events url"
+     * @param url the Events url (either "private/full" or "private/free-busy"
+     * @return the corresponding allcalendar url
+     */
+    private static String getSelfUrlFromEventsUrl(String url) {
+        return rewriteUrlFromHttpToHttps(getAllCalendarsUrlFromEventsUrl(url));
+    }
+
+    /**
+     * Get "editUrl" from "events url"
+     * @param url the Events url (either "private/full" or "private/free-busy"
+     * @return the corresponding allcalendar url
+     */
+    private static String getEditUrlFromEventsUrl(String url) {
+        return rewriteUrlFromHttpToHttps(getAllCalendarsUrlFromEventsUrl(url));
+    }
+
+    /**
+     * Rewrite the url from "http" to "https" scheme
+     * @param url the url to rewrite
+     * @return the rewritten URL
+     */
+    private static String rewriteUrlFromHttpToHttps(String url) {
+        if (url == null) {
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "Cannot rewrite a NULL url");
+            }
+            return null;
+        }
+        if (url.startsWith(SCHEMA_HTTPS)) {
+            return url;
+        }
+        if (!url.startsWith(SCHEMA_HTTP)) {
+            throw new IllegalArgumentException("invalid url parameter, unknown scheme: " + url);
+        }
+        return SCHEMA_HTTPS + url.substring(SCHEMA_HTTP.length());
     }
 }

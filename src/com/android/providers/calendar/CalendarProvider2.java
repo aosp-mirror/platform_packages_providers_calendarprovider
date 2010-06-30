@@ -958,7 +958,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Events.ORIGINAL_EVENT,
             Events.ORIGINAL_INSTANCE_TIME,
             Events.CALENDAR_ID,
-            Calendar.EventsColumns.DELETED
+            Events.DELETED
     };
 
     /**
@@ -1065,7 +1065,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         int originalEventColumn = entries.getColumnIndex(Events.ORIGINAL_EVENT);
         int originalInstanceTimeColumn = entries.getColumnIndex(Events.ORIGINAL_INSTANCE_TIME);
         int calendarIdColumn = entries.getColumnIndex(Events.CALENDAR_ID);
-        int deletedColumn = entries.getColumnIndex(Calendar.EventsColumns.DELETED);
+        int deletedColumn = entries.getColumnIndex(Events.DELETED);
 
         ContentValues initialValues;
         EventInstancesMap instancesMap = new EventInstancesMap();
@@ -1269,7 +1269,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     initialValues.put(Instances.END, dtendMillis);
 
                     // we temporarily store the DELETED status (will be cleaned later)
-                    initialValues.put(Calendar.EventsColumns.DELETED, deleted);
+                    initialValues.put(Events.DELETED, deleted);
 
                     if (allDay) {
                         eventTime.timezone = Time.TIMEZONE_UTC;
@@ -1368,14 +1368,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // If this instance was cancelled or deleted then don't create a new
                 // instance.
                 Integer status = values.getAsInteger(Events.STATUS);
-                boolean deleted = values.containsKey(Calendar.EventsColumns.DELETED) ?
-                        values.getAsBoolean(Calendar.EventsColumns.DELETED) : false;
+                boolean deleted = values.containsKey(Events.DELETED) ?
+                        values.getAsBoolean(Events.DELETED) : false;
                 if ((status != null && status == Events.STATUS_CANCELED) || deleted) {
                     continue;
                 }
 
                 // We remove this useless key (not valid in the context of Instances table)
-                values.remove(Calendar.EventsColumns.DELETED);
+                values.remove(Events.DELETED);
 
                 // Remove these fields before inserting a new instance
                 values.remove(ORIGINAL_EVENT_AND_CALENDAR);
@@ -1657,8 +1657,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     String accountType = values.getAsString(
                             Calendars._SYNC_ACCOUNT_TYPE);
                     final Account account = new Account(accountName, accountType);
-                    String calendarUrl = values.getAsString(Calendars.EVENTS_URL);
-                    mDbHelper.scheduleSync(account, false /* two-way sync */, calendarUrl);
+                    String eventsUrl = values.getAsString(Calendars.SYNC1);
+                    mDbHelper.scheduleSync(account, false /* two-way sync */, eventsUrl);
                 }
                 id = mDbHelper.calendarsInsert(values);
                 sendUpdateNotification(id, callerIsSyncAdapter);
@@ -2483,7 +2483,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     mDb.delete("Events", "_id=?", selectionArgs);
                 } else {
                     ContentValues values = new ContentValues();
-                    values.put(Calendar.EventsColumns.DELETED, 1);
+                    values.put(Events.DELETED, 1);
                     values.put(Events._SYNC_DIRTY, 1);
                     mDb.update("Events", values, "_id=?", selectionArgs);
 
@@ -2867,7 +2867,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // for this calendar.
         Cursor cursor = query(ContentUris.withAppendedId(Calendars.CONTENT_URI, id),
                 new String[] {Calendars._SYNC_ACCOUNT, Calendars._SYNC_ACCOUNT_TYPE,
-                        Calendars.EVENTS_URL, Calendars.SYNC_EVENTS},
+                        Calendars.SYNC1, Calendars.SYNC_EVENTS},
                 null /* selection */,
                 null /* selectionArgs */,
                 null /* sort */);
@@ -3388,7 +3388,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Events.GUESTS_CAN_MODIFY, "guestsCanModify");
         sEventsProjectionMap.put(Events.GUESTS_CAN_SEE_GUESTS, "guestsCanSeeGuests");
         sEventsProjectionMap.put(Events.ORGANIZER, "organizer");
-        sEventsProjectionMap.put(Calendar.EventsColumns.DELETED, "deleted");
+        sEventsProjectionMap.put(Events.DELETED, "deleted");
 
         // Put the shared items into the Attendees, Reminders projection map
         sAttendeesProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
@@ -3398,7 +3398,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Calendars.COLOR, "color");
         sEventsProjectionMap.put(Calendars.ACCESS_LEVEL, "access_level");
         sEventsProjectionMap.put(Calendars.SELECTED, "selected");
-        sEventsProjectionMap.put(Calendars.EVENTS_URL, "eventsUrl");
+        sEventsProjectionMap.put(Calendars.SYNC1, "sync1");
         sEventsProjectionMap.put(Calendars.TIMEZONE, "timezone");
         sEventsProjectionMap.put(Calendars.OWNER_ACCOUNT, "ownerAccount");
 
@@ -3449,15 +3449,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_MODIFY, "guestsCanModify");
         sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_SEE_GUESTS, "guestsCanSeeGuests");
         sEventEntitiesProjectionMap.put(Events.ORGANIZER, "organizer");
-        sEventEntitiesProjectionMap.put(Calendar.EventsColumns.DELETED, "deleted");
+        sEventEntitiesProjectionMap.put(Events.DELETED, "deleted");
         sEventEntitiesProjectionMap.put(Events._ID, Events._ID);
         sEventEntitiesProjectionMap.put(Events._SYNC_ID, Events._SYNC_ID);
         sEventEntitiesProjectionMap.put(Events._SYNC_DATA, Events._SYNC_DATA);
         sEventEntitiesProjectionMap.put(Events._SYNC_VERSION, Events._SYNC_VERSION);
         sEventEntitiesProjectionMap.put(Events._SYNC_DIRTY, Events._SYNC_DIRTY);
-        sEventEntitiesProjectionMap.put(Calendars.EVENTS_URL, "eventsUrl");
+        sEventEntitiesProjectionMap.put(Calendars.SYNC1, Calendars.SYNC1);
 
         // Instances columns
+        sInstancesProjectionMap.put(Events.DELETED, "Events.deleted as deleted");
         sInstancesProjectionMap.put(Instances.BEGIN, "begin");
         sInstancesProjectionMap.put(Instances.END, "end");
         sInstancesProjectionMap.put(Instances.EVENT_ID, "Instances.event_id AS event_id");

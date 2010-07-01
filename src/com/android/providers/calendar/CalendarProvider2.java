@@ -267,16 +267,25 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * this window, to prevent spamming too many intents at once.
      */
     private static final long UPDATE_BROADCAST_TIMEOUT_MILLIS =
-        (int) DateUtils.SECOND_IN_MILLIS;
+        DateUtils.SECOND_IN_MILLIS;
+
+    private static final long SYNC_UPDATE_BROADCAST_TIMEOUT_MILLIS =
+        30 * DateUtils.SECOND_IN_MILLIS;
+
+    private Context mContext;
 
     private final Handler mBroadcastHandler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
-            Context context = CalendarProvider2.this.getContext();
+            Context context = CalendarProvider2.this.mContext;
             if (msg.what == UPDATE_BROADCAST_MSG) {
                 // Broadcast a provider changed intent
                 doSendUpdateNotification();
-                // Stop the service that was protecting us
+                // Because the handler does not guarantee message delivery in
+                // the case that the provider is killed, we need to make sure
+                // that the provider stays alive long enough to deliver the
+                // notification. This empty service is sufficient to "wedge" the
+                // process until we stop it here.
                 context.stopService(new Intent(context, EmptyService.class));
             }
         }
@@ -328,6 +337,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     private boolean initialize() {
+        mContext = getContext();
         mDbHelper = (CalendarDatabaseHelper)getDatabaseHelper();
         mDb = mDbHelper.getWritableDatabase();
 
@@ -1637,7 +1647,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         }
                         createAttendeeEntry(id, status, owner);
                     }
-                    sendUpdateNotification(id);
+                    sendUpdateNotification(id, callerIsSyncAdapter);
                 }
                 break;
             case CALENDARS:
@@ -1651,7 +1661,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     mDbHelper.scheduleSync(account, false /* two-way sync */, calendarUrl);
                 }
                 id = mDbHelper.calendarsInsert(values);
-                sendUpdateNotification(id);
+                sendUpdateNotification(id, callerIsSyncAdapter);
                 break;
             case ATTENDEES:
                 if (!values.containsKey(Attendees.EVENT_ID)) {
@@ -2312,7 +2322,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         result += deleteEventInternal(id, callerIsSyncAdapter, true /* isBatch */);
                     }
                     scheduleNextAlarm(false /* do not remove alarms */);
-                    sendUpdateNotification();
+                    sendUpdateNotification(callerIsSyncAdapter);
                 } finally {
                     cursor.close();
                     cursor = null;
@@ -2493,7 +2503,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         if (!isBatch) {
             scheduleNextAlarm(false /* do not remove alarms */);
-            sendUpdateNotification();
+            sendUpdateNotification(callerIsSyncAdapter);
         }
         return result;
     }
@@ -2651,7 +2661,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
                 if (result > 0) {
                     // update the widget
-                    sendUpdateNotification();
+                    sendUpdateNotification(callerIsSyncAdapter);
                 }
 
                 return result;
@@ -2734,7 +2744,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         scheduleNextAlarm(false /* do not remove alarms */);
                     }
 
-                    sendUpdateNotification(id);
+                    sendUpdateNotification(id, callerIsSyncAdapter);
                 }
 
                 return result;
@@ -3213,9 +3223,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * Call this to trigger a broadcast of the ACTION_PROVIDER_CHANGED intent.
      * This also provides a timeout, so any calls to this method will be batched
      * over a period of BROADCAST_TIMEOUT_MILLIS defined in this class.
+     *
+     * @param whether or not the update is being triggered by a sync
      */
-    private void sendUpdateNotification() {
-        sendUpdateNotification(-1);
+    private void sendUpdateNotification(boolean callerIsSyncAdapter) {
+        // We use -1 to represent an update to all events
+        sendUpdateNotification(-1, callerIsSyncAdapter);
     }
 
     /**
@@ -3228,21 +3241,34 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * TODO add support for eventId
      *
      * @param the ID of the event that changed, or -1 for no specific event
+     * @param whether or not the update is being triggered by a sync
      */
-    private void sendUpdateNotification(long eventId) {
+    private void sendUpdateNotification(long eventId,
+            boolean callerIsSyncAdapter) {
         // Are there any pending broadcast requests?
         if (mBroadcastHandler.hasMessages(UPDATE_BROADCAST_MSG)) {
             // Delete any pending requests, before requeuing a fresh one
             mBroadcastHandler.removeMessages(UPDATE_BROADCAST_MSG);
         } else {
-            // No pending requests, start an empty service to prevent the
-            // process from getting killed off.  This will be stopped when the
-            // messaged is handled.
-            final Context context = getContext();
-            context.startService(new Intent(context, EmptyService.class));
+            // Because the handler does not guarantee message delivery in
+            // the case that the provider is killed, we need to make sure
+            // that the provider stays alive long enough to deliver the
+            // notification. This empty service is sufficient to "wedge" the
+            // process until we stop it here.
+            mContext.startService(new Intent(mContext, EmptyService.class));
         }
+        // We use a much longer delay for sync-related updates, to prevent any
+        // receivers from slowing down the sync
+        long delay = callerIsSyncAdapter ?
+                SYNC_UPDATE_BROADCAST_TIMEOUT_MILLIS :
+                UPDATE_BROADCAST_TIMEOUT_MILLIS;
+        // Despite the fact that we actually only ever use one message at a time
+        // for now, it is really important to call obtainMessage() to get a
+        // clean instance.  This avoids potentially infinite loops resulting
+        // adding the same instance to the message queue twice, since the
+        // message queue implements its linked list using a field from Message.
         Message msg = mBroadcastHandler.obtainMessage(UPDATE_BROADCAST_MSG);
-        mBroadcastHandler.sendMessageDelayed(msg, UPDATE_BROADCAST_TIMEOUT_MILLIS);
+        mBroadcastHandler.sendMessageDelayed(msg, delay);
     }
 
     /**
@@ -3254,10 +3280,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      */
     private void doSendUpdateNotification() {
         Intent intent = new Intent(Intent.ACTION_PROVIDER_CHANGED,
-                Uri.parse("content://" + Calendar.AUTHORITY + "/"));
+                Calendar.CONTENT_URI);
         Log.i(TAG, "Sending notification intent: " + intent);
-        // TODO attach extra information to the intent
-        // intent.putExtra(name, value)
         getContext().sendBroadcast(intent, null);
     }
 
@@ -3528,7 +3552,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
 
         // make sure the widget reflects the account changes
-        sendUpdateNotification();
+        sendUpdateNotification(false);
     }
 
     /* package */ static boolean readBooleanQueryParameter(Uri uri, String name,

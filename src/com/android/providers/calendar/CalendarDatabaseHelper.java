@@ -54,7 +54,7 @@ import java.net.URLDecoder;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    static final int DATABASE_VERSION = 72;
+    static final int DATABASE_VERSION = 73;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -333,7 +333,7 @@ import java.net.URLDecoder;
         db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON " + Tables.EVENTS + " (" +
                 Calendar.Events._SYNC_ACCOUNT_TYPE + ", " +
                 Calendar.Events._SYNC_ACCOUNT + ", " +
-                Calendar.Events._SYNC_ID + 
+                Calendar.Events._SYNC_ID +
                 ");");
 
         db.execSQL("CREATE INDEX eventsCalendarIdIndex ON " + Tables.EVENTS + " (" +
@@ -470,7 +470,8 @@ import java.net.URLDecoder;
                 Calendar.Calendars.DELETED + " INTEGER NOT NULL DEFAULT 0," +
                 Calendar.Calendars.SYNC1 + " TEXT," +
                 Calendar.Calendars.SYNC2 + " TEXT," +
-                Calendar.Calendars.SYNC3 + " TEXT" +
+                Calendar.Calendars.SYNC3 + " TEXT," +
+                Calendar.Calendars.SYNC4 + " TEXT" +
                 ");");
 
         // Trigger to remove a calendar's events when we delete the calendar
@@ -616,6 +617,10 @@ import java.net.URLDecoder;
                 bootstrapDB(db);
                 oldVersion = 72;
             }
+            if (oldVersion == 72) {
+                upgradeToVersion73(db);
+                oldVersion += 1;
+            }
         } catch (SQLiteException e) {
             Log.e(TAG, "onUpgrade: SQLiteException, recreating db. " + e);
             dropTables(db);
@@ -646,6 +651,12 @@ import java.net.URLDecoder;
             return true;
         }
         return false;
+    }
+
+    @VisibleForTesting
+    void upgradeToVersion73(SQLiteDatabase db) {
+        db.execSQL("ALTER TABLE " + Tables.CALENDARS +
+                " ADD COLUMN " + Calendar.Calendars.SYNC4 + " TEXT;");
     }
 
     @VisibleForTesting

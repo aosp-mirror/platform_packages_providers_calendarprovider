@@ -655,6 +655,7 @@ import java.net.URLDecoder;
         db.execSQL("ALTER TABLE " + Tables.CALENDARS +" RENAME TO " +
                 Tables.CALENDARS + "_Backup;");
 
+        db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
         createCalendarsTable(db);
 
         // Populate the new Calendars table except the SYNC2 / SYNC3 columns

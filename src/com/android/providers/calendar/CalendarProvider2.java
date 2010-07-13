@@ -66,6 +66,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.regex.Pattern;
 
 /**
  * Calendar content provider. The contract between this provider and applications
@@ -243,15 +244,40 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     // Allocate the string constant once here instead of on the heap
     private static final String CALENDAR_ID_SELECTION = "calendar_id=?";
 
-    private static final String[] sInstancesProjection =
-            new String[] { Instances.START_DAY, Instances.END_DAY,
-                    Instances.START_MINUTE, Instances.END_MINUTE, Instances.ALL_DAY };
+    private static final String INSTANCE_QUERY_TABLES =
+        CalendarDatabaseHelper.Tables.INSTANCES + " INNER JOIN " +
+        CalendarDatabaseHelper.Views.EVENTS + " AS " +
+        CalendarDatabaseHelper.Tables.EVENTS +
+        " ON (" + CalendarDatabaseHelper.Tables.INSTANCES + "."
+        + Calendar.Instances.EVENT_ID + "=" +
+        CalendarDatabaseHelper.Tables.EVENTS + "."
+        + Calendar.Events._ID + ")";
+
+    private static final String BETWEEN_DAY_WHERE =
+        Calendar.Instances.START_DAY + "<=? AND " +
+        Calendar.Instances.END_DAY + ">=?";
+
+    private static final String BETWEEN_WHERE =
+        Calendar.Instances.BEGIN + "<=? AND " +
+        Calendar.Instances.END + ">=?";
 
     private static final int INSTANCES_INDEX_START_DAY = 0;
     private static final int INSTANCES_INDEX_END_DAY = 1;
     private static final int INSTANCES_INDEX_START_MINUTE = 2;
     private static final int INSTANCES_INDEX_END_MINUTE = 3;
     private static final int INSTANCES_INDEX_ALL_DAY = 4;
+
+    /**
+     * A regex for describing how we split search queries into tokens.
+     * Currently splits on whitespace and punctuation
+     */
+    private static final Pattern SEARCH_TOKEN_PATTERN = Pattern.compile("[\\s,.!?]+");
+
+    private static final String[] SEARCH_COLUMNS = new String[] {
+        Calendar.Events.TITLE,
+        Calendar.Events.DESCRIPTION,
+        Calendar.Events.EVENT_LOCATION
+    };
 
     private AlarmManager mAlarmManager;
 
@@ -681,6 +707,24 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 return handleInstanceQuery(qb, begin, end, projection,
                         selection, sortOrder, match == INSTANCES_BY_DAY);
+            case INSTANCES_SEARCH:
+            case INSTANCES_SEARCH_BY_DAY:
+                try {
+                    begin = Long.valueOf(uri.getPathSegments().get(2));
+                } catch (NumberFormatException nfe) {
+                    throw new IllegalArgumentException("Cannot parse begin "
+                            + uri.getPathSegments().get(2));
+                }
+                try {
+                    end = Long.valueOf(uri.getPathSegments().get(3));
+                } catch (NumberFormatException nfe) {
+                    throw new IllegalArgumentException("Cannot parse end "
+                            + uri.getPathSegments().get(3));
+                }
+                // this is already decoded
+                String query = uri.getPathSegments().get(4);
+                return handleInstanceSearchQuery(qb, begin, end, query, projection,
+                        selection, sortOrder, match == INSTANCES_SEARCH_BY_DAY);
             case EVENT_DAYS:
                 int startDay;
                 int endDay;
@@ -791,8 +835,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             long rangeEnd, String[] projection,
             String selection, String sort, boolean searchByDay) {
 
-        qb.setTables("Instances INNER JOIN Events ON (Instances.event_id=Events._id) " +
-                "INNER JOIN Calendars ON (Events.calendar_id = Calendars._id)");
+        qb.setTables(INSTANCE_QUERY_TABLES);
         qb.setProjectionMap(sInstancesProjectionMap);
         if (searchByDay) {
             // Convert the first and last Julian day range to a range that uses
@@ -804,11 +847,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             long endMs = time.setJulianDay((int) rangeEnd + 1);
             // will lock the database.
             acquireInstanceRange(beginMs, endMs, true /* use minimum expansion window */);
-            qb.appendWhere("startDay<=? AND endDay>=?");
+            qb.appendWhere(BETWEEN_DAY_WHERE);
         } else {
             // will lock the database.
             acquireInstanceRange(rangeBegin, rangeEnd, true /* use minimum expansion window */);
-            qb.appendWhere("begin<=? AND end>=?");
+            qb.appendWhere(BETWEEN_WHERE);
         }
         String selectionArgs[] = new String[] {String.valueOf(rangeEnd),
                 String.valueOf(rangeBegin)};
@@ -816,10 +859,111 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 null /* having */, sort);
     }
 
+    /**
+     * Splits the search query into individual search tokens based on whitespace
+     * and punctuation.
+     *
+     * TODO Support quoted phrases
+     * @param query the search query
+     * @return an array of tokens from the search query
+     */
+    @VisibleForTesting
+    String[] tokenizeSearchQuery(String query) {
+        return SEARCH_TOKEN_PATTERN.split(query);
+    }
+
+    /**
+     * In order to support what most people would consider a reasonable
+     * search behavior, we have to do some interesting things here. We
+     * assume that when a user searches for something like "lunch meeting",
+     * they really want any event that matches both "lunch" and "meeting",
+     * not events that match the string "lunch meeting" itself. In order to
+     * do this across multiple columns, we have to construct a WHERE clause
+     * that looks like:
+     * <code>
+     *   WHERE (title LIKE "%lunch%"
+     *      OR description LIKE "%lunch%"
+     *      OR eventLocation LIKE "%lunch%")
+     *     AND (title LIKE "%meeting%"
+     *      OR description LIKE "%meeting%"
+     *      OR eventLocation LIKE "%meeting%")
+     * </code>
+     * This "product of clauses" is a bit ugly, but produced a fairly good
+     * approximation of full-text search across multiple columns.
+     */
+    @VisibleForTesting
+    String constructSearchWhere(String[] tokens) {
+        if (tokens.length == 0) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        String column, token;
+        for (int j = 0; j < tokens.length; j++) {
+            sb.append("(");
+            for (int i = 0; i < SEARCH_COLUMNS.length; i++) {
+                sb.append(SEARCH_COLUMNS[i]);
+                sb.append(" LIKE ? ");
+                if (i < SEARCH_COLUMNS.length - 1) {
+                    sb.append("OR ");
+                }
+            }
+            sb.append(") AND ");
+        }
+        return sb.toString();
+    }
+
+    @VisibleForTesting
+    String[] constructSearchArgs(String[] tokens, long rangeBegin, long rangeEnd) {
+        // the additional two elements here are for begin/end time
+        String[] selectionArgs =
+            new String[tokens.length * SEARCH_COLUMNS.length + 2];
+        for (int j = 0; j < tokens.length; j++) {
+            for (int i = 0; i < SEARCH_COLUMNS.length; i++) {
+                selectionArgs[j * SEARCH_COLUMNS.length + i] =
+                    "%" + tokens[j] + "%";
+            }
+        }
+        selectionArgs[selectionArgs.length - 2] =  String.valueOf(rangeEnd);
+        selectionArgs[selectionArgs.length - 1] =  String.valueOf(rangeBegin);
+        return selectionArgs;
+    }
+
+    private Cursor handleInstanceSearchQuery(SQLiteQueryBuilder qb,
+            long rangeBegin, long rangeEnd, String query, String[] projection,
+            String selection, String sort, boolean searchByDay) {
+        qb.setTables(INSTANCE_QUERY_TABLES);
+        qb.setProjectionMap(sInstancesProjectionMap);
+
+
+        String[] tokens = SEARCH_TOKEN_PATTERN.split(query);
+        String[] selectionArgs = constructSearchArgs(tokens, rangeBegin, rangeEnd);
+        qb.appendWhere(constructSearchWhere(tokens));
+
+        if (searchByDay) {
+            // Convert the first and last Julian day range to a range that uses
+            // UTC milliseconds.
+            Time time = new Time();
+            long beginMs = time.setJulianDay((int) rangeBegin);
+            // We add one to lastDay because the time is set to 12am on the given
+            // Julian day and we want to include all the events on the last day.
+            long endMs = time.setJulianDay((int) rangeEnd + 1);
+            // will lock the database.
+            acquireInstanceRange(beginMs, endMs, true /* use minimum expansion window */);
+            qb.appendWhere(BETWEEN_DAY_WHERE);
+        } else {
+            // will lock the database.
+            acquireInstanceRange(rangeBegin, rangeEnd, true /* use minimum expansion window */);
+            qb.appendWhere(BETWEEN_WHERE);
+        }
+
+        return qb.query(mDb, projection, selection, selectionArgs, null /* groupBy */,
+                null /* having */, sort);
+
+    }
+
     private Cursor handleEventDayQuery(SQLiteQueryBuilder qb, int begin, int end,
             String[] projection, String selection) {
-        qb.setTables("Instances INNER JOIN Events ON (Instances.event_id=Events._id) " +
-                "INNER JOIN Calendars ON (Events.calendar_id = Calendars._id)");
+        qb.setTables(INSTANCE_QUERY_TABLES);
         qb.setProjectionMap(sInstancesProjectionMap);
         // Convert the first and last Julian day range to a range that uses
         // UTC milliseconds.
@@ -830,7 +974,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         long endMs = time.setJulianDay(end + 1);
 
         acquireInstanceRange(beginMs, endMs, true);
-        qb.appendWhere("startDay<=? AND endDay>=?");
+        qb.appendWhere(BETWEEN_DAY_WHERE);
         String selectionArgs[] = new String[] {String.valueOf(end), String.valueOf(begin)};
 
         return qb.query(mDb, projection, selection, selectionArgs,
@@ -3317,6 +3461,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final int TIME = 24;
     private static final int CALENDAR_ENTITIES = 25;
     private static final int CALENDAR_ENTITIES_ID = 26;
+    private static final int INSTANCES_SEARCH = 27;
+    private static final int INSTANCES_SEARCH_BY_DAY = 28;
 
     private static final UriMatcher sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
     private static final HashMap<String, String> sInstancesProjectionMap;
@@ -3329,6 +3475,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     static {
         sUriMatcher.addURI(Calendar.AUTHORITY, "instances/when/*/*", INSTANCES);
         sUriMatcher.addURI(Calendar.AUTHORITY, "instances/whenbyday/*/*", INSTANCES_BY_DAY);
+        sUriMatcher.addURI(Calendar.AUTHORITY, "instances/search/*/*/*", INSTANCES_SEARCH);
+        sUriMatcher.addURI(Calendar.AUTHORITY, "instances/searchbyday/*/*/*",
+                INSTANCES_SEARCH_BY_DAY);
         sUriMatcher.addURI(Calendar.AUTHORITY, "instances/groupbyday/*/*", EVENT_DAYS);
         sUriMatcher.addURI(Calendar.AUTHORITY, "events", EVENTS);
         sUriMatcher.addURI(Calendar.AUTHORITY, "events/#", EVENTS_ID);

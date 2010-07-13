@@ -16,27 +16,42 @@
 
 package com.android.providers.calendar;
 
-import android.database.sqlite.SQLiteOpenHelper;
-import com.android.common.ArrayListCursor;
-
-import android.content.*;
+import android.content.ComponentName;
+import android.content.ContentProvider;
+import android.content.ContentUris;
+import android.content.ContentValues;
+import android.content.Context;
+import android.content.Entity;
+import android.content.EntityIterator;
+import android.content.Intent;
+import android.content.res.Resources;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
-import android.text.format.DateUtils;
-import android.text.format.Time;
 import android.provider.Calendar;
 import android.provider.Calendar.Calendars;
 import android.provider.Calendar.Events;
 import android.provider.Calendar.EventsEntity;
 import android.provider.Calendar.Instances;
-import android.test.ProviderTestCase2;
+import android.test.AndroidTestCase;
+import android.test.IsolatedContext;
+import android.test.RenamingDelegatingContext;
 import android.test.mock.MockContentResolver;
-import android.test.suitebuilder.annotation.LargeTest;
+import android.test.mock.MockContext;
+import android.test.suitebuilder.annotation.SmallTest;
+import android.test.suitebuilder.annotation.Smoke;
 import android.test.suitebuilder.annotation.Suppress;
+import android.text.format.DateUtils;
+import android.text.format.Time;
 import android.util.Log;
 
+import com.android.common.ArrayListCursor;
+import com.android.providers.calendar.CalendarProvider2Test.MockProvider;
+
+import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 /**
  * Runs various tests on an isolated Calendar provider with its own database.
@@ -48,12 +63,18 @@ import java.util.ArrayList;
  * -w
  * -e class com.android.providers.calendar.CalendarProvider2Test
  * com.android.providers.calendar.tests/android.test.InstrumentationTestRunner
+ *
+ * This test no longer extends ProviderTestCase2 because it actually doesn't
+ * allow you to inject a custom context (which we needed to mock out the calls
+ * to start a service). We the next best thing, which is copy the relevant code
+ * from PTC2 and extend AndroidTestCase instead.
  */
 // flaky test, add back to LargeTest when fixed - bug 2395696
 // @LargeTest
-public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2ForTesting> {
+public class CalendarProvider2Test extends AndroidTestCase {
     static final String TAG = "calendar";
 
+    private CalendarProvider2ForTesting mProvider;
     private SQLiteDatabase mDb;
     private MetaData mMetaData;
     private Context mContext;
@@ -75,6 +96,40 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
     private static final String DEFAULT_TIMEZONE = TIME_ZONE_AMERICA_LOS_ANGELES;
 
     private static final String MOCK_TIME_ZONE_DATABASE_VERSION = "2010a";
+
+
+    /**
+     * We need a few more stub methods so that our tests can run
+     */
+    protected class MockContext2 extends MockContext {
+
+        @Override
+        public String getPackageName() {
+            return getContext().getPackageName();
+        }
+
+        @Override
+        public Resources getResources() {
+            return getContext().getResources();
+        }
+
+        @Override
+        public File getDir(String name, int mode) {
+            // name the directory so the directory will be seperated from
+            // one created through the regular Context
+            return getContext().getDir("mockcontext2_" + name, mode);
+        }
+
+        @Override
+        public ComponentName startService(Intent service) {
+            return null;
+        }
+
+        @Override
+        public boolean stopService(Intent service) {
+            return false;
+        }
+    }
 
     /**
      * KeyValue is a simple class that stores a pair of strings representing
@@ -836,16 +891,23 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         return null;
     }
 
-    public CalendarProvider2Test() {
-        super(CalendarProvider2ForTesting.class, Calendar.AUTHORITY);
-    }
-
     @Override
     protected void setUp() throws Exception {
         super.setUp();
+        // This code here is the code that was originally in ProviderTestCase2
+        mResolver = new MockContentResolver();
 
-        mContext = getMockContext();
-        mResolver = getMockContentResolver();
+        final String filenamePrefix = "test.";
+        RenamingDelegatingContext targetContextWrapper = new RenamingDelegatingContext(
+                new MockContext2(), // The context that most methods are delegated to
+                getContext(), // The context that file methods are delegated to
+                filenamePrefix);
+        mContext = new IsolatedContext(mResolver, targetContextWrapper);
+
+        mProvider = new CalendarProvider2ForTesting();
+        mProvider.attachInfo(mContext, null);
+
+        mResolver.addProvider(Calendar.AUTHORITY, mProvider);
         mResolver.addProvider("subscribedfeeds", new MockProvider("subscribedfeeds"));
         mResolver.addProvider("sync", new MockProvider("sync"));
 
@@ -856,6 +918,17 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         mForceDtend = false;
     }
 
+    @Override
+    protected void tearDown() throws Exception {
+        try {
+            mDb.close();
+            mDb = null;
+            getProvider().getDatabaseHelper().close();
+        } catch (IllegalStateException e) {
+            e.printStackTrace();
+        }
+        super.tearDown();
+    }
 
     public void wipeData(SQLiteDatabase db) {
         db.execSQL("DELETE FROM Calendars;");
@@ -870,12 +943,8 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         db.execSQL("DELETE FROM ExtendedProperties;");
     }
 
-    @Override
-    protected void tearDown() throws Exception {
-        mDb.close();
-        mDb = null;
-        getProvider().getDatabaseHelper().close();
-        super.tearDown();
+    protected CalendarProvider2ForTesting getProvider() {
+        return mProvider;
     }
 
     /**
@@ -1190,6 +1259,204 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
             int rows = mResolver.delete(updatedUri(url, true),
                     null /* selection */, null /* selection args */);
             assertEquals(1, rows);
+        }
+    }
+
+    public static <T> void assertArrayEquals(T[] expected, T[] actual) {
+        if (!Arrays.equals(expected, actual)) {
+            fail("expected:<" + Arrays.toString(expected) +
+                "> but was:<" + Arrays.toString(actual) + ">");
+        }
+    }
+
+    @SmallTest @Smoke
+    public void testTokenizeSearchQuery() {
+        String query = "";
+        String[] expectedTokens = new String[] {""};
+        assertArrayEquals(expectedTokens, mProvider.tokenizeSearchQuery(query));
+
+        query = "a";
+        expectedTokens = new String[] {"a"};
+        assertArrayEquals(expectedTokens, mProvider.tokenizeSearchQuery(query));
+
+        query = "two words";
+        expectedTokens = new String[] {"two", "words"};
+        assertArrayEquals(expectedTokens, mProvider.tokenizeSearchQuery(query));
+
+        query = "test, punctuation.";
+        expectedTokens = new String[] {"test", "punctuation"};
+        assertArrayEquals(expectedTokens, mProvider.tokenizeSearchQuery(query));
+    }
+
+    @SmallTest @Smoke
+    public void testConstructSearchWhere() {
+        String[] tokens = new String[] {"red"};
+        String expected = "(title LIKE ? OR description LIKE ? OR eventLocation"
+                + " LIKE ? ) AND ";
+        assertEquals(expected, mProvider.constructSearchWhere(tokens));
+
+        tokens = new String[] {};
+        expected = "";
+        assertEquals(expected, mProvider.constructSearchWhere(tokens));
+
+        tokens = new String[] {"red", "green"};
+        expected = "(title LIKE ? OR description LIKE ? OR eventLocation"
+                + " LIKE ? ) AND (title LIKE ? OR description LIKE ? OR "
+                + "eventLocation LIKE ? ) AND ";
+        assertEquals(expected, mProvider.constructSearchWhere(tokens));
+
+        tokens = new String[] {"red blue", "green"};
+        expected = "(title LIKE ? OR description LIKE ? OR eventLocation"
+                + " LIKE ? ) AND (title LIKE ? OR description LIKE ? OR "
+                + "eventLocation LIKE ? ) AND ";
+        assertEquals(expected, mProvider.constructSearchWhere(tokens));
+    }
+
+    @SmallTest @Smoke
+    public void testConstructSearchArgs() {
+        long rangeBegin = 0;
+        long rangeEnd = 10;
+
+        String[] tokens = new String[] {"red"};
+        String[] expected = new String[] {"%red%", "%red%", "%red%", "10", "0" };
+        assertArrayEquals(expected, mProvider.constructSearchArgs(tokens,
+                rangeBegin, rangeEnd));
+
+        tokens = new String[] {"red", "blue"};
+        expected = new String[] {"%red%", "%red%", "%red%",
+                "%blue%", "%blue%","%blue%", "10", "0" };
+        assertArrayEquals(expected, mProvider.constructSearchArgs(tokens,
+                rangeBegin, rangeEnd));
+
+        tokens = new String[] {};
+        expected = new String[] {"10", "0" };
+        assertArrayEquals(expected, mProvider.constructSearchArgs(tokens,
+                rangeBegin, rangeEnd));
+    }
+
+    public void testInstanceSearchQuery() throws Exception {
+        final String[] PROJECTION = new String[] {
+                Instances.TITLE,                 // 0
+                Instances.EVENT_LOCATION,        // 1
+                Instances.ALL_DAY,               // 2
+                Instances.COLOR,                 // 3
+                Instances.EVENT_TIMEZONE,        // 4
+                Instances.EVENT_ID,              // 5
+                Instances.BEGIN,                 // 6
+                Instances.END,                   // 7
+                Instances._ID,                   // 8
+                Instances.START_DAY,             // 9
+                Instances.END_DAY,               // 10
+                Instances.START_MINUTE,          // 11
+                Instances.END_MINUTE,            // 12
+                Instances.HAS_ALARM,             // 13
+                Instances.RRULE,                 // 14
+                Instances.RDATE,                 // 15
+                Instances.SELF_ATTENDEE_STATUS,  // 16
+                Events.ORGANIZER,                // 17
+                Events.GUESTS_CAN_MODIFY,        // 18
+        };
+
+        String orderBy = Instances.SORT_CALENDAR_VIEW;
+        String where = Instances.SELF_ATTENDEE_STATUS + "!=" +
+                Calendar.Attendees.ATTENDEE_STATUS_DECLINED;
+
+        int calId = insertCal("Calendar0", DEFAULT_TIMEZONE);
+        final String START = "2008-05-01T00:00:00";
+        final String END = "2008-05-01T20:00:00";
+
+        EventInfo event1 = new EventInfo("search orange",
+                START,
+                END,
+                false /* allDay */,
+                DEFAULT_TIMEZONE);
+        event1.mDescription = "this is description1";
+
+        EventInfo event2 = new EventInfo("search purple",
+                START,
+                END,
+                false /* allDay */,
+                DEFAULT_TIMEZONE);
+        event2.mDescription = "lasers, out of nowhere";
+
+        EventInfo event3 = new EventInfo("",
+                START,
+                END,
+                false /* allDay */,
+                DEFAULT_TIMEZONE);
+        event3.mDescription = "kapow";
+
+        EventInfo[] events = { event1, event2, event3 };
+
+        insertEvent(calId, events[0]);
+        insertEvent(calId, events[1]);
+        insertEvent(calId, events[2]);
+
+        Time time = new Time(DEFAULT_TIMEZONE);
+        time.parse3339(START);
+        long startMs = time.toMillis(true /* ignoreDst */);
+        // Query starting from way in the past to one hour into the event.
+        // Query is more than 2 months so the range won't get extended by the provider.
+        Cursor cursor = null;
+
+        try {
+            cursor = Instances.query(mResolver, PROJECTION,
+                    startMs - DateUtils.YEAR_IN_MILLIS,
+                    startMs + DateUtils.HOUR_IN_MILLIS,
+                    "search", where, orderBy);
+            assertEquals(2, cursor.getCount());
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+
+        try {
+            cursor = Instances.query(mResolver, PROJECTION,
+                    startMs - DateUtils.YEAR_IN_MILLIS,
+                    startMs + DateUtils.HOUR_IN_MILLIS,
+                    "purple", where, orderBy);
+            assertEquals(1, cursor.getCount());
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+
+        try {
+            cursor = Instances.query(mResolver, PROJECTION,
+                    startMs - DateUtils.YEAR_IN_MILLIS,
+                    startMs + DateUtils.HOUR_IN_MILLIS,
+                    "puurple", where, orderBy);
+            assertEquals(0, cursor.getCount());
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+
+        try {
+            cursor = Instances.query(mResolver, PROJECTION,
+                    startMs - DateUtils.YEAR_IN_MILLIS,
+                    startMs + DateUtils.HOUR_IN_MILLIS,
+                    "purple lasers", where, orderBy);
+            assertEquals(1, cursor.getCount());
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+
+        try {
+            cursor = Instances.query(mResolver, PROJECTION,
+                    startMs - DateUtils.YEAR_IN_MILLIS,
+                    startMs + DateUtils.HOUR_IN_MILLIS,
+                    "lasers kapow", where, orderBy);
+            assertEquals(0, cursor.getCount());
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
         }
     }
 

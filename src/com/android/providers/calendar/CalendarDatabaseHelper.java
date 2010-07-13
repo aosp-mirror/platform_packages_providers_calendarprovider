@@ -46,7 +46,10 @@ import java.net.URLDecoder;
  * {@link android.content.ContentProvider} users get the same reference.
  */
 /* package */ class CalendarDatabaseHelper extends SQLiteOpenHelper {
+
     private static final String TAG = "CalendarDatabaseHelper";
+
+    private static final boolean LOGD = false;
 
     private static final String DATABASE_NAME = "calendar.db";
 
@@ -188,7 +191,7 @@ import java.net.URLDecoder;
      */
     /* package */ CalendarDatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
-        if (false) Log.i(TAG, "Creating OpenHelper");
+        if (LOGD) Log.d(TAG, "Creating OpenHelper");
         Resources resources = context.getResources();
 
         mContext = context;

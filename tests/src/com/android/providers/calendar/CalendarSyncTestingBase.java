@@ -182,7 +182,6 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
 
         values.put(Calendar.Calendars.SYNC_EVENTS, 1);
         values.put(Calendar.Calendars.SELECTED, 1);
-        values.put(Calendar.Calendars.HIDDEN, 0);
         values.put(Calendar.Calendars.COLOR, -14069085 /* blue */);
         values.put(Calendar.Calendars.ACCESS_LEVEL, Calendar.Calendars.OWNER_ACCESS);
 

@@ -54,7 +54,7 @@ import java.net.URLDecoder;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    static final int DATABASE_VERSION = 73;
+    static final int DATABASE_VERSION = 74;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -458,7 +458,6 @@ import java.net.URLDecoder;
                 Calendar.Calendars._SYNC_MARK + " INTEGER," + // Used to filter out new rows
                 Calendar.Calendars.NAME + " TEXT," +
                 Calendar.Calendars.DISPLAY_NAME + " TEXT," +
-                Calendar.Calendars.HIDDEN + " INTEGER NOT NULL DEFAULT 0," +
                 Calendar.Calendars.COLOR + " INTEGER," +
                 Calendar.Calendars.ACCESS_LEVEL + " INTEGER," +
                 Calendar.Calendars.SELECTED + " INTEGER NOT NULL DEFAULT 1," +
@@ -471,7 +470,8 @@ import java.net.URLDecoder;
                 Calendar.Calendars.SYNC1 + " TEXT," +
                 Calendar.Calendars.SYNC2 + " TEXT," +
                 Calendar.Calendars.SYNC3 + " TEXT," +
-                Calendar.Calendars.SYNC4 + " TEXT" +
+                Calendar.Calendars.SYNC4 + " TEXT," +
+                Calendar.Calendars.SYNC5 + " TEXT" +
                 ");");
 
         // Trigger to remove a calendar's events when we delete the calendar
@@ -621,6 +621,10 @@ import java.net.URLDecoder;
                 upgradeToVersion73(db);
                 oldVersion += 1;
             }
+            if (oldVersion == 73) {
+                upgradeToVersion74(db);
+                oldVersion += 1;
+            }
         } catch (SQLiteException e) {
             Log.e(TAG, "onUpgrade: SQLiteException, recreating db. " + e);
             dropTables(db);
@@ -654,6 +658,79 @@ import java.net.URLDecoder;
     }
 
     @VisibleForTesting
+    void upgradeToVersion74(SQLiteDatabase db) {
+        // We will drop the "hidden" column from the calendar schema and add the "sync5" column
+        db.execSQL("ALTER TABLE " + Tables.CALENDARS +" RENAME TO " +
+                Tables.CALENDARS + "_Backup;");
+
+        db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
+        createCalendarsTable(db);
+
+        // Populate the new Calendars table and put into the "sync5" column the value of the
+        // old "hidden" column
+        db.execSQL("INSERT INTO " + Tables.CALENDARS + " (" +
+                Calendar.Calendars._ID + ", " +
+                Calendar.Calendars._SYNC_ACCOUNT + ", " +
+                Calendar.Calendars._SYNC_ACCOUNT_TYPE + ", " +
+                Calendar.Calendars._SYNC_ID + ", " +
+                Calendar.Calendars._SYNC_VERSION + ", " +
+                Calendar.Calendars._SYNC_TIME + ", " +
+                Calendar.Calendars._SYNC_DATA + ", " +
+                Calendar.Calendars._SYNC_DIRTY + ", " +
+                Calendar.Calendars._SYNC_MARK + ", " +
+                Calendar.Calendars.NAME + ", " +
+                Calendar.Calendars.DISPLAY_NAME + ", " +
+                Calendar.Calendars.COLOR + ", " +
+                Calendar.Calendars.ACCESS_LEVEL + ", " +
+                Calendar.Calendars.SELECTED + ", " +
+                Calendar.Calendars.SYNC_EVENTS + ", " +
+                Calendar.Calendars.LOCATION + ", " +
+                Calendar.Calendars.TIMEZONE + ", " +
+                Calendar.Calendars.OWNER_ACCOUNT + ", " +
+                Calendar.Calendars.ORGANIZER_CAN_RESPOND + ", " +
+                Calendar.Calendars.DELETED + ", " +
+                Calendar.Calendars.SYNC1 + ", " +
+                Calendar.Calendars.SYNC2 + ", " +
+                Calendar.Calendars.SYNC3 + ", " +
+                Calendar.Calendars.SYNC4 + ", " +
+                Calendar.Calendars.SYNC5 + ") " +
+                "SELECT " +
+                Calendar.Calendars._ID + ", " +
+                Calendar.Calendars._SYNC_ACCOUNT + ", " +
+                Calendar.Calendars._SYNC_ACCOUNT_TYPE + ", " +
+                Calendar.Calendars._SYNC_ID + ", " +
+                Calendar.Calendars._SYNC_VERSION + ", " +
+                Calendar.Calendars._SYNC_TIME + ", " +
+                Calendar.Calendars._SYNC_DATA + ", " +
+                Calendar.Calendars._SYNC_DIRTY + ", " +
+                Calendar.Calendars._SYNC_MARK + ", " +
+                Calendar.Calendars.NAME + ", " +
+                Calendar.Calendars.DISPLAY_NAME + ", " +
+                Calendar.Calendars.COLOR + ", " +
+                Calendar.Calendars.ACCESS_LEVEL + ", " +
+                Calendar.Calendars.SELECTED + ", " +
+                Calendar.Calendars.SYNC_EVENTS + ", " +
+                Calendar.Calendars.LOCATION + ", " +
+                Calendar.Calendars.TIMEZONE + ", " +
+                Calendar.Calendars.OWNER_ACCOUNT + ", " +
+                Calendar.Calendars.ORGANIZER_CAN_RESPOND + ", " +
+                Calendar.Calendars.DELETED + ", " +
+                Calendar.Calendars.SYNC1 + ", " +
+                Calendar.Calendars.SYNC2 + ", " +
+                Calendar.Calendars.SYNC3 + ", " +
+                Calendar.Calendars.SYNC4 + " " +
+                "hidden" + " " +
+                "FROM " + Tables.CALENDARS + "_Backup" + ";"
+        );
+
+        // Drop the backup table
+        db.execSQL("DROP TABLE " + Tables.CALENDARS + "_Backup;");
+
+        // Recreate the Events Views as column "hidden" has been deleted
+        createEventsView(db);
+    }
+
+    @VisibleForTesting
     void upgradeToVersion73(SQLiteDatabase db) {
         db.execSQL("ALTER TABLE " + Tables.CALENDARS +
                 " ADD COLUMN " + Calendar.Calendars.SYNC4 + " TEXT;");
@@ -682,7 +759,6 @@ import java.net.URLDecoder;
                 Calendar.Calendars._SYNC_MARK + ", " +
                 Calendar.Calendars.NAME + ", " +
                 Calendar.Calendars.DISPLAY_NAME + ", " +
-                Calendar.Calendars.HIDDEN + ", " +
                 Calendar.Calendars.COLOR + ", " +
                 Calendar.Calendars.ACCESS_LEVEL + ", " +
                 Calendar.Calendars.SELECTED + ", " +
@@ -705,7 +781,6 @@ import java.net.URLDecoder;
                 Calendar.Calendars._SYNC_MARK + ", " +
                 Calendar.Calendars.NAME + ", " +
                 Calendar.Calendars.DISPLAY_NAME + ", " +
-                Calendar.Calendars.HIDDEN + ", " +
                 Calendar.Calendars.COLOR + ", " +
                 Calendar.Calendars.ACCESS_LEVEL + ", " +
                 Calendar.Calendars.SELECTED + ", " +

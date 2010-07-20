@@ -1270,13 +1270,48 @@ public class CalendarProvider2Test extends AndroidTestCase {
     }
 
     @SmallTest @Smoke
+    public void testEscapeSearchToken() {
+        String token = "test";
+        String expected = "test";
+        assertEquals(expected, mProvider.escapeSearchToken(token));
+
+        token = "%";
+        expected = "#%";
+        assertEquals(expected, mProvider.escapeSearchToken(token));
+
+        token = "_";
+        expected = "#_";
+        assertEquals(expected, mProvider.escapeSearchToken(token));
+
+        token = "#";
+        expected = "##";
+        assertEquals(expected, mProvider.escapeSearchToken(token));
+
+        token = "##";
+        expected = "####";
+        assertEquals(expected, mProvider.escapeSearchToken(token));
+
+        token = "%_#";
+        expected = "#%#_##";
+        assertEquals(expected, mProvider.escapeSearchToken(token));
+
+        token = "blah%blah";
+        expected = "blah#%blah";
+        assertEquals(expected, mProvider.escapeSearchToken(token));
+    }
+
+    @SmallTest @Smoke
     public void testTokenizeSearchQuery() {
         String query = "";
-        String[] expectedTokens = new String[] {""};
+        String[] expectedTokens = new String[] {};
         assertArrayEquals(expectedTokens, mProvider.tokenizeSearchQuery(query));
 
         query = "a";
         expectedTokens = new String[] {"a"};
+        assertArrayEquals(expectedTokens, mProvider.tokenizeSearchQuery(query));
+
+        query = "word";
+        expectedTokens = new String[] {"word"};
         assertArrayEquals(expectedTokens, mProvider.tokenizeSearchQuery(query));
 
         query = "two words";
@@ -1286,13 +1321,38 @@ public class CalendarProvider2Test extends AndroidTestCase {
         query = "test, punctuation.";
         expectedTokens = new String[] {"test", "punctuation"};
         assertArrayEquals(expectedTokens, mProvider.tokenizeSearchQuery(query));
+
+        query = "\"test phrase\"";
+        expectedTokens = new String[] {"test phrase"};
+        assertArrayEquals(expectedTokens, mProvider.tokenizeSearchQuery(query));
+
+        query = "unquoted \"this is quoted\"";
+        expectedTokens = new String[] {"unquoted", "this is quoted"};
+        assertArrayEquals(expectedTokens, mProvider.tokenizeSearchQuery(query));
+
+        query = " \"this is quoted\"  unquoted ";
+        expectedTokens = new String[] {"this is quoted", "unquoted"};
+        assertArrayEquals(expectedTokens, mProvider.tokenizeSearchQuery(query));
+
+        query = "escap%e m_e";
+        expectedTokens = new String[] {"escap#%e", "m#_e"};
+        assertArrayEquals(expectedTokens, mProvider.tokenizeSearchQuery(query));
+
+        query = "'a bunch' of malformed\" things";
+        expectedTokens = new String[] {"a", "bunch", "of", "malformed", "things"};
+        assertArrayEquals(expectedTokens, mProvider.tokenizeSearchQuery(query));
+
+        query = "''''''....,.''trim punctuation";
+        expectedTokens = new String[] {"trim", "punctuation"};
+        assertArrayEquals(expectedTokens, mProvider.tokenizeSearchQuery(query));
     }
 
     @SmallTest @Smoke
     public void testConstructSearchWhere() {
         String[] tokens = new String[] {"red"};
-        String expected = "(title LIKE ? OR description LIKE ? OR eventLocation"
-                + " LIKE ? ) AND ";
+        String expected = "(title LIKE ? ESCAPE \"#\" OR "
+                + "description LIKE ? ESCAPE \"#\" OR "
+                + "eventLocation LIKE ? ESCAPE \"#\" ) AND ";
         assertEquals(expected, mProvider.constructSearchWhere(tokens));
 
         tokens = new String[] {};
@@ -1300,15 +1360,21 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertEquals(expected, mProvider.constructSearchWhere(tokens));
 
         tokens = new String[] {"red", "green"};
-        expected = "(title LIKE ? OR description LIKE ? OR eventLocation"
-                + " LIKE ? ) AND (title LIKE ? OR description LIKE ? OR "
-                + "eventLocation LIKE ? ) AND ";
+        expected = "(title LIKE ? ESCAPE \"#\" OR "
+                + "description LIKE ? ESCAPE \"#\" OR "
+                + "eventLocation LIKE ? ESCAPE \"#\" ) AND "
+                + "(title LIKE ? ESCAPE \"#\" OR "
+                + "description LIKE ? ESCAPE \"#\" OR "
+                + "eventLocation LIKE ? ESCAPE \"#\" ) AND ";
         assertEquals(expected, mProvider.constructSearchWhere(tokens));
 
         tokens = new String[] {"red blue", "green"};
-        expected = "(title LIKE ? OR description LIKE ? OR eventLocation"
-                + " LIKE ? ) AND (title LIKE ? OR description LIKE ? OR "
-                + "eventLocation LIKE ? ) AND ";
+        expected = "(title LIKE ? ESCAPE \"#\" OR "
+                + "description LIKE ? ESCAPE \"#\" OR "
+                + "eventLocation LIKE ? ESCAPE \"#\" ) AND "
+                + "(title LIKE ? ESCAPE \"#\" OR "
+                + "description LIKE ? ESCAPE \"#\" OR "
+                + "eventLocation LIKE ? ESCAPE \"#\" ) AND ";
         assertEquals(expected, mProvider.constructSearchWhere(tokens));
     }
 
@@ -1452,6 +1518,42 @@ public class CalendarProvider2Test extends AndroidTestCase {
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
                     "lasers kapow", where, orderBy);
+            assertEquals(0, cursor.getCount());
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+
+        try {
+            cursor = Instances.query(mResolver, PROJECTION,
+                    startMs - DateUtils.YEAR_IN_MILLIS,
+                    startMs + DateUtils.HOUR_IN_MILLIS,
+                    "\"search purple\"", where, orderBy);
+            assertEquals(1, cursor.getCount());
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+
+        try {
+            cursor = Instances.query(mResolver, PROJECTION,
+                    startMs - DateUtils.YEAR_IN_MILLIS,
+                    startMs + DateUtils.HOUR_IN_MILLIS,
+                    "\"purple search\"", where, orderBy);
+            assertEquals(0, cursor.getCount());
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+
+        try {
+            cursor = Instances.query(mResolver, PROJECTION,
+                    startMs - DateUtils.YEAR_IN_MILLIS,
+                    startMs + DateUtils.HOUR_IN_MILLIS,
+                    "%", where, orderBy);
             assertEquals(0, cursor.getCount());
         } finally {
             if (cursor != null) {

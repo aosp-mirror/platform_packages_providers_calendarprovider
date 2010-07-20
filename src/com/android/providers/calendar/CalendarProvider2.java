@@ -64,8 +64,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -269,9 +271,29 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     /**
      * A regex for describing how we split search queries into tokens.
-     * Currently splits on whitespace and punctuation
+     * Keeps quoted phrases as one token.
+     *
+     *   "one \"two three\"" ==> ["one" "two three"]
      */
-    private static final Pattern SEARCH_TOKEN_PATTERN = Pattern.compile("[\\s,.!?]+");
+    private static final Pattern SEARCH_TOKEN_PATTERN =
+        Pattern.compile("[^\\s\"'.?!,]+|" // first part matches unquoted words
+                      + "\"([^\"]*)\"");  // second part matches quoted phrases
+    /**
+     * A special character that was use to escape potentially problematic
+     * characters in search queries.
+     *
+     * Note: do not use backslash for this, as it interferes with the regex
+     * escaping mechanism.
+     */
+    private static final String SEARCH_ESCAPE_CHAR = "#";
+
+    /**
+     * A regex for matching any characters in an incoming search query that we
+     * need to escape with {@link #SEARCH_ESCAPE_CHAR}, including the escape
+     * character itself.
+     */
+    private static final Pattern SEARCH_ESCAPE_PATTERN =
+        Pattern.compile("([%_" + SEARCH_ESCAPE_CHAR + "])");
 
     private static final String[] SEARCH_COLUMNS = new String[] {
         Calendar.Events.TITLE,
@@ -860,16 +882,40 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     /**
+     * Escape any special characters in the search token
+     * @param token the token to escape
+     * @return the escaped token
+     */
+    @VisibleForTesting
+    String escapeSearchToken(String token) {
+        Matcher matcher = SEARCH_ESCAPE_PATTERN.matcher(token);
+        return matcher.replaceAll(SEARCH_ESCAPE_CHAR + "$1");
+    }
+
+    /**
      * Splits the search query into individual search tokens based on whitespace
-     * and punctuation.
+     * and punctuation. Leaves both single quoted and double quoted strings
+     * intact.
      *
-     * TODO Support quoted phrases
      * @param query the search query
      * @return an array of tokens from the search query
      */
     @VisibleForTesting
     String[] tokenizeSearchQuery(String query) {
-        return SEARCH_TOKEN_PATTERN.split(query);
+        List<String> matchList = new ArrayList<String>();
+        Matcher matcher = SEARCH_TOKEN_PATTERN.matcher(query);
+        String token;
+        while (matcher.find()) {
+            if (matcher.group(1) != null) {
+                // double quoted string
+                token = matcher.group(1);
+            } else {
+                // unquoted token
+                token = matcher.group();
+            }
+            matchList.add(escapeSearchToken(token));
+        }
+        return matchList.toArray(new String[matchList.size()]);
     }
 
     /**
@@ -902,7 +948,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             sb.append("(");
             for (int i = 0; i < SEARCH_COLUMNS.length; i++) {
                 sb.append(SEARCH_COLUMNS[i]);
-                sb.append(" LIKE ? ");
+                sb.append(" LIKE ? ESCAPE \"");
+                sb.append(SEARCH_ESCAPE_CHAR);
+                sb.append("\" ");
                 if (i < SEARCH_COLUMNS.length - 1) {
                     sb.append("OR ");
                 }
@@ -934,10 +982,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         qb.setTables(INSTANCE_QUERY_TABLES);
         qb.setProjectionMap(sInstancesProjectionMap);
 
-
-        String[] tokens = SEARCH_TOKEN_PATTERN.split(query);
+        String[] tokens = tokenizeSearchQuery(query);
         String[] selectionArgs = constructSearchArgs(tokens, rangeBegin, rangeEnd);
-        qb.appendWhere(constructSearchWhere(tokens));
+        String searchWhere = constructSearchWhere(tokens);
+
+        qb.appendWhere(searchWhere);
 
         if (searchByDay) {
             // Convert the first and last Julian day range to a range that uses

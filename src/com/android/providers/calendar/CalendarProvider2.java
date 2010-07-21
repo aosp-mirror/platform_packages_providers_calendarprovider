@@ -255,6 +255,20 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         CalendarDatabaseHelper.Tables.EVENTS + "."
         + Calendar.Events._ID + ")";
 
+    private static final String INSTANCE_SEARCH_QUERY_TABLES = "(" +
+        CalendarDatabaseHelper.Tables.INSTANCES + " INNER JOIN " +
+        CalendarDatabaseHelper.Views.EVENTS + " AS " +
+        CalendarDatabaseHelper.Tables.EVENTS +
+        " ON (" + CalendarDatabaseHelper.Tables.INSTANCES + "."
+        + Calendar.Instances.EVENT_ID + "=" +
+        CalendarDatabaseHelper.Tables.EVENTS + "."
+        + Calendar.Events._ID + ")" + ") LEFT OUTER JOIN " +
+        CalendarDatabaseHelper.Tables.ATTENDEES +
+        " ON (" + CalendarDatabaseHelper.Tables.ATTENDEES + "."
+        + Calendar.Attendees.EVENT_ID + "=" +
+        CalendarDatabaseHelper.Tables.EVENTS + "."
+        + Calendar.Events._ID + ")";
+
     private static final String BETWEEN_DAY_WHERE =
         Calendar.Instances.START_DAY + "<=? AND " +
         Calendar.Instances.END_DAY + ">=?";
@@ -295,10 +309,26 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final Pattern SEARCH_ESCAPE_PATTERN =
         Pattern.compile("([%_" + SEARCH_ESCAPE_CHAR + "])");
 
+    /**
+     * Alias used for aggregate concatenation of attendee e-mails when grouping
+     * attendees by instance.
+     */
+    private static final String ATTENDEES_EMAIL_CONCAT =
+        "group_concat(" + Calendar.Attendees.ATTENDEE_EMAIL + ")";
+
+    /**
+     * Alias used for aggregate concatenation of attendee names when grouping
+     * attendees by instance.
+     */
+    private static final String ATTENDEES_NAME_CONCAT =
+        "group_concat(" + Calendar.Attendees.ATTENDEE_NAME + ")";
+
     private static final String[] SEARCH_COLUMNS = new String[] {
         Calendar.Events.TITLE,
         Calendar.Events.DESCRIPTION,
-        Calendar.Events.EVENT_LOCATION
+        Calendar.Events.EVENT_LOCATION,
+        ATTENDEES_EMAIL_CONCAT,
+        ATTENDEES_NAME_CONCAT
     };
 
     private AlarmManager mAlarmManager;
@@ -955,38 +985,41 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     sb.append("OR ");
                 }
             }
-            sb.append(") AND ");
+            sb.append(")");
+            if (j < tokens.length - 1) {
+                sb.append(" AND ");
+            }
         }
         return sb.toString();
     }
 
     @VisibleForTesting
     String[] constructSearchArgs(String[] tokens, long rangeBegin, long rangeEnd) {
+        int numCols = SEARCH_COLUMNS.length;
+        int numArgs = tokens.length * numCols + 2;
         // the additional two elements here are for begin/end time
-        String[] selectionArgs =
-            new String[tokens.length * SEARCH_COLUMNS.length + 2];
+        String[] selectionArgs = new String[numArgs];
+        selectionArgs[0] =  String.valueOf(rangeEnd);
+        selectionArgs[1] =  String.valueOf(rangeBegin);
         for (int j = 0; j < tokens.length; j++) {
-            for (int i = 0; i < SEARCH_COLUMNS.length; i++) {
-                selectionArgs[j * SEARCH_COLUMNS.length + i] =
-                    "%" + tokens[j] + "%";
+            for (int i = 2; i < numArgs; i++) {
+                selectionArgs[i] = "%" + tokens[j] + "%";
             }
         }
-        selectionArgs[selectionArgs.length - 2] =  String.valueOf(rangeEnd);
-        selectionArgs[selectionArgs.length - 1] =  String.valueOf(rangeBegin);
         return selectionArgs;
     }
 
     private Cursor handleInstanceSearchQuery(SQLiteQueryBuilder qb,
             long rangeBegin, long rangeEnd, String query, String[] projection,
             String selection, String sort, boolean searchByDay) {
-        qb.setTables(INSTANCE_QUERY_TABLES);
+        qb.setTables(INSTANCE_SEARCH_QUERY_TABLES);
         qb.setProjectionMap(sInstancesProjectionMap);
 
         String[] tokens = tokenizeSearchQuery(query);
         String[] selectionArgs = constructSearchArgs(tokens, rangeBegin, rangeEnd);
+        // we pass this in as a HAVING instead of a WHERE so the filtering
+        // happens after the grouping
         String searchWhere = constructSearchWhere(tokens);
-
-        qb.appendWhere(searchWhere);
 
         if (searchByDay) {
             // Convert the first and last Julian day range to a range that uses
@@ -997,17 +1030,20 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             // Julian day and we want to include all the events on the last day.
             long endMs = time.setJulianDay((int) rangeEnd + 1);
             // will lock the database.
+            // we expand the instances here because we might be searching over
+            // a range where instance expansion has not occurred yet
             acquireInstanceRange(beginMs, endMs, true /* use minimum expansion window */);
             qb.appendWhere(BETWEEN_DAY_WHERE);
         } else {
             // will lock the database.
+            // we expand the instances here because we might be searching over
+            // a range where instance expansion has not occurred yet
             acquireInstanceRange(rangeBegin, rangeEnd, true /* use minimum expansion window */);
             qb.appendWhere(BETWEEN_WHERE);
         }
 
-        return qb.query(mDb, projection, selection, selectionArgs, null /* groupBy */,
-                null /* having */, sort);
-
+        return qb.query(mDb, projection, selection, selectionArgs,
+                Instances._ID /* groupBy */, searchWhere /* having */, sort);
     }
 
     private Cursor handleEventDayQuery(SQLiteQueryBuilder qb, int begin, int end,

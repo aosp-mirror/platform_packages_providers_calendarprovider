@@ -1351,8 +1351,10 @@ public class CalendarProvider2Test extends AndroidTestCase {
     public void testConstructSearchWhere() {
         String[] tokens = new String[] {"red"};
         String expected = "(title LIKE ? ESCAPE \"#\" OR "
-                + "description LIKE ? ESCAPE \"#\" OR "
-                + "eventLocation LIKE ? ESCAPE \"#\" ) AND ";
+            + "description LIKE ? ESCAPE \"#\" OR "
+            + "eventLocation LIKE ? ESCAPE \"#\" OR "
+            + "group_concat(attendeeEmail) LIKE ? ESCAPE \"#\" OR "
+            + "group_concat(attendeeName) LIKE ? ESCAPE \"#\" )";
         assertEquals(expected, mProvider.constructSearchWhere(tokens));
 
         tokens = new String[] {};
@@ -1362,19 +1364,27 @@ public class CalendarProvider2Test extends AndroidTestCase {
         tokens = new String[] {"red", "green"};
         expected = "(title LIKE ? ESCAPE \"#\" OR "
                 + "description LIKE ? ESCAPE \"#\" OR "
-                + "eventLocation LIKE ? ESCAPE \"#\" ) AND "
+                + "eventLocation LIKE ? ESCAPE \"#\" OR "
+                + "group_concat(attendeeEmail) LIKE ? ESCAPE \"#\" OR "
+                + "group_concat(attendeeName) LIKE ? ESCAPE \"#\" ) AND "
                 + "(title LIKE ? ESCAPE \"#\" OR "
                 + "description LIKE ? ESCAPE \"#\" OR "
-                + "eventLocation LIKE ? ESCAPE \"#\" ) AND ";
+                + "eventLocation LIKE ? ESCAPE \"#\" OR "
+                + "group_concat(attendeeEmail) LIKE ? ESCAPE \"#\" OR "
+                + "group_concat(attendeeName) LIKE ? ESCAPE \"#\" )";
         assertEquals(expected, mProvider.constructSearchWhere(tokens));
 
         tokens = new String[] {"red blue", "green"};
         expected = "(title LIKE ? ESCAPE \"#\" OR "
-                + "description LIKE ? ESCAPE \"#\" OR "
-                + "eventLocation LIKE ? ESCAPE \"#\" ) AND "
-                + "(title LIKE ? ESCAPE \"#\" OR "
-                + "description LIKE ? ESCAPE \"#\" OR "
-                + "eventLocation LIKE ? ESCAPE \"#\" ) AND ";
+            + "description LIKE ? ESCAPE \"#\" OR "
+            + "eventLocation LIKE ? ESCAPE \"#\" OR "
+            + "group_concat(attendeeEmail) LIKE ? ESCAPE \"#\" OR "
+            + "group_concat(attendeeName) LIKE ? ESCAPE \"#\" ) AND "
+            + "(title LIKE ? ESCAPE \"#\" OR "
+            + "description LIKE ? ESCAPE \"#\" OR "
+            + "eventLocation LIKE ? ESCAPE \"#\" OR "
+            + "group_concat(attendeeEmail) LIKE ? ESCAPE \"#\" OR "
+            + "group_concat(attendeeName) LIKE ? ESCAPE \"#\" )";
         assertEquals(expected, mProvider.constructSearchWhere(tokens));
     }
 
@@ -1384,13 +1394,15 @@ public class CalendarProvider2Test extends AndroidTestCase {
         long rangeEnd = 10;
 
         String[] tokens = new String[] {"red"};
-        String[] expected = new String[] {"%red%", "%red%", "%red%", "10", "0" };
+        String[] expected = new String[] {"10", "0", "%red%", "%red%",
+                "%red%", "%red%", "%red%" };
         assertArrayEquals(expected, mProvider.constructSearchArgs(tokens,
                 rangeBegin, rangeEnd));
 
         tokens = new String[] {"red", "blue"};
-        expected = new String[] {"%red%", "%red%", "%red%",
-                "%blue%", "%blue%","%blue%", "10", "0" };
+        expected = new String[] { "10", "0", "%red%", "%red%", "%red%",
+                "%red%", "%red%", "%blue%", "%blue%",
+                "%blue%", "%blue%","%blue%"};
         assertArrayEquals(expected, mProvider.constructSearchArgs(tokens,
                 rangeBegin, rangeEnd));
 

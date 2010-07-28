@@ -1002,7 +1002,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         selectionArgs[0] =  String.valueOf(rangeEnd);
         selectionArgs[1] =  String.valueOf(rangeBegin);
         for (int j = 0; j < tokens.length; j++) {
-            for (int i = 2; i < numArgs; i++) {
+            int start = 2 + numCols * j;
+            for (int i = start; i < start + numCols; i++) {
                 selectionArgs[i] = "%" + tokens[j] + "%";
             }
         }

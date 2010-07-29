@@ -26,6 +26,13 @@ LOCAL_SRC_FILES += \
 
 LOCAL_PACKAGE_NAME := CalendarProvider
 
+# The Emma tool analyzes code coverage when running unit tests on the
+# application. This configuration line selects which packages will be analyzed,
+# leaving out code which is tested by other means (e.g. static libraries) that
+# would dilute the coverage results. These options do not affect regular
+# production builds.
+LOCAL_EMMA_COVERAGE_FILTER := +com.android.providers.calendar.*
+
 include $(BUILD_PACKAGE)
 
 # Use the following include to make our test apk.

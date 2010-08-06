@@ -60,6 +60,9 @@ import android.util.Log;
 import android.util.TimeFormatException;
 import android.util.TimeUtils;
 
+import static com.android.providers.calendar.CalendarDatabaseHelper.Tables;
+import static com.android.providers.calendar.CalendarDatabaseHelper.Views;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -82,12 +85,21 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final boolean MULTIPLE_ATTENDEES_PER_EVENT = true;
 
     private static final String INVALID_CALENDARALERTS_SELECTOR =
-            "_id IN (SELECT ca._id FROM CalendarAlerts AS ca"
-                    + " LEFT OUTER JOIN Instances USING (event_id, begin, end)"
-                    + " LEFT OUTER JOIN Reminders AS r ON"
-                    + " (ca.event_id=r.event_id AND ca.minutes=r.minutes)"
-                    + " WHERE Instances.begin ISNULL OR ca.alarmTime<?"
-                    + "   OR (r.minutes ISNULL AND ca.minutes<>0))";
+            "_id IN (SELECT ca." + CalendarAlerts._ID + " FROM "
+                    + Tables.CALENDAR_ALERTS + " AS ca"
+                    + " LEFT OUTER JOIN " + Tables.INSTANCES
+                    + " USING (" + Instances.EVENT_ID + ","
+                    + Instances.BEGIN + "," + Instances.END + ")"
+                    + " LEFT OUTER JOIN " + Tables.REMINDERS + " AS r ON"
+                    + " (ca." + CalendarAlerts.EVENT_ID + "=r." + Reminders.EVENT_ID
+                    + " AND ca." + CalendarAlerts.MINUTES + "=r." + Reminders.MINUTES + ")"
+                    + " LEFT OUTER JOIN " + Views.EVENTS + " AS e ON"
+                    + " (ca." + CalendarAlerts.EVENT_ID + "=e." + Events._ID + ")"
+                    + " WHERE " + Tables.INSTANCES + "." + Instances.BEGIN + " ISNULL"
+                    + "   OR ca." + CalendarAlerts.ALARM_TIME + "<?"
+                    + "   OR (r." + Reminders.MINUTES + " ISNULL"
+                    + "       AND ca." + CalendarAlerts.MINUTES + "<>0)"
+                    + "   OR e." + Calendars.SELECTED + "=0)";
 
     private static final String[] ID_ONLY_PROJECTION =
             new String[] {Events._ID};
@@ -2894,6 +2906,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         new String[] {String.valueOf(id)});
 
                 if (result > 0) {
+                    // if visibility was toggled, we need to update alarms
+                    if (values.containsKey(Calendars.SELECTED)) {
+                        // pass false for removeAlarms since the call to
+                        // scheduleNextAlarmLocked will remove any alarms for
+                        // non-visible events anyways. removeScheduledAlarmsLocked
+                        // does not actually have the effect we want
+                        scheduleNextAlarm(false);
+                    }
                     // update the widget
                     sendUpdateNotification(callerIsSyncAdapter);
                 }
@@ -3311,21 +3331,31 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // will be untyped and sqlite3's manifest typing will not convert the
         // string query parameter to an int in myAlarmtime>=?, so the comparison
         // will fail.  This could be simplified if bug 2464440 is resolved.
-        String query = "SELECT begin-(minutes*60000) AS myAlarmTime,"
-                + " Instances.event_id AS eventId, begin, end,"
-                + " title, allDay, method, minutes"
-                + " FROM Instances INNER JOIN Events"
-                + " ON (Events._id = Instances.event_id)"
-                + " INNER JOIN Reminders"
-                + " ON (Instances.event_id = Reminders.event_id)"
-                + " WHERE method=" + Reminders.METHOD_ALERT
+        String query = "SELECT " + Instances.BEGIN + "-(" + Reminders.MINUTES
+                + "*60000) AS myAlarmTime," + Tables.INSTANCES
+                + "." + Instances.EVENT_ID + " AS eventId"
+                + "," + Instances.BEGIN + "," + Instances.END
+                + "," + Instances.TITLE + "," + Instances.ALL_DAY
+                + "," + Reminders.METHOD + "," + Reminders.MINUTES
+                + " FROM " + Tables.INSTANCES
+                + " INNER JOIN " + Views.EVENTS
+                + " ON (" + Views.EVENTS + "." + Events._ID
+                + "=" + Tables.INSTANCES + "." + Instances.EVENT_ID + ")"
+                + " INNER JOIN " + Tables.REMINDERS
+                + " ON (" + Tables.INSTANCES + "." + Instances.EVENT_ID
+                + "=" + Tables.REMINDERS + "." + Reminders.EVENT_ID + ")"
+                + " WHERE " + Calendars.SELECTED + "=1"
+                + " AND " + Reminders.METHOD + "=" + Reminders.METHOD_ALERT
                 + " AND myAlarmTime>=CAST(? AS INT)"
                 + " AND myAlarmTime<=CAST(? AS INT)"
-                + " AND end>=?"
-                + " AND 0=(SELECT count(*) from CalendarAlerts CA"
-                + " where CA.event_id=Instances.event_id AND CA.begin=Instances.begin"
-                + " AND CA.alarmTime=myAlarmTime)"
-                + " ORDER BY myAlarmTime,begin,title";
+                + " AND " + Instances.END + ">=?"
+                + " AND 0=(SELECT count(*) from " + Tables.CALENDAR_ALERTS + " CA"
+                + " WHERE CA." + CalendarAlerts.EVENT_ID
+                + "=" + Tables.INSTANCES + "." + Instances.EVENT_ID
+                + " AND CA." + CalendarAlerts.BEGIN
+                + "=" + Tables.INSTANCES + "." + Instances.BEGIN
+                + " AND CA." + CalendarAlerts.ALARM_TIME + "=myAlarmTime)"
+                + " ORDER BY myAlarmTime," + Instances.BEGIN + "," + Instances.TITLE;
         String queryParams[] = new String[] {String.valueOf(start), String.valueOf(nextAlarmTime),
                 String.valueOf(currentMillis)};
 

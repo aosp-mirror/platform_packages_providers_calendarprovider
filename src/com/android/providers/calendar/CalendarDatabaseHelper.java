@@ -58,7 +58,7 @@ import java.net.URLDecoder;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    static final int DATABASE_VERSION = 69;
+    static final int DATABASE_VERSION = 70;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -428,7 +428,12 @@ import java.net.URLDecoder;
                 "value TEXT" +
                 ");");
 
-        db.execSQL("INSERT INTO CalendarCache (key, value) VALUES (" +
+        initCalendarCacheTable(db);
+    }
+
+    private void initCalendarCacheTable(SQLiteDatabase db) {
+        db.execSQL("INSERT INTO CalendarCache (_id, key, value) VALUES (" +
+                CalendarCache.KEY_TIMEZONE_DATABASE_VERSION.hashCode() + "," +
                 "'" + CalendarCache.KEY_TIMEZONE_DATABASE_VERSION + "',"  +
                 "'" + CalendarCache.DEFAULT_TIMEZONE_DATABASE_VERSION + "'" +
                 ");");
@@ -532,6 +537,10 @@ import java.net.URLDecoder;
                 upgradeToVersion69(db);
                 oldVersion = 69;
             }
+            if (oldVersion == 69) {
+                upgradeToVersion70(db);
+                oldVersion += 1;
+            }
         } catch (SQLiteException e) {
             Log.e(TAG, "onUpgrade: SQLiteException, recreating db. " + e);
             dropTables(db);
@@ -562,6 +571,11 @@ import java.net.URLDecoder;
             return true;
         }
         return false;
+    }
+
+    @VisibleForTesting
+    void upgradeToVersion70(SQLiteDatabase db) {
+        createCalendarCacheTable(db);
     }
 
     @VisibleForTesting

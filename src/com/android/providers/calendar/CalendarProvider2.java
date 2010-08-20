@@ -491,9 +491,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // helps to catch missed alarms when the Calendar process is
                 // killed (because of low-memory conditions) and then restarted.
                 rescheduleMissedAlarms();
-                return;
             }
-            regenerateInstancesTable();
         } catch (SQLException e) {
             Log.e(TAG, "doUpdateTimezoneDependentFields() failed", e);
             try {
@@ -511,9 +509,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         try {
             updateEventsStartEndFromEventRawTimesLocked(timezone);
             updateTimezoneDatabaseVersion(timeZoneDatabaseVersion);
-            cleanInstancesTable();
             regenerateInstancesTable();
-
             mDb.setTransactionSuccessful();
         } finally {
             mDb.endTransaction();
@@ -580,10 +576,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     }
 
-    private void cleanInstancesTable() {
-        mDb.delete("Instances", null /* where clause */, null /* where args */);
-    }
-
     private void updateTimezoneDatabaseVersion(String timeZoneDatabaseVersion) {
         try {
             mCalendarCache.writeTimezoneDatabaseVersion(timeZoneDatabaseVersion);
@@ -648,7 +640,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             cursor = handleInstanceQuery(new SQLiteQueryBuilder(),
                     begin, end,
                     new String[] { Instances._ID },
-                    null /* selection */, null /* sort */, false /* searchByDayInsteadOfMillis */);
+                    null /* selection */, null /* sort */,
+                    false /* searchByDayInsteadOfMillis */,
+                    true /* force Instances deletion and expansion */);
         } finally {
             if (cursor != null) {
                 cursor.close();
@@ -758,7 +752,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                             + uri.getPathSegments().get(3));
                 }
                 return handleInstanceQuery(qb, begin, end, projection,
-                        selection, sortOrder, match == INSTANCES_BY_DAY);
+                        selection, sortOrder, match == INSTANCES_BY_DAY,
+                        false /* do not force Instances deletion and expansion */);
             case INSTANCES_SEARCH:
             case INSTANCES_SEARCH_BY_DAY:
                 try {
@@ -881,11 +876,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * @param selection The selection
      * @param sort How to sort
      * @param searchByDay if true, range is in Julian days, if false, range is in ms
+     * @param forceExpansion force the Instance deletion and expansion if set to true
      * @return
      */
     private Cursor handleInstanceQuery(SQLiteQueryBuilder qb, long rangeBegin,
-            long rangeEnd, String[] projection,
-            String selection, String sort, boolean searchByDay) {
+            long rangeEnd, String[] projection, String selection, String sort,
+            boolean searchByDay, boolean forceExpansion) {
 
         qb.setTables(INSTANCE_QUERY_TABLES);
         qb.setProjectionMap(sInstancesProjectionMap);
@@ -898,11 +894,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             // Julian day and we want to include all the events on the last day.
             long endMs = time.setJulianDay((int) rangeEnd + 1);
             // will lock the database.
-            acquireInstanceRange(beginMs, endMs, true /* use minimum expansion window */);
+            acquireInstanceRange(beginMs, endMs, 
+                    true /* use minimum expansion window */, forceExpansion);
             qb.appendWhere(BETWEEN_DAY_WHERE);
         } else {
             // will lock the database.
-            acquireInstanceRange(rangeBegin, rangeEnd, true /* use minimum expansion window */);
+            acquireInstanceRange(rangeBegin, rangeEnd,
+                    true /* use minimum expansion window */, forceExpansion);
             qb.appendWhere(BETWEEN_WHERE);
         }
         String selectionArgs[] = new String[] {String.valueOf(rangeEnd),
@@ -1033,13 +1031,19 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             // will lock the database.
             // we expand the instances here because we might be searching over
             // a range where instance expansion has not occurred yet
-            acquireInstanceRange(beginMs, endMs, true /* use minimum expansion window */);
+            acquireInstanceRange(beginMs, endMs,
+                    true /* use minimum expansion window */,
+                    false /* do not force Instances deletion and expansion */
+            );
             qb.appendWhere(BETWEEN_DAY_WHERE);
         } else {
             // will lock the database.
             // we expand the instances here because we might be searching over
             // a range where instance expansion has not occurred yet
-            acquireInstanceRange(rangeBegin, rangeEnd, true /* use minimum expansion window */);
+            acquireInstanceRange(rangeBegin, rangeEnd,
+                    true /* use minimum expansion window */,
+                    false /* do not force Instances deletion and expansion */
+            );
             qb.appendWhere(BETWEEN_WHERE);
         }
 
@@ -1059,7 +1063,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // Julian day and we want to include all the events on the last day.
         long endMs = time.setJulianDay(end + 1);
 
-        acquireInstanceRange(beginMs, endMs, true);
+        acquireInstanceRange(beginMs, endMs, true, false /* do not force Instances expansion */);
         qb.appendWhere(BETWEEN_DAY_WHERE);
         String selectionArgs[] = new String[] {String.valueOf(end), String.valueOf(begin)};
 
@@ -1074,13 +1078,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * @param begin start of range (ms)
      * @param end end of range (ms)
      * @param useMinimumExpansionWindow expand by at least MINIMUM_EXPANSION_SPAN
+     * @param forceExpansion force the Instance deletion and expansion if set to true
      */
-    private void acquireInstanceRange(final long begin,
-            final long end,
-            final boolean useMinimumExpansionWindow) {
+    private void acquireInstanceRange(final long begin, final long end,
+            final boolean useMinimumExpansionWindow, final boolean forceExpansion) {
         mDb.beginTransaction();
         try {
-            acquireInstanceRangeLocked(begin, end, useMinimumExpansionWindow);
+            acquireInstanceRangeLocked(begin, end, useMinimumExpansionWindow, forceExpansion);
             mDb.setTransactionSuccessful();
         } finally {
             mDb.endTransaction();
@@ -1096,7 +1100,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * @param useMinimumExpansionWindow expand by at least MINIMUM_EXPANSION_SPAN
      */
     private void acquireInstanceRangeLocked(long begin, long end,
-            boolean useMinimumExpansionWindow) {
+            boolean useMinimumExpansionWindow, boolean forceExpansion) {
         long expandBegin = begin;
         long expandEnd = end;
 
@@ -1122,7 +1126,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         String localTimezone = TimeZone.getDefault().getID();
         boolean timezoneChanged = (dbTimezone == null) || !dbTimezone.equals(localTimezone);
 
-        if (maxInstance == 0 || timezoneChanged) {
+        if (maxInstance == 0 || timezoneChanged || forceExpansion) {
             // Empty the Instances table and expand from scratch.
             mDb.execSQL("DELETE FROM Instances;");
             if (Config.LOGV) {
@@ -3325,7 +3329,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         String queryParams[] = new String[] {String.valueOf(start), String.valueOf(nextAlarmTime),
                 String.valueOf(currentMillis)};
 
-        acquireInstanceRangeLocked(start, end, false /* don't use minimum expansion windows */);
+        acquireInstanceRangeLocked(start,
+                end,
+                false /* don't use minimum expansion windows */,
+                false /* do not force Instances deletion and expansion */);
         Cursor cursor = null;
         try {
             cursor = db.rawQuery(query, queryParams);

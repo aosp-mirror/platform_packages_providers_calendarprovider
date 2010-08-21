@@ -57,7 +57,7 @@ import java.net.URLDecoder;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    static final int DATABASE_VERSION = 74;
+    static final int DATABASE_VERSION = 202;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -505,7 +505,16 @@ import java.net.URLDecoder;
                 CalendarCache.COLUMN_NAME_VALUE + " TEXT" +
                 ");");
 
-        db.execSQL("INSERT INTO CalendarCache (key, value) VALUES (" +
+        initCalendarCacheTable(db);
+    }
+
+    private void initCalendarCacheTable(SQLiteDatabase db) {
+        db.execSQL("INSERT INTO " + Tables.CALENDAR_CACHE + " (" +
+                CalendarCache.COLUMN_NAME_ID + ", " +
+                CalendarCache.COLUMN_NAME_KEY + ", " +
+                CalendarCache.COLUMN_NAME_VALUE +
+                ") VALUES (" +
+                CalendarCache.KEY_TIMEZONE_DATABASE_VERSION.hashCode() + "," +
                 "'" + CalendarCache.KEY_TIMEZONE_DATABASE_VERSION + "',"  +
                 "'" + CalendarCache.DEFAULT_TIMEZONE_DATABASE_VERSION + "'" +
                 ");");
@@ -609,24 +618,48 @@ import java.net.URLDecoder;
                 upgradeToVersion69(db);
                 oldVersion = 69;
             }
-            if (oldVersion == 69) {
-                upgradeToVersion72(db);
-                oldVersion = 72;
+            // 69. 70 are for Froyo/old Gingerbread only and 100s are for Gingerbread only
+            // 70 and 71 have been for Honeycomb but no more used
+            // 72 and 73 and 74 were for Honeycomb only but are considered as obsolete for enabling
+            // room for Froyo version numbers
+            if(oldVersion == 69) {
+                upgradeToVersion100(db);
+                oldVersion = 100;
             }
-            // we are not supporting versions 70 nor 71 and we just go from 69 to 72 by recreating
-            // the schema in case we had some users with 70 or 71
-            if (oldVersion == 70 || oldVersion == 71) {
-                dropTables(db);
-                bootstrapDB(db);
-                oldVersion = 72;
+            if (oldVersion == 70) {
+                upgradeToVersion200(db);
+                oldVersion = 200;
             }
+            if (oldVersion == 100) {
+                upgradeToVersion200(db);
+                oldVersion = 200;
+            }
+            // This is needed for "converting" 72 to 200, 73 to 201 and 74 to 202
+            // TODO: This code needs to be deleted later on especially when Froyo starts hitting
+            // those numbers
             if (oldVersion == 72) {
-                upgradeToVersion73(db);
-                oldVersion += 1;
+                oldVersion = 200;
             }
             if (oldVersion == 73) {
-                upgradeToVersion74(db);
+                oldVersion = 201;
+            }
+            if (oldVersion == 74) {
+                oldVersion = 202;
+            }
+            if (oldVersion == 200) {
+                upgradeToVersion201(db);
                 oldVersion += 1;
+            }
+            if (oldVersion == 201) {
+                upgradeToVersion202(db);
+                oldVersion += 1;
+            }
+            if (oldVersion != DATABASE_VERSION) {
+                Log.e(TAG, "Need to recreate Calendar schema because of "
+                        + "unknown Calendar database version: " + oldVersion);
+                dropTables(db);
+                bootstrapDB(db);
+                oldVersion = DATABASE_VERSION;
             }
         } catch (SQLiteException e) {
             Log.e(TAG, "onUpgrade: SQLiteException, recreating db. " + e);
@@ -661,7 +694,7 @@ import java.net.URLDecoder;
     }
 
     @VisibleForTesting
-    void upgradeToVersion74(SQLiteDatabase db) {
+    void upgradeToVersion202(SQLiteDatabase db) {
         // We will drop the "hidden" column from the calendar schema and add the "sync5" column
         db.execSQL("ALTER TABLE " + Tables.CALENDARS +" RENAME TO " +
                 Tables.CALENDARS + "_Backup;");
@@ -734,13 +767,13 @@ import java.net.URLDecoder;
     }
 
     @VisibleForTesting
-    void upgradeToVersion73(SQLiteDatabase db) {
+    void upgradeToVersion201(SQLiteDatabase db) {
         db.execSQL("ALTER TABLE " + Tables.CALENDARS +
                 " ADD COLUMN " + Calendar.Calendars.SYNC4 + " TEXT;");
     }
 
     @VisibleForTesting
-    void upgradeToVersion72(SQLiteDatabase db) {
+    void upgradeToVersion200(SQLiteDatabase db) {
         // we cannot use here a Calendar.Calendars,URL constant for "url" as we are trying to make
         // it disappear so we are keeping the hardcoded name "url" in all the SQLs
         db.execSQL("ALTER TABLE " + Tables.CALENDARS +" RENAME TO " +
@@ -837,6 +870,11 @@ import java.net.URLDecoder;
         // Recreate the Events Views as column "deleted" is now ambiguous
         // ("deleted" is now defined in both Calendars and Events tables)
         createEventsView(db);
+    }
+
+    @VisibleForTesting
+    void upgradeToVersion100(SQLiteDatabase db) {
+        createCalendarCacheTable(db);
     }
 
     @VisibleForTesting

@@ -906,7 +906,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             // Julian day and we want to include all the events on the last day.
             long endMs = time.setJulianDay((int) rangeEnd + 1);
             // will lock the database.
-            acquireInstanceRange(beginMs, endMs, 
+            acquireInstanceRange(beginMs, endMs,
                     true /* use minimum expansion window */, forceExpansion);
             qb.appendWhere(BETWEEN_DAY_WHERE);
         } else {
@@ -3274,6 +3274,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * @param db the database
      */
     private void scheduleNextAlarmLocked(SQLiteDatabase db) {
+        Time time = new Time();
         AlarmManager alarmManager = getAlarmManager();
         if (alarmManager == null) {
             Log.e(TAG, "Failed to find the AlarmManager. Could not schedule the next alarm!");
@@ -3285,7 +3286,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         final long end = start + (24 * 60 * 60 * 1000);
         ContentResolver cr = getContext().getContentResolver();
         if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Time time = new Time();
             time.set(start);
             String startTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
             Log.d(TAG, "runScheduleNextAlarm() start search: " + startTimeStr);
@@ -3331,8 +3331,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // will be untyped and sqlite3's manifest typing will not convert the
         // string query parameter to an int in myAlarmtime>=?, so the comparison
         // will fail.  This could be simplified if bug 2464440 is resolved.
-        String query = "SELECT " + Instances.BEGIN + "-(" + Reminders.MINUTES
-                + "*60000) AS myAlarmTime," + Tables.INSTANCES
+
+        time.setToNow();
+        time.normalize(false);
+        long localOffset = time.gmtoff * 1000;
+
+        String allDayOffset = " -(" + localOffset + ") ";
+        String subQueryPrefix = "SELECT " + Instances.BEGIN;
+        String subQuerySuffix = " -(" + Reminders.MINUTES + "*" +
+                + DateUtils.MINUTE_IN_MILLIS + ")"
+                + " AS myAlarmTime" + "," + Tables.INSTANCES
                 + "." + Instances.EVENT_ID + " AS eventId"
                 + "," + Instances.BEGIN + "," + Instances.END
                 + "," + Instances.TITLE + "," + Instances.ALL_DAY
@@ -3345,22 +3353,36 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 + " ON (" + Tables.INSTANCES + "." + Instances.EVENT_ID
                 + "=" + Tables.REMINDERS + "." + Reminders.EVENT_ID + ")"
                 + " WHERE " + Calendars.SELECTED + "=1"
-                + " AND " + Reminders.METHOD + "=" + Reminders.METHOD_ALERT
                 + " AND myAlarmTime>=CAST(? AS INT)"
                 + " AND myAlarmTime<=CAST(? AS INT)"
                 + " AND " + Instances.END + ">=?"
-                + " AND 0=(SELECT count(*) from " + Tables.CALENDAR_ALERTS + " CA"
-                + " WHERE CA." + CalendarAlerts.EVENT_ID
-                + "=" + Tables.INSTANCES + "." + Instances.EVENT_ID
-                + " AND CA." + CalendarAlerts.BEGIN
-                + "=" + Tables.INSTANCES + "." + Instances.BEGIN
-                + " AND CA." + CalendarAlerts.ALARM_TIME + "=myAlarmTime)"
-                + " ORDER BY myAlarmTime," + Instances.BEGIN + "," + Instances.TITLE;
-        String queryParams[] = new String[] {String.valueOf(start), String.valueOf(nextAlarmTime),
-                String.valueOf(currentMillis)};
+                + " AND " + Reminders.METHOD + "=" + Reminders.METHOD_ALERT;
 
-        acquireInstanceRangeLocked(start,
-                end,
+        // we query separately for all day events to convert to local time from UTC
+        // we need to /subtract/ the offset to get the correct resulting local time
+        String allDayQuery = subQueryPrefix + allDayOffset + subQuerySuffix
+                + " AND " + Instances.ALL_DAY + "=1";
+        String nonAllDayQuery = subQueryPrefix + subQuerySuffix
+                + " AND " + Instances.ALL_DAY + "=0";
+
+        // we use UNION ALL because we are guaranteed to have no dupes between
+        // the two queries, and it is less expensive
+        String query = "SELECT *"
+                + " FROM (" + allDayQuery + " UNION ALL " + nonAllDayQuery + ")"
+                // avoid rescheduling existing alarms
+                + " WHERE 0=(SELECT count(*) from " + Tables.CALENDAR_ALERTS + " CA"
+                         + " WHERE CA." + CalendarAlerts.EVENT_ID + "=eventId"
+                         + " AND CA." + CalendarAlerts.BEGIN + "=" + Instances.BEGIN
+                         + " AND CA." + CalendarAlerts.ALARM_TIME + "=myAlarmTime)"
+                + " ORDER BY myAlarmTime," + Instances.BEGIN + "," + Instances.TITLE;
+
+        String queryParams[] = new String[] { String.valueOf(start), String.valueOf(nextAlarmTime),
+                String.valueOf(currentMillis), String.valueOf(start), String.valueOf(nextAlarmTime),
+                String.valueOf(currentMillis) };
+
+        // expand this range by a day on either end to account for all day events
+        acquireInstanceRangeLocked(start - DateUtils.DAY_IN_MILLIS,
+                end + DateUtils.DAY_IN_MILLIS,
                 false /* don't use minimum expansion windows */,
                 false /* do not force Instances deletion and expansion */);
         Cursor cursor = null;
@@ -3374,7 +3396,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             final int minutesIndex = cursor.getColumnIndex(Reminders.MINUTES);
 
             if (Log.isLoggable(TAG, Log.DEBUG)) {
-                Time time = new Time();
                 time.set(nextAlarmTime);
                 String alarmTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
                 Log.d(TAG, "cursor results: " + cursor.getCount() + " nextAlarmTime: "
@@ -3396,7 +3417,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 final long endTime = cursor.getLong(endIndex);
 
                 if (Log.isLoggable(TAG, Log.DEBUG)) {
-                    Time time = new Time();
                     time.set(alarmTime);
                     String schedTime = time.format(" %a, %b %d, %Y %I:%M%P");
                     time.set(startTime);

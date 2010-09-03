@@ -22,6 +22,8 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.util.Log;
 
+import java.util.TimeZone;
+
 /**
  * Class for managing a persistent Cache of (key, value) pairs. The persistent storage used is
  * a SQLite database.
@@ -34,9 +36,16 @@ public class CalendarCache {
     public static final String KEY_TIMEZONE_DATABASE_VERSION = "timezoneDatabaseVersion";
     public static final String DEFAULT_TIMEZONE_DATABASE_VERSION = "2009s";
 
-    private static final String COLUMN_NAME_ID = "_id";
-    private static final String COLUMN_NAME_KEY = "key";
-    private static final String COLUMN_NAME_VALUE = "value";
+    public static final String KEY_TIMEZONE_TYPE = "timezoneType";
+    public static final String TIMEZONE_TYPE_AUTO = "auto";
+    public static final String TIMEZONE_TYPE_HOME = "home";
+
+    public static final String KEY_TIMEZONE_INSTANCES = "timezoneInstances";
+    public static final String KEY_TIMEZONE_INSTANCES_PREVIOUS = "timezoneInstancesPrevious";
+
+    public static final String COLUMN_NAME_ID = "_id";
+    public static final String COLUMN_NAME_KEY = "key";
+    public static final String COLUMN_NAME_VALUE = "value";
 
     private static final String[] sProjection = {
         COLUMN_NAME_KEY,
@@ -65,12 +74,65 @@ public class CalendarCache {
     }
 
     public void writeTimezoneDatabaseVersion(String timezoneDatabaseVersion) throws CacheException {
-        writeData(KEY_TIMEZONE_DATABASE_VERSION,
-                timezoneDatabaseVersion);
+        writeData(KEY_TIMEZONE_DATABASE_VERSION, timezoneDatabaseVersion);
     }
 
-    public String readTimezoneDatabaseVersion() throws CacheException {
-        return readData(KEY_TIMEZONE_DATABASE_VERSION);
+    public String readTimezoneDatabaseVersion() {
+        try {
+            return readData(KEY_TIMEZONE_DATABASE_VERSION);
+        } catch (CacheException e) {
+            Log.e(TAG, "Could not read timezone database version from CalendarCache");
+        }
+        return null;
+    }
+
+    public void writeTimezoneType(String timezoneType) throws CacheException {
+        writeData(KEY_TIMEZONE_TYPE, timezoneType);
+    }
+
+    public String readTimezoneType() {
+        try {
+            return readData(KEY_TIMEZONE_TYPE);
+        } catch (CacheException e) {
+            Log.e(TAG, "Cannot read timezone type from CalendarCache - using AUTO as default", e);
+        }
+        return TIMEZONE_TYPE_AUTO;
+    }
+
+    public void writeTimezoneInstances(String timezone) {
+        try {
+            writeData(KEY_TIMEZONE_INSTANCES, timezone);
+        } catch (CacheException e) {
+            Log.e(TAG, "Cannot write instances timezone to CalendarCache");
+        }
+    }
+
+    public String readTimezoneInstances() {
+        try {
+            return readData(KEY_TIMEZONE_INSTANCES);
+        } catch (CacheException e) {
+            String localTimezone = TimeZone.getDefault().getID();
+            Log.e(TAG, "Cannot read instances timezone from CalendarCache - using device one: " +
+                    localTimezone, e);
+            return localTimezone;
+        }
+    }
+
+    public void writeTimezoneInstancesPrevious(String timezone) {
+        try {
+            writeData(KEY_TIMEZONE_INSTANCES_PREVIOUS, timezone);
+        } catch (CacheException e) {
+            Log.e(TAG, "Cannot write previous instance timezone to CalendarCache");
+        }
+    }
+
+    public String readTimezoneInstancesPrevious() {
+        try {
+            return readData(KEY_TIMEZONE_INSTANCES_PREVIOUS);
+        } catch (CacheException e) {
+            Log.e(TAG, "Cannot read previous instances timezone from CalendarCache", e);
+        }
+        return null;
     }
 
     /**

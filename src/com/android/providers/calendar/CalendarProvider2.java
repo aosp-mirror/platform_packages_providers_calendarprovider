@@ -17,6 +17,8 @@
 
 package com.android.providers.calendar;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.accounts.OnAccountsUpdateListener;
@@ -55,7 +57,6 @@ import android.util.Config;
 import android.util.Log;
 import android.util.TimeFormatException;
 import android.util.TimeUtils;
-import com.google.common.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -2866,6 +2867,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                             else if (value.equals(CalendarCache.TIMEZONE_TYPE_AUTO)) {
                                 String localTimezone = TimeZone.getDefault().getID();
                                 mCalendarCache.writeTimezoneInstances(localTimezone);
+                                if (!timezoneInstancesBeforeUpdate.equals(localTimezone)) {
+                                    regenerateInstancesTable();
+                                }
                             }
                         }
                     }

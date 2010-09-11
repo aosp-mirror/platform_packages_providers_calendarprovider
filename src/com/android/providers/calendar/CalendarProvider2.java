@@ -778,6 +778,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * @param searchByDay if true, range is in Julian days, if false, range is in ms
      * @param forceExpansion force the Instance deletion and expansion if set to true
      * @param instancesTimezone timezone we need to use for computing the instances
+     * @param isHomeTimezone if true, we are in the "home" timezone
      * @return
      */
     private Cursor handleInstanceQuery(SQLiteQueryBuilder qb, long rangeBegin,
@@ -822,7 +823,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         qb.setProjectionMap(sInstancesProjectionMap);
         // Convert the first and last Julian day range to a range that uses
         // UTC milliseconds.
-        Time time = new Time();
+        Time time = new Time(instancesTimezone);
         long beginMs = time.setJulianDay(begin);
         // We add one to lastDay because the time is set to 12am on the given
         // Julian day and we want to include all the events on the last day.
@@ -845,6 +846,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * @param end end of range (ms)
      * @param useMinimumExpansionWindow expand by at least MINIMUM_EXPANSION_SPAN
      * @param forceExpansion force the Instance deletion and expansion if set to true
+     * @param instancesTimezone timezone we need to use for computing the instances
+     * @param isHomeTimezone if true, we are in the "home" timezone
      */
     private void acquireInstanceRange(final long begin, final long end,
             final boolean useMinimumExpansionWindow, final boolean forceExpansion,
@@ -866,6 +869,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * @param begin start of range (ms)
      * @param end end of range (ms)
      * @param useMinimumExpansionWindow expand by at least MINIMUM_EXPANSION_SPAN
+     * @param forceExpansion force the Instance deletion and expansion if set to true
+     * @param instancesTimezone timezone we need to use for computing the instances
+     * @param isHomeTimezone if true, we are in the "home" timezone
      */
     private void acquireInstanceRangeLocked(long begin, long end, boolean useMinimumExpansionWindow,
             boolean forceExpansion, String instancesTimezone, boolean isHomeTimezone) {

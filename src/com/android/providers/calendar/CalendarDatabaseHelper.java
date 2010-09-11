@@ -40,6 +40,7 @@ import android.util.Log;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
+import java.util.TimeZone;
 
 /**
  * Database helper for calendar. Designed as a singleton to make sure that all
@@ -57,7 +58,7 @@ import java.net.URLDecoder;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    static final int DATABASE_VERSION = 202;
+    static final int DATABASE_VERSION = 203;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -374,7 +375,7 @@ import java.net.URLDecoder;
 
         createCalendarMetaDataTable(db);
 
-        createCalendarCacheTable(db);
+        createCalendarCacheTable(db, null);
 
         db.execSQL("CREATE TABLE " + Tables.ATTENDEES + " (" +
                 Calendar.Attendees._ID + " INTEGER PRIMARY KEY," +
@@ -493,7 +494,7 @@ import java.net.URLDecoder;
                 ");");
     }
 
-    private void createCalendarCacheTable(SQLiteDatabase db) {
+    private void createCalendarCacheTable(SQLiteDatabase db, String oldTimezoneDbVersion) {
         // This is a hack because versioning skipped version number 61 of schema
         // TODO after version 70 this can be removed
         db.execSQL("DROP TABLE IF EXISTS " + Tables.CALENDAR_CACHE + ";");
@@ -505,18 +506,44 @@ import java.net.URLDecoder;
                 CalendarCache.COLUMN_NAME_VALUE + " TEXT" +
                 ");");
 
-        initCalendarCacheTable(db);
+        initCalendarCacheTable(db, oldTimezoneDbVersion);
+        updateCalendarCacheTableTo203(db);
     }
 
-    private void initCalendarCacheTable(SQLiteDatabase db) {
-        db.execSQL("INSERT INTO " + Tables.CALENDAR_CACHE + " (" +
-                CalendarCache.COLUMN_NAME_ID + ", " +
-                CalendarCache.COLUMN_NAME_KEY + ", " +
-                CalendarCache.COLUMN_NAME_VALUE +
-                ") VALUES (" +
+    private void initCalendarCacheTable(SQLiteDatabase db, String oldTimezoneDbVersion) {
+        String timezoneDbVersion = (oldTimezoneDbVersion != null) ?
+                oldTimezoneDbVersion : CalendarCache.DEFAULT_TIMEZONE_DATABASE_VERSION;
+
+        // Set the default timezone database version
+        db.execSQL("INSERT OR REPLACE INTO CalendarCache (_id, key, value) VALUES (" +
                 CalendarCache.KEY_TIMEZONE_DATABASE_VERSION.hashCode() + "," +
                 "'" + CalendarCache.KEY_TIMEZONE_DATABASE_VERSION + "',"  +
-                "'" + CalendarCache.DEFAULT_TIMEZONE_DATABASE_VERSION + "'" +
+                "'" + timezoneDbVersion + "'" +
+                ");");
+    }
+
+    private void updateCalendarCacheTableTo203(SQLiteDatabase db) {
+        // Define the default timezone type for Instances timezone management
+        db.execSQL("INSERT INTO CalendarCache (_id, key, value) VALUES (" +
+                CalendarCache.KEY_TIMEZONE_TYPE.hashCode() + "," +
+                "'" + CalendarCache.KEY_TIMEZONE_TYPE + "',"  +
+                "'" + CalendarCache.TIMEZONE_TYPE_AUTO + "'" +
+                ");");
+
+        String defaultTimezone = TimeZone.getDefault().getID();
+
+        // Define the default timezone for Instances
+        db.execSQL("INSERT INTO CalendarCache (_id, key, value) VALUES (" +
+                CalendarCache.KEY_TIMEZONE_INSTANCES.hashCode() + "," +
+                "'" + CalendarCache.KEY_TIMEZONE_INSTANCES + "',"  +
+                "'" + defaultTimezone + "'" +
+                ");");
+
+        // Define the default previous timezone for Instances
+        db.execSQL("INSERT INTO CalendarCache (_id, key, value) VALUES (" +
+                CalendarCache.KEY_TIMEZONE_INSTANCES_PREVIOUS.hashCode() + "," +
+                "'" + CalendarCache.KEY_TIMEZONE_INSTANCES_PREVIOUS + "',"  +
+                "'" + defaultTimezone + "'" +
                 ");");
     }
 
@@ -623,8 +650,8 @@ import java.net.URLDecoder;
             // 72 and 73 and 74 were for Honeycomb only but are considered as obsolete for enabling
             // room for Froyo version numbers
             if(oldVersion == 69) {
-                upgradeToVersion100(db);
-                oldVersion = 100;
+                upgradeToVersion200(db);
+                oldVersion = 200;
             }
             if (oldVersion == 70) {
                 upgradeToVersion200(db);
@@ -633,6 +660,12 @@ import java.net.URLDecoder;
             if (oldVersion == 100) {
                 upgradeToVersion200(db);
                 oldVersion = 200;
+            }
+            boolean need203Update = true;
+            if (oldVersion == 101) {
+                oldVersion = 200;
+                // Gingerbread version 101 is similar to Honeycomb version 203
+                need203Update = false;
             }
             // This is needed for "converting" 72 to 200, 73 to 201 and 74 to 202
             // TODO: This code needs to be deleted later on especially when Froyo starts hitting
@@ -652,6 +685,10 @@ import java.net.URLDecoder;
             }
             if (oldVersion == 201) {
                 upgradeToVersion202(db);
+                oldVersion += 1;
+            }
+            if (oldVersion == 202 && need203Update) {
+                upgradeToVersion203(db);
                 oldVersion += 1;
             }
             if (oldVersion != DATABASE_VERSION) {
@@ -691,6 +728,22 @@ import java.net.URLDecoder;
             return true;
         }
         return false;
+    }
+
+    @VisibleForTesting
+    void upgradeToVersion203(SQLiteDatabase db) {
+        // Same as Gingerbread version 100
+        Cursor cursor = db.rawQuery("SELECT value from CalendarCache WHERE key=?",
+                new String[] {"timezoneDatabaseVersion"});
+
+        String oldTimezoneDbVersion = null;
+        if (cursor != null && cursor.moveToNext()) {
+            oldTimezoneDbVersion = cursor.getString(0);
+        }
+        initCalendarCacheTable(db, oldTimezoneDbVersion);
+
+        // Same as Gingerbread version 101
+        updateCalendarCacheTableTo203(db);
     }
 
     @VisibleForTesting
@@ -870,11 +923,6 @@ import java.net.URLDecoder;
         // Recreate the Events Views as column "deleted" is now ambiguous
         // ("deleted" is now defined in both Calendars and Events tables)
         createEventsView(db);
-    }
-
-    @VisibleForTesting
-    void upgradeToVersion100(SQLiteDatabase db) {
-        createCalendarCacheTable(db);
     }
 
     @VisibleForTesting
@@ -1162,7 +1210,19 @@ import java.net.URLDecoder;
     }
 
     private void upgradeToVersion61(SQLiteDatabase db) {
-        createCalendarCacheTable(db);
+        db.execSQL("DROP TABLE IF EXISTS CalendarCache;");
+
+        // IF NOT EXISTS should be normal pattern for table creation
+        db.execSQL("CREATE TABLE IF NOT EXISTS CalendarCache (" +
+                "_id INTEGER PRIMARY KEY," +
+                "key TEXT NOT NULL," +
+                "value TEXT" +
+                ");");
+
+        db.execSQL("INSERT INTO CalendarCache (key, value) VALUES (" +
+                "'" + CalendarCache.KEY_TIMEZONE_DATABASE_VERSION + "',"  +
+                "'" + CalendarCache.DEFAULT_TIMEZONE_DATABASE_VERSION + "'" +
+                ");");
     }
 
     private void upgradeToVersion60(SQLiteDatabase db) {

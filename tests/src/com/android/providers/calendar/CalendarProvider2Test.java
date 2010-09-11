@@ -52,6 +52,9 @@ import com.android.providers.calendar.CalendarProvider2Test.MockProvider;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.TimeZone;
 
 /**
  * Runs various tests on an isolated Calendar provider with its own database.
@@ -916,6 +919,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         wipeData(mDb);
         mMetaData = getProvider().mMetaData;
         mForceDtend = false;
+        initCalendarCache();
     }
 
     @Override
@@ -1131,6 +1135,20 @@ public class CalendarProvider2Test extends AndroidTestCase {
     private void deleteAllEvents() {
         mDb.execSQL("DELETE FROM Events;");
         mMetaData.clearInstanceRange();
+    }
+
+    private void initCalendarCache() throws CalendarCache.CacheException {
+        CalendarDatabaseHelper helper = (CalendarDatabaseHelper) getProvider().getDatabaseHelper();
+        cleanCalendarDataTable(helper);
+        CalendarCache cache = new CalendarCache(helper);
+
+        String localTimezone = TimeZone.getDefault().getID();
+
+        // Set initial values
+        cache.writeTimezoneDatabaseVersion("2010k");
+        cache.writeTimezoneType(CalendarCache.TIMEZONE_TYPE_AUTO);
+        cache.writeTimezoneInstances(localTimezone);
+        cache.writeTimezoneInstancesPrevious(localTimezone);
     }
 
     public void testInsertNormalEvents() throws Exception {
@@ -2350,11 +2368,6 @@ public class CalendarProvider2Test extends AndroidTestCase {
         // check the inserted event
         checkEvent(1, events[0].mTitle, events[0].mDtstart, events[0].mDtend, events[0].mAllDay);
 
-// TODO (fdimeglio): uncomment when the VM is more stable
-//        // check timezone database version
-//        assertEquals(TimeUtils.getTimeZoneDatabaseVersion(),
-//                getProvider().getTimezoneDatabaseVersion());
-
         // inject a new time zone
         getProvider().doProcessEventRawTimes(TIME_ZONE_AMERICA_ANCHORAGE,
                 MOCK_TIME_ZONE_DATABASE_VERSION);
@@ -2369,5 +2382,121 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 events[0].mDtstart + deltaMillisForTimezones,
                 events[0].mDtend + deltaMillisForTimezones,
                 events[0].mAllDay);
+    }
+
+    public static final Uri PROPERTIES_CONTENT_URI =
+            Uri.parse("content://" + Calendar.AUTHORITY + "/properties");
+
+    public static final int COLUMN_KEY_INDEX = 1;
+    public static final int COLUMN_VALUE_INDEX = 0;
+
+    public void testGetProviderProperties() throws CalendarCache.CacheException {
+        CalendarDatabaseHelper helper = (CalendarDatabaseHelper) getProvider().getDatabaseHelper();
+        cleanCalendarDataTable(helper);
+        CalendarCache cache = new CalendarCache(helper);
+
+        cache.writeTimezoneDatabaseVersion("2010k");
+        cache.writeTimezoneInstances("America/Denver");
+        cache.writeTimezoneInstancesPrevious("America/Los_Angeles");
+        cache.writeTimezoneType(CalendarCache.TIMEZONE_TYPE_AUTO);
+
+        Cursor cursor = mResolver.query(PROPERTIES_CONTENT_URI, null, null, null, null);
+        assertEquals(4, cursor.getCount());
+
+        assertEquals(CalendarCache.COLUMN_NAME_KEY, cursor.getColumnName(COLUMN_KEY_INDEX));
+        assertEquals(CalendarCache.COLUMN_NAME_VALUE, cursor.getColumnName(COLUMN_VALUE_INDEX));
+
+        Map<String, String> map = new HashMap<String, String>();
+
+        while (cursor.moveToNext()) {
+            String key = cursor.getString(COLUMN_KEY_INDEX);
+            String value = cursor.getString(COLUMN_VALUE_INDEX);
+            map.put(key, value);
+        }
+
+        assertTrue(map.containsKey(CalendarCache.KEY_TIMEZONE_DATABASE_VERSION));
+        assertTrue(map.containsKey(CalendarCache.KEY_TIMEZONE_TYPE));
+        assertTrue(map.containsKey(CalendarCache.KEY_TIMEZONE_INSTANCES));
+        assertTrue(map.containsKey(CalendarCache.KEY_TIMEZONE_INSTANCES_PREVIOUS));
+
+        assertEquals("2010k", map.get(CalendarCache.KEY_TIMEZONE_DATABASE_VERSION));
+        assertEquals("America/Denver", map.get(CalendarCache.KEY_TIMEZONE_INSTANCES));
+        assertEquals("America/Los_Angeles", map.get(CalendarCache.KEY_TIMEZONE_INSTANCES_PREVIOUS));
+        assertEquals(CalendarCache.TIMEZONE_TYPE_AUTO, map.get(CalendarCache.KEY_TIMEZONE_TYPE));
+
+        cursor.close();
+    }
+
+    public void testGetProviderPropertiesByKey() throws CalendarCache.CacheException {
+        CalendarDatabaseHelper helper = (CalendarDatabaseHelper) getProvider().getDatabaseHelper();
+        cleanCalendarDataTable(helper);
+        CalendarCache cache = new CalendarCache(helper);
+
+        cache.writeTimezoneDatabaseVersion("2010k");
+        cache.writeTimezoneInstances("America/Denver");
+        cache.writeTimezoneInstancesPrevious("America/Los_Angeles");
+        cache.writeTimezoneType(CalendarCache.TIMEZONE_TYPE_AUTO);
+
+        checkValueForKey(CalendarCache.TIMEZONE_TYPE_AUTO, CalendarCache.KEY_TIMEZONE_TYPE);
+        checkValueForKey("2010k", CalendarCache.KEY_TIMEZONE_DATABASE_VERSION);
+        checkValueForKey("America/Denver", CalendarCache.KEY_TIMEZONE_INSTANCES);
+        checkValueForKey("America/Los_Angeles", CalendarCache.KEY_TIMEZONE_INSTANCES_PREVIOUS);
+    }
+
+    private void checkValueForKey(String value, String key) {
+        Cursor cursor = mResolver.query(PROPERTIES_CONTENT_URI, null,
+                "key=?", new String[] {key}, null);
+
+        assertEquals(1, cursor.getCount());
+        assertTrue(cursor.moveToFirst());
+        assertEquals(cursor.getString(COLUMN_KEY_INDEX), key);
+        assertEquals(cursor.getString(COLUMN_VALUE_INDEX), value);
+
+        cursor.close();
+    }
+
+    public void testUpdateProviderProperties() throws CalendarCache.CacheException {
+        CalendarDatabaseHelper helper = (CalendarDatabaseHelper) getProvider().getDatabaseHelper();
+        cleanCalendarDataTable(helper);
+        CalendarCache cache = new CalendarCache(helper);
+
+        String localTimezone = TimeZone.getDefault().getID();
+
+        // Set initial value
+        cache.writeTimezoneDatabaseVersion("2010k");
+
+        updateValueForKey("2009s", CalendarCache.KEY_TIMEZONE_DATABASE_VERSION);
+        checkValueForKey("2009s", CalendarCache.KEY_TIMEZONE_DATABASE_VERSION);
+
+        // Set initial values
+        cache.writeTimezoneType(CalendarCache.TIMEZONE_TYPE_AUTO);
+        cache.writeTimezoneInstances("America/Chicago");
+        cache.writeTimezoneInstancesPrevious("America/Denver");
+
+        updateValueForKey(CalendarCache.TIMEZONE_TYPE_AUTO, CalendarCache.KEY_TIMEZONE_TYPE);
+        checkValueForKey(localTimezone, CalendarCache.KEY_TIMEZONE_INSTANCES);
+        checkValueForKey("America/Denver", CalendarCache.KEY_TIMEZONE_INSTANCES_PREVIOUS);
+
+        updateValueForKey(CalendarCache.TIMEZONE_TYPE_HOME, CalendarCache.KEY_TIMEZONE_TYPE);
+        checkValueForKey("America/Denver", CalendarCache.KEY_TIMEZONE_INSTANCES);
+        checkValueForKey("America/Denver", CalendarCache.KEY_TIMEZONE_INSTANCES_PREVIOUS);
+
+        // Set initial value
+        cache.writeTimezoneInstancesPrevious("");
+        updateValueForKey(localTimezone, CalendarCache.KEY_TIMEZONE_INSTANCES);
+        checkValueForKey(localTimezone, CalendarCache.KEY_TIMEZONE_INSTANCES);
+        checkValueForKey(localTimezone, CalendarCache.KEY_TIMEZONE_INSTANCES_PREVIOUS);
+    }
+
+    private void updateValueForKey(String value, String key) {
+        ContentValues contentValues = new ContentValues();
+        contentValues.put(CalendarCache.COLUMN_NAME_VALUE, value);
+
+        int result = mResolver.update(PROPERTIES_CONTENT_URI,
+                contentValues,
+                CalendarCache.COLUMN_NAME_KEY + "=?",
+                new String[] {key});
+
+        assertEquals(1, result);
     }
 }

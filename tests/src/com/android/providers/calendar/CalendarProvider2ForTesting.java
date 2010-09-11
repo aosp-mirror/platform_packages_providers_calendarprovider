@@ -17,4 +17,8 @@ public class CalendarProvider2ForTesting extends CalendarProvider2 {
     @Override
     public void onAccountsUpdated(Account[] accounts) {
     }
+
+    @Override
+    protected void doUpdateTimezoneDependentFields() {
+    }
 }

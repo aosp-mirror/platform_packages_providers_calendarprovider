@@ -38,7 +38,7 @@ public class CalendarAppWidgetProvider extends AppWidgetProvider {
 
     static final String ACTION_CALENDAR_APPWIDGET_UPDATE =
             "com.android.providers.calendar.APPWIDGET_UPDATE";
-    
+
     /**
      * Threshold to check against when building widget updates. If system clock
      * has changed less than this amount, we consider ignoring the request.
@@ -49,21 +49,21 @@ public class CalendarAppWidgetProvider extends AppWidgetProvider {
      * Maximum time to hold {@link WakeLock} when performing widget updates.
      */
     static final long WAKE_LOCK_TIMEOUT = DateUtils.MINUTE_IN_MILLIS;
-    
+
     static final String PACKAGE_THIS_APPWIDGET =
         "com.android.providers.calendar";
     static final String CLASS_THIS_APPWIDGET =
         "com.android.providers.calendar.CalendarAppWidgetProvider";
 
     private static CalendarAppWidgetProvider sInstance;
-    
+
     static synchronized CalendarAppWidgetProvider getInstance() {
         if (sInstance == null) {
             sInstance = new CalendarAppWidgetProvider();
         }
         return sInstance;
     }
-    
+
     /**
      * {@inheritDoc}
      */
@@ -79,7 +79,7 @@ public class CalendarAppWidgetProvider extends AppWidgetProvider {
             super.onReceive(context, intent);
         }
     }
-    
+
     /**
      * {@inheritDoc}
      */
@@ -118,7 +118,7 @@ public class CalendarAppWidgetProvider extends AppWidgetProvider {
     public void onUpdate(Context context, AppWidgetManager appWidgetManager, int[] appWidgetIds) {
         performUpdate(context, appWidgetIds, null /* no eventIds */, false /* force */);
     }
-    
+
     /**
      * Check against {@link AppWidgetManager} if there are any instances of this widget.
      */
@@ -128,7 +128,7 @@ public class CalendarAppWidgetProvider extends AppWidgetProvider {
         int[] appWidgetIds = appWidgetManager.getAppWidgetIds(thisAppWidget);
         return (appWidgetIds.length > 0);
     }
-    
+
     /**
      * Build {@link ComponentName} describing this specific
      * {@link AppWidgetProvider}
@@ -140,7 +140,7 @@ public class CalendarAppWidgetProvider extends AppWidgetProvider {
     /**
      * The {@link CalendarProvider} has been updated, which means we should push
      * updates to any widgets, if they exist.
-     * 
+     *
      * @param context Context to use when creating widget.
      * @param changedEventId Specific event known to be changed, otherwise -1.
      *            If present, we use it to decide if an update is necessary.
@@ -152,14 +152,14 @@ public class CalendarAppWidgetProvider extends AppWidgetProvider {
             if (changedEventId != -1) {
                 changedEventIds = new long[] { changedEventId };
             }
-            
+
             performUpdate(context, null /* all widgets */, changedEventIds, false /* force */);
         }
     }
 
     /**
      * {@link TimeChangeReceiver} has triggered that the time changed.
-     * 
+     *
      * @param context Context to use when creating widget.
      * @param considerIgnore If true, compare
      *            {@link AppWidgetShared#sLastRequest} against
@@ -171,7 +171,7 @@ public class CalendarAppWidgetProvider extends AppWidgetProvider {
             performUpdate(context, null /* all widgets */, null /* no events */, considerIgnore);
         }
     }
-    
+
     /**
      * Process and push out an update for the given appWidgetIds. This call
      * actually fires an intent to start {@link CalendarAppWidgetService} as a
@@ -180,7 +180,7 @@ public class CalendarAppWidgetProvider extends AppWidgetProvider {
      * <p>
      * This call will acquire a single {@link WakeLock} and set a flag that an
      * update has been requested.
-     * 
+     *
      * @param context Context to use when acquiring {@link WakeLock} and
      *            starting {@link CalendarAppWidgetService}.
      * @param appWidgetIds List of specific appWidgetIds to update, or null for
@@ -205,7 +205,7 @@ public class CalendarAppWidgetProvider extends AppWidgetProvider {
                     return;
                 }
             }
-            
+
             // We need to update, so make sure we have a valid, held wakelock
             if (AppWidgetShared.sWakeLock == null ||
                     !AppWidgetShared.sWakeLock.isHeld()) {
@@ -217,27 +217,27 @@ public class CalendarAppWidgetProvider extends AppWidgetProvider {
                 AppWidgetShared.sWakeLock.setReferenceCounted(false);
                 AppWidgetShared.sWakeLock.acquire(WAKE_LOCK_TIMEOUT);
             }
-            
+
             if (LOGD) Log.d(TAG, "setting request now=" + now);
             AppWidgetShared.sLastRequest = now;
             AppWidgetShared.sUpdateRequested = true;
-            
+
             // Apply filters that would limit the scope of this update, or clear
             // any pending filters if all requested.
             AppWidgetShared.mergeAppWidgetIdsLocked(appWidgetIds);
             AppWidgetShared.mergeChangedEventIdsLocked(changedEventIds);
-            
+
             // Launch over to service so it can perform update
             final Intent updateIntent = new Intent(context, CalendarAppWidgetService.class);
             context.startService(updateIntent);
         }
     }
-    
+
     /**
      * Build the {@link PendingIntent} used to trigger an update of all calendar
      * widgets. Uses {@link #ACTION_CALENDAR_APPWIDGET_UPDATE} to directly target
      * all widgets instead of using {@link AppWidgetManager#EXTRA_APPWIDGET_IDS}.
-     * 
+     *
      * @param context Context to use when building broadcast.
      */
     static PendingIntent getUpdateIntent(Context context) {

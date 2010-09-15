@@ -29,17 +29,18 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.IBinder;
 import android.provider.Calendar.Attendees;
+import android.provider.Calendar.CalendarCache;
 import android.provider.Calendar.Calendars;
 import android.provider.Calendar.Instances;
 import android.text.TextUtils;
 import android.text.format.DateFormat;
 import android.text.format.DateUtils;
 import android.text.format.Time;
-import android.util.CalendarUtils.TimeZoneUtils;
 import android.util.Log;
 import android.view.View;
 import android.widget.RemoteViews;
 
+import java.util.Formatter;
 import java.util.Locale;
 import java.util.Set;
 import java.util.TimeZone;
@@ -83,15 +84,15 @@ public class CalendarAppWidgetService extends Service implements Runnable {
     static final String ACTION_CLASS = "com.android.calendar.LaunchActivity";
     static final String KEY_DETAIL_VIEW = "DETAIL_VIEW";
     static final String CALENDAR_PREFS_NAME = "com.android.calendar_preferences";
-    static TimeZoneUtils mTZUtils = new TimeZoneUtils(CALENDAR_PREFS_NAME);
+
+    private static StringBuilder mSB = new StringBuilder(50);
+    private static Formatter mF = new Formatter(mSB, Locale.getDefault());
 
     TimeZone mTimeZone;
 
     @Override
     public void onStart(Intent intent, int startId) {
         super.onStart(intent, startId);
-
-        mTZUtils.forceDBRequery(getApplicationContext(), this);
 
         // Only start processing thread if not already running
         synchronized (AppWidgetShared.sLock) {
@@ -112,8 +113,6 @@ public class CalendarAppWidgetService extends Service implements Runnable {
      * Thread loop to handle
      */
     public void run() {
-        mTimeZone = TimeZone.getTimeZone(
-            mTZUtils.getTimeZone(getApplicationContext(), this));
 
         while (true) {
             long now = -1;
@@ -158,10 +157,30 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         ContentResolver resolver = context.getContentResolver();
 
         Cursor cursor = null;
+        Cursor tzCursor = null;
         RemoteViews views = null;
         long triggerTime = -1;
 
         try {
+            tzCursor = resolver.query(CalendarCache.URI, CalendarCache.POJECTION,
+                    null, null, null);
+            String tz = null;
+            if (tzCursor != null) {
+                int keyColumn = tzCursor.getColumnIndexOrThrow(CalendarCache.KEY);
+                int valueColumn = tzCursor.getColumnIndexOrThrow(CalendarCache.VALUE);
+                while (tzCursor.moveToNext()) {
+                    if (TextUtils.equals(
+                            tzCursor.getString(keyColumn), CalendarCache.TIMEZONE_KEY_INSTANCES)) {
+                        tz = tzCursor.getString(valueColumn);
+                    }
+                }
+            }
+            if (tz == null) {
+                tz = Time.getCurrentTimezone();
+            }
+            if (mTimeZone == null || !TextUtils.equals(tz, mTimeZone.getID())) {
+                mTimeZone = TimeZone.getTimeZone(tz);
+            }
             cursor = getUpcomingInstancesCursor(resolver, SEARCH_DURATION, now);
             if (cursor != null) {
                 MarkedEvents events = buildMarkedEvents(cursor, changedEventIds, now);
@@ -183,6 +202,9 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         } finally {
             if (cursor != null) {
                 cursor.close();
+            }
+            if (tzCursor != null) {
+                tzCursor.close();
             }
         }
 
@@ -401,8 +423,10 @@ public class CalendarAppWidgetService extends Service implements Runnable {
         if (DateFormat.is24HourFormat(context)) {
             flags |= DateUtils.FORMAT_24HOUR;
         }
-        whenString = mTZUtils.formatDateRange(context, start, start, flags);
         String tz = mTimeZone.getID();
+        mSB.setLength(0);
+        whenString = DateUtils.formatDateRange(context, mF, start, start, flags, tz).toString();
+
         if (!TextUtils.equals(tz,Time.getCurrentTimezone())) {
             StringBuilder title = new StringBuilder(whenString);
             boolean isDST = time.isDst != 0;

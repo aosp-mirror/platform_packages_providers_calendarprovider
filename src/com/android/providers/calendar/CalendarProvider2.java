@@ -74,6 +74,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private static final String TAG = "CalendarProvider2";
 
+    private static final String TIMEZONE_GMT = "GMT";
+
     private static final boolean PROFILE = false;
     private static final boolean MULTIPLE_ATTENDEES_PER_EVENT = true;
 
@@ -908,6 +910,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         } else {
             String localTimezone = TimeZone.getDefault().getID();
             timezoneChanged = !instancesTimezone.equals(localTimezone);
+            // if we're in auto make sure we are using the device time zone
+            if (timezoneChanged) {
+                instancesTimezone = localTimezone;
+            }
         }
         // if "home", then timezoneChanged only if current != previous
         // if "auto", then timezoneChanged, if !instancesTimezone.equals(localTimezone);
@@ -923,9 +929,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             mMetaData.writeLocked(instancesTimezone, expandBegin, expandEnd);
 
             String timezoneType = mCalendarCache.readTimezoneType();
-            // Save the new timezone if we have the "auto" timezone type
+            // This may cause some double writes but guarantees the time zone in
+            // the db and the time zone the instances are in is the same, which
+            // future changes may affect.
+            mCalendarCache.writeTimezoneInstances(instancesTimezone);
+
+            // If we're in auto check if we need to fix the previous tz value
             if (timezoneType.equals(CalendarCache.TIMEZONE_TYPE_AUTO)) {
-                mCalendarCache.writeTimezoneInstances(instancesTimezone);
+                String prevTZ = mCalendarCache.readTimezoneInstancesPrevious();
+                if (TextUtils.equals(TIMEZONE_GMT, prevTZ)) {
+                    mCalendarCache.writeTimezoneInstancesPrevious(instancesTimezone);
+                }
             }
             return;
         }

@@ -212,7 +212,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
                 runScheduleNextAlarm(mRemoveAlarms);
             } catch (SQLException e) {
-                Log.e(TAG, "runScheduleNextAlarm() failed", e);
+                if (Log.isLoggable(TAG, Log.ERROR)) {
+                    Log.e(TAG, "runScheduleNextAlarm() failed", e);
+                }
             }
         }
     }
@@ -420,7 +422,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         try {
             return initialize();
         } catch (RuntimeException e) {
-            Log.e(TAG, "Cannot start provider", e);
+            if (Log.isLoggable(TAG, Log.ERROR)) {
+                Log.e(TAG, "Cannot start provider", e);
+            }
             return false;
         }
     }
@@ -518,13 +522,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 rescheduleMissedAlarms();
             }
         } catch (SQLException e) {
-            Log.e(TAG, "doUpdateTimezoneDependentFields() failed", e);
+            if (Log.isLoggable(TAG, Log.ERROR)) {
+                Log.e(TAG, "doUpdateTimezoneDependentFields() failed", e);
+            }
             try {
                 // Clear at least the in-memory data (and if possible the
                 // database fields) to force a re-computation of Instances.
                 mMetaData.clearInstanceRange();
             } catch (SQLException e2) {
-                Log.e(TAG, "clearInstanceRange() also failed: " + e2);
+                if (Log.isLoggable(TAG, Log.ERROR)) {
+                    Log.e(TAG, "clearInstanceRange() also failed: " + e2);
+                }
             }
         }
     }
@@ -560,6 +568,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 long eventId = cursor.getLong(0);
                 String dtStart2445 = cursor.getString(1);
                 String dtEnd2445 = cursor.getString(2);
+                if (dtStart2445 == null && dtEnd2445 == null) {
+                    if (Log.isLoggable(TAG, Log.ERROR)) {
+                        Log.e(TAG, "Event " + eventId + " has dtStart2445 and dtEnd2445 null "
+                                + "at the same time in EventsRawTimes!");
+                    }
+                    continue;
+                }
                 updateEventsStartEndLocked(eventId,
                         timezone,
                         dtStart2445,
@@ -573,14 +588,18 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private long get2445ToMillis(String timezone, String dt2445) {
         if (null == dt2445) {
-            Log.v( TAG, "Cannot parse null RFC2445 date");
+            if (Log.isLoggable(TAG, Log.VERBOSE)) {
+                Log.v(TAG, "Cannot parse null RFC2445 date");
+            }
             return 0;
         }
         Time time = (timezone != null) ? new Time(timezone) : new Time();
         try {
             time.parse(dt2445);
         } catch (TimeFormatException e) {
-            Log.v( TAG, "Cannot parse RFC2445 date " + dt2445);
+            if (Log.isLoggable(TAG, Log.ERROR)) {
+                Log.e(TAG, "Cannot parse RFC2445 date " + dt2445);
+            }
             return 0;
         }
         return time.toMillis(true /* ignore DST */);
@@ -606,7 +625,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         try {
             mCalendarCache.writeTimezoneDatabaseVersion(timeZoneDatabaseVersion);
         } catch (CalendarCache.CacheException e) {
-            Log.e(TAG, "Could not write timezone database version in the cache");
+            if (Log.isLoggable(TAG, Log.ERROR)) {
+                Log.e(TAG, "Could not write timezone database version in the cache");
+            }
         }
     }
 
@@ -627,7 +648,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (timezoneDatabaseVersion == null) {
             return "";
         }
-        Log.i(TAG, "timezoneDatabaseVersion = " + timezoneDatabaseVersion);
+        if (Log.isLoggable(TAG, Log.INFO)) {
+            Log.i(TAG, "timezoneDatabaseVersion = " + timezoneDatabaseVersion);
+        }
         return timezoneDatabaseVersion;
     }
 
@@ -1187,7 +1210,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (maxInstance == 0 || timezoneChanged || forceExpansion) {
             // Empty the Instances table and expand from scratch.
             mDb.execSQL("DELETE FROM Instances;");
-            if (Config.LOGV) {
+            if (Log.isLoggable(TAG, Log.VERBOSE)) {
                 Log.v(TAG, "acquireInstanceRangeLocked() deleted Instances,"
                         + " timezone changed: " + timezoneChanged);
             }
@@ -1215,7 +1238,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // always be expanding because there would always be one more day
         // or week that hasn't been expanded.
         if ((begin >= minInstance) && (end <= maxInstance)) {
-            if (Config.LOGV) {
+            if (Log.isLoggable(TAG, Log.VERBOSE)) {
                 Log.v(TAG, "Canceled instance query (" + expandBegin + ", " + expandEnd
                         + ") falls within previously expanded range.");
             }
@@ -1407,8 +1430,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         duration.parse(durationStr);
                     }
                     catch (DateException e) {
-                        Log.w(TAG, "error parsing duration for event "
-                                + eventId + "'" + durationStr + "'", e);
+                        if (Log.isLoggable(TAG, Log.ERROR)) {
+                            Log.w(TAG, "error parsing duration for event "
+                                    + eventId + "'" + durationStr + "'", e);
+                        }
                         duration.sign = 1;
                         duration.weeks = 0;
                         duration.days = 0;
@@ -1440,7 +1465,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 try {
                     recur = new RecurrenceSet(rruleStr, rdateStr, exruleStr, exdateStr);
                 } catch (EventRecurrence.InvalidFormatException e) {
-                    Log.w(TAG, "Could not parse RRULE recurrence string: " + rruleStr, e);
+                    if (Log.isLoggable(TAG, Log.ERROR)) {
+                        Log.w(TAG, "Could not parse RRULE recurrence string: " + rruleStr, e);
+                    }
                     continue;
                 }
 
@@ -1449,8 +1476,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
                     if (status == Events.STATUS_CANCELED) {
                         // should not happen!
-                        Log.e(TAG, "Found canceled recurring event in "
-                                + "Events table.  Ignoring.");
+                        if (Log.isLoggable(TAG, Log.ERROR)) {
+                            Log.e(TAG, "Found canceled recurring event in "
+                                    + "Events table.  Ignoring.");
+                        }
                         continue;
                     }
                     if (deleted) {
@@ -1465,8 +1494,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
                     if (durationStr == null) {
                         // should not happen.
-                        Log.e(TAG, "Repeating event has no duration -- "
-                                + "should not happen.");
+                        if (Log.isLoggable(TAG, Log.ERROR)) {
+                            Log.e(TAG, "Repeating event has no duration -- "
+                                    + "should not happen.");
+                        }
                         if (allDay) {
                             // set to one day.
                             duration.sign = 1;
@@ -1556,7 +1587,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         if (originalEvent != null && originalInstanceTimeMillis != -1) {
                             initialValues.put(Events.STATUS, Events.STATUS_CANCELED);
                         } else {
-                            Log.w(TAG, "Unexpected event outside window: " + syncId);
+                            if (Log.isLoggable(TAG, Log.ERROR)) {
+                                Log.w(TAG, "Unexpected event outside window: " + syncId);
+                            }
                             continue;
                         }
                     }
@@ -1580,9 +1613,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     instancesMap.add(syncIdKey, initialValues);
                 }
             } catch (DateException e) {
-                Log.w(TAG, "RecurrenceProcessor error ", e);
+                if (Log.isLoggable(TAG, Log.ERROR)) {
+                    Log.w(TAG, "RecurrenceProcessor error ", e);
+                }
             } catch (TimeFormatException e) {
-                Log.w(TAG, "RecurrenceProcessor error ", e);
+                if (Log.isLoggable(TAG, Log.ERROR)) {
+                    Log.w(TAG, "RecurrenceProcessor error ", e);
+                }
             }
         }
 
@@ -1930,8 +1967,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     }
                 }
                 if (fixAllDayTime(uri, updatedValues)) {
-                    Log.w(TAG, "insertInTransaction: " +
-                            "allDay is true but sec, min, hour were not 0.");
+                    if (Log.isLoggable(TAG, Log.WARN)) {
+                        Log.w(TAG, "insertInTransaction: " +
+                                "allDay is true but sec, min, hour were not 0.");
+                    }
                 }
                 id = mDbHelper.eventsInsert(updatedValues);
                 if (id != -1) {
@@ -2108,7 +2147,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      */
     private String getOwner(long calId) {
         if (calId < 0) {
-            Log.e(TAG, "Calendar Id is not valid: " + calId);
+            if (Log.isLoggable(TAG, Log.ERROR)) {
+                Log.e(TAG, "Calendar Id is not valid: " + calId);
+            }
             return null;
         }
         // Get the email address of this user from this Calendar
@@ -2121,7 +2162,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     null /* selectionArgs */,
                     null /* sort */);
             if (cursor == null || !cursor.moveToFirst()) {
-                Log.d(TAG, "Couldn't find " + calId + " in Calendars table");
+                if (Log.isLoggable(TAG, Log.DEBUG)) {
+                    Log.d(TAG, "Couldn't find " + calId + " in Calendars table");
+                }
                 return null;
             }
             emailAddress = cursor.getString(0);
@@ -2181,7 +2224,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         null /* selectionArgs */,
                         null /* sort */);
                 if (cursor == null || !cursor.moveToFirst()) {
-                    Log.d(TAG, "Couldn't find " + eventId + " in Events table");
+                    if (Log.isLoggable(TAG, Log.DEBUG)) {
+                        Log.d(TAG, "Couldn't find " + eventId + " in Events table");
+                    }
                     return;
                 }
                 calId = cursor.getLong(0);
@@ -2201,7 +2246,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         null /* selectionArgs */,
                         null /* sort */);
                 if (cursor == null || !cursor.moveToFirst()) {
-                    Log.d(TAG, "Couldn't find " + calId + " in Calendars table");
+                    if (Log.isLoggable(TAG, Log.DEBUG)) {
+                        Log.d(TAG, "Couldn't find " + calId + " in Calendars table");
+                    }
                     return;
                 }
                 calendarEmail = cursor.getString(0);
@@ -2270,8 +2317,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // must be present for a new event.
                 throw new RuntimeException("DTSTART missing.");
             }
-            if (Config.LOGV) Log.v(TAG, "Missing DTSTART.  "
-                    + "No need to update instance.");
+            if (Log.isLoggable(TAG, Log.VERBOSE)) {
+                Log.v(TAG, "Missing DTSTART.  No need to update instance.");
+            }
             return;
         }
 
@@ -2475,8 +2523,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             try {
                 recur = new RecurrenceSet(values);
             } catch (EventRecurrence.InvalidFormatException e) {
-                Log.w(TAG, "Could not parse RRULE recurrence string: " +
-                        values.get(Calendar.Events.RRULE), e);
+                if (Log.isLoggable(TAG, Log.WARN)) {
+                    Log.w(TAG, "Could not parse RRULE recurrence string: " +
+                            values.get(Calendar.Events.RRULE), e);
+                }
                 return lastMillis; // -1
             }
 
@@ -2525,7 +2575,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             return values;
         } catch (DateException e) {
             // don't add it if there was an error
-            Log.w(TAG, "Could not calculate last date.", e);
+            if (Log.isLoggable(TAG, Log.WARN)) {
+                Log.w(TAG, "Could not calculate last date.", e);
+            }
             return null;
         }
     }
@@ -2991,8 +3043,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         // Sync adapter Events operation affects just Events table, not associated
                         // tables.
                         if (fixAllDayTime(uri, values)) {
-                            Log.w(TAG, "updateInTransaction: Caller is sync adapter. " +
-                                    "allDay is true but sec, min, hour were not 0.");
+                            if (Log.isLoggable(TAG, Log.WARN)) {
+                                Log.w(TAG, "updateInTransaction: Caller is sync adapter. " +
+                                        "allDay is true but sec, min, hour were not 0.");
+                            }
                         }
                         return mDb.update("Events", values, selection, selectionArgs);
                     }
@@ -3022,7 +3076,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // TODO: should extend validateEventData to work with updates and call it here
                 updatedValues = updateLastDate(updatedValues);
                 if (updatedValues == null) {
-                    Log.w(TAG, "Could not update event.");
+                    if (Log.isLoggable(TAG, Log.WARN)) {
+                        Log.w(TAG, "Could not update event.");
+                    }
                     return 0;
                 }
                 // Make sure we pass in a uri with the id appended to fixAllDayTime
@@ -3033,8 +3089,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     allDayUri = uri;
                 }
                 if (fixAllDayTime(allDayUri, updatedValues)) {
-                    Log.w(TAG, "updateInTransaction: " +
-                            "allDay is true but sec, min, hour were not 0.");
+                    if (Log.isLoggable(TAG, Log.WARN)) {
+                        Log.w(TAG, "updateInTransaction: " +
+                                "allDay is true but sec, min, hour were not 0.");
+                    }
                 }
 
                 int result = mDb.update("Events", updatedValues, "_id=?",
@@ -3272,8 +3330,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         if (account == null) {
             // should not happen?
-            Log.w(TAG, "Cannot update subscription because account "
-                    + "is empty -- should not happen.");
+            if (Log.isLoggable(TAG, Log.WARN)) {
+                Log.w(TAG, "Cannot update subscription because account "
+                        + "is empty -- should not happen.");
+            }
             return;
         }
 
@@ -3310,7 +3370,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             if (mAlarmManager == null) {
                 Context context = getContext();
                 if (context == null) {
-                    Log.e(TAG, "getAlarmManager() cannot get Context");
+                    if (Log.isLoggable(TAG, Log.ERROR)) {
+                        Log.e(TAG, "getAlarmManager() cannot get Context");
+                    }
                     return null;
                 }
                 Object service = context.getSystemService(Context.ALARM_SERVICE);
@@ -3323,7 +3385,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     void scheduleNextAlarmCheck(long triggerTime) {
         AlarmManager manager = getAlarmManager();
         if (manager == null) {
-            Log.e(TAG, "scheduleNextAlarmCheck() cannot get AlarmManager");
+            if (Log.isLoggable(TAG, Log.ERROR)) {
+                Log.e(TAG, "scheduleNextAlarmCheck() cannot get AlarmManager");
+            }
             return;
         }
         Context context = getContext();
@@ -3404,7 +3468,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         Time time = new Time();
         AlarmManager alarmManager = getAlarmManager();
         if (alarmManager == null) {
-            Log.e(TAG, "Failed to find the AlarmManager. Could not schedule the next alarm!");
+            if (Log.isLoggable(TAG, Log.ERROR)) {
+                Log.e(TAG, "Failed to find the AlarmManager. Could not schedule the next alarm!");
+            }
             return;
         }
 
@@ -3585,7 +3651,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 Uri uri = CalendarAlerts.insert(cr, eventId, startTime,
                         endTime, alarmTime, minutes);
                 if (uri == null) {
-                    Log.e(TAG, "runScheduleNextAlarm() insert into CalendarAlerts table failed");
+                    if (Log.isLoggable(TAG, Log.ERROR)) {
+                        Log.e(TAG, "runScheduleNextAlarm() insert into "
+                                + "CalendarAlerts table failed");
+                    }
                     continue;
                 }
 
@@ -3700,7 +3769,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private void doSendUpdateNotification() {
         Intent intent = new Intent(Intent.ACTION_PROVIDER_CHANGED,
                 Calendar.CONTENT_URI);
-        Log.i(TAG, "Sending notification intent: " + intent);
+        if (Log.isLoggable(TAG, Log.INFO)) {
+            Log.i(TAG, "Sending notification intent: " + intent);
+        }
         getContext().sendBroadcast(intent, null);
     }
 
@@ -3971,7 +4042,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
 
             for (Account account : accountsToDelete) {
-                Log.d(TAG, "removing data for removed account " + account);
+                if (Log.isLoggable(TAG, Log.DEBUG)) {
+                    Log.d(TAG, "removing data for removed account " + account);
+                }
                 String[] params = new String[]{account.name, account.type};
                 mDb.execSQL("DELETE FROM Calendars" +
                             " WHERE " +

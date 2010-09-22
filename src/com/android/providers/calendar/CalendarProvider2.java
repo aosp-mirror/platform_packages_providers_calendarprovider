@@ -506,7 +506,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         try {
             String timezoneType = mCalendarCache.readTimezoneType();
             // Nothing to do if we have the "home" timezone type (timezone is sticky)
-            if (timezoneType.equals(CalendarCache.TIMEZONE_TYPE_HOME)) {
+            if (timezoneType != null && timezoneType.equals(CalendarCache.TIMEZONE_TYPE_HOME)) {
                 return;
             }
             // We are here in "auto" mode, the timezone is coming from the device

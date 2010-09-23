@@ -624,7 +624,11 @@ import java.util.TimeZone;
 
         String oldTimezoneDbVersion = null;
         if (cursor != null && cursor.moveToNext()) {
-            oldTimezoneDbVersion = cursor.getString(0);
+            try {
+                oldTimezoneDbVersion = cursor.getString(0);
+            } finally {
+                cursor.close();
+            }
         }
         initCalendarCacheTable(db, oldTimezoneDbVersion);
     }

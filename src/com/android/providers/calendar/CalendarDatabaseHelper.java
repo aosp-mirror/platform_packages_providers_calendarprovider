@@ -667,18 +667,6 @@ import java.util.TimeZone;
                 // Gingerbread version 101 is similar to Honeycomb version 203
                 need203Update = false;
             }
-            // This is needed for "converting" 72 to 200, 73 to 201 and 74 to 202
-            // TODO: This code needs to be deleted later on especially when Froyo starts hitting
-            // those numbers
-            if (oldVersion == 72) {
-                oldVersion = 200;
-            }
-            if (oldVersion == 73) {
-                oldVersion = 201;
-            }
-            if (oldVersion == 74) {
-                oldVersion = 202;
-            }
             if (oldVersion == 200) {
                 upgradeToVersion201(db);
                 oldVersion += 1;

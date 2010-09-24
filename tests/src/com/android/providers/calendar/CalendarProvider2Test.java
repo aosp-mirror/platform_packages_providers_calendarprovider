@@ -1636,11 +1636,12 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 ArrayList<Entity.NamedContentValues> subvalues = entity.getSubValues();
                 switch (values.getAsInteger("_id")) {
                     case 1:
-                        assertEquals(4, subvalues.size()); // 2 x reminder, 2 x extended properties
+                        assertEquals(5, subvalues.size()); // 2 x reminder, 3 x extended properties
                         break;
                     case 2:
-                        assertEquals(1, subvalues.size()); // Extended properties
-                        ContentValues subContentValues = subvalues.get(0).values;
+                        // Extended properties (contains originalTimezone)
+                        assertEquals(2, subvalues.size());
+                        ContentValues subContentValues = subvalues.get(1).values;
                         String name = subContentValues.getAsString(
                                 Calendar.ExtendedProperties.NAME);
                         String value = subContentValues.getAsString(
@@ -1649,10 +1650,10 @@ public class CalendarProvider2Test extends AndroidTestCase {
                         assertEquals("bar", value);
                         break;
                     case 3:
-                        assertEquals(1, subvalues.size()); // Attendees
+                        assertEquals(2, subvalues.size()); // Attendees
                         break;
                     default:
-                        assertEquals(0, subvalues.size());
+                        assertEquals(1, subvalues.size());
                         break;
                 }
                 count += 1;
@@ -1945,7 +1946,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         Uri extendedUri = mResolver.insert(
                 updatedUri(Calendar.ExtendedProperties.CONTENT_URI, syncAdapter), extended);
         testAndClearDirty(eventId, syncAdapter ? 0 : 1);
-        testQueryCount(Calendar.ExtendedProperties.CONTENT_URI, "event_id=" + eventId, 1);
+        testQueryCount(Calendar.ExtendedProperties.CONTENT_URI, "event_id=" + eventId, 2);
 
         // Now test updates
 
@@ -1983,7 +1984,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertEquals("update", 1, mResolver.update(updatedUri(extendedUri, syncAdapter), extended,
                 null /* where */, null /* selectionArgs */));
         testAndClearDirty(eventId, syncAdapter ? 0 : 1);
-        testQueryCount(Calendar.ExtendedProperties.CONTENT_URI, "event_id=" + eventId, 1);
+        testQueryCount(Calendar.ExtendedProperties.CONTENT_URI, "event_id=" + eventId, 2);
 
         // Now test deletes
 
@@ -2010,7 +2011,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 null /* where */, null /* selectionArgs */));
 
         testAndClearDirty(eventId, syncAdapter ? 0 : 1);
-        testQueryCount(Calendar.ExtendedProperties.CONTENT_URI, "event_id=" + eventId, 0);
+        testQueryCount(Calendar.ExtendedProperties.CONTENT_URI, "event_id=" + eventId, 1);
     }
 
     /**
@@ -2498,5 +2499,50 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 new String[] {key});
 
         assertEquals(1, result);
+    }
+
+    public void testInsertOriginalTimezoneInExtProperties() throws Exception {
+        int calId = insertCal("Calendar0", DEFAULT_TIMEZONE);
+
+
+        EventInfo[] events = { new EventInfo("normal0",
+                                        "2008-05-01T00:00:00",
+                                        "2008-05-02T00:00:00",
+                                        false,
+                                        DEFAULT_TIMEZONE) };
+
+        Uri eventUri = insertEvent(calId, events[0]);
+        assertNotNull(eventUri);
+
+        long eventId = ContentUris.parseId(eventUri);
+        assertTrue(eventId > -1);
+
+        // check the inserted event
+        checkEvent(1, events[0].mTitle, events[0].mDtstart, events[0].mDtend, events[0].mAllDay);
+
+        // Should have 1 calendars and 1 event
+        testQueryCount(Calendar.Calendars.CONTENT_URI, null /* where */, 1);
+        testQueryCount(Calendar.Events.CONTENT_URI, null /* where */, 1);
+
+        // Verify that the original timezone is correct
+        Cursor cursor = mResolver.query(Calendar.ExtendedProperties.CONTENT_URI,
+                null/* projection */,
+                "event_id=" + eventId,
+                null /* selectionArgs */,
+                null /* sortOrder */);
+        try {
+            // Should have 1 extended property for the original timezone
+            assertEquals(1, cursor.getCount());
+
+            if (cursor.moveToFirst()) {
+                long id = cursor.getLong(0);
+                assertEquals(id, eventId);
+
+                assertEquals(CalendarProvider2.EXT_PROP_ORIGINAL_TIMEZONE, cursor.getString(2));
+                assertEquals(DEFAULT_TIMEZONE, cursor.getString(3));
+            }
+        } finally {
+            cursor.close();
+        }
     }
 }

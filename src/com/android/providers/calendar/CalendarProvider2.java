@@ -166,6 +166,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     // the original start time.
     private static final int MAX_ASSUMED_DURATION = 7*24*60*60*1000;
 
+    // The extended property name for storing an Event original Timezone.
+    // Due to an issue in Calendar Server restricting the length of the name we had to strip it down
+    // TODO - Better name would be:
+    // "com.android.providers.calendar.CalendarSyncAdapter#originalTimezone"
+    protected static final String EXT_PROP_ORIGINAL_TIMEZONE =
+        "CalendarSyncAdapter#originalTimezone";
+
     public static final class TimeRange {
         public long begin;
         public long end;
@@ -1998,6 +2005,38 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                             owner = getOwner(updatedValues.getAsLong(Events.CALENDAR_ID));
                         }
                         createAttendeeEntry(id, status, owner);
+                    }
+                    // if the Event Timezone is defined, store it as the original one in the
+                    // ExtendedProperties table
+                    if (values.containsKey(Events.EVENT_TIMEZONE) && !callerIsSyncAdapter) {
+                        String originalTimezone = values.getAsString(Events.EVENT_TIMEZONE);
+
+                        ContentValues expropsValues = new ContentValues();
+                        expropsValues.put(Calendar.ExtendedProperties.EVENT_ID, id);
+                        expropsValues.put(Calendar.ExtendedProperties.NAME,
+                                EXT_PROP_ORIGINAL_TIMEZONE);
+                        expropsValues.put(Calendar.ExtendedProperties.VALUE, originalTimezone);
+
+                        // Insert the extended property
+                        long exPropId = mDbHelper.extendedPropertiesInsert(expropsValues);
+                        if (exPropId == -1) {
+                            if (Log.isLoggable(TAG, Log.ERROR)) {
+                                Log.e(TAG, "Cannot add the original Timezone in the "
+                                        + "ExtendedProperties table for Event: " + id);
+                            }
+                        } else {
+                            // Update the Event for saying it has some extended properties
+                            ContentValues eventValues = new ContentValues();
+                            eventValues.put(Events.HAS_EXTENDED_PROPERTIES, "1");
+                            int result = mDb.update("Events", eventValues, "_id=?",
+                                    new String[] {String.valueOf(id)});
+                            if (result <= 0) {
+                                if (Log.isLoggable(TAG, Log.ERROR)) {
+                                    Log.e(TAG, "Cannot update hasExtendedProperties column"
+                                            + " for Event: " + id);
+                                }
+                            }
+                        }
                     }
                     sendUpdateNotification(id, callerIsSyncAdapter);
                 }

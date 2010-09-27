@@ -2773,6 +2773,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 int result = mDb.update("Calendars", values, "_id=?",
                         new String[] {String.valueOf(id)});
 
+                // The calendar should not be displayed in widget either.
+                final Integer selected = values.getAsInteger(Calendars.SELECTED);
+                if (selected != null && selected == 0) {
+                    triggerAppWidgetUpdate(-1);
+                }
+
                 return result;
             }
             case EVENTS:

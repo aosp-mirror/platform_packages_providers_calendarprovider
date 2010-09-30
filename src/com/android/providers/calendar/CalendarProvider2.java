@@ -53,7 +53,6 @@ import android.provider.Calendar.Reminders;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.text.format.Time;
-import android.util.Config;
 import android.util.Log;
 import android.util.TimeFormatException;
 import android.util.TimeUtils;
@@ -146,6 +145,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     /* package */ static final Uri SCHEDULE_ALARM_REMOVE_URI =
             Uri.withAppendedPath(Calendar.CONTENT_URI, SCHEDULE_ALARM_REMOVE_PATH);
 
+    // 5 second delay before updating alarms
+    private static final long ALARM_SCHEDULER_DELAY = 5000;
+
     // To determine if a recurrence exception originally overlapped the
     // window, we need to assume a maximum duration, since we only know
     // the original start time.
@@ -202,7 +204,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     // A thread that runs in the background and schedules the next
-    // calendar event alarm.
+    // calendar event alarm. It delays for 5 seconds before updating
+    // to aggregate further requests.
     private class AlarmScheduler extends Thread {
         boolean mRemoveAlarms;
 
@@ -212,16 +215,58 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         @Override
         public void run() {
-            try {
-                Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
-                runScheduleNextAlarm(mRemoveAlarms);
-            } catch (SQLException e) {
-                if (Log.isLoggable(TAG, Log.ERROR)) {
-                    Log.e(TAG, "runScheduleNextAlarm() failed", e);
+            Context context = CalendarProvider2.this.getContext();
+            // Because the handler does not guarantee message delivery in
+            // the case that the provider is killed, we need to make sure
+            // that the provider stays alive long enough to deliver the
+            // notification. This empty service is sufficient to "wedge" the
+            // process until we finish.
+            context.startService(new Intent(context, EmptyService.class));
+            while (true) {
+                // Wait a bit before writing to collect any other requests that
+                // may come in
+                try {
+                    sleep(ALARM_SCHEDULER_DELAY);
+                } catch (InterruptedException e1) {
+                    if(Log.isLoggable(TAG, Log.DEBUG)) {
+                        Log.d(TAG, "AlarmScheduler woke up early: " + e1.getMessage());
+                    }
+                }
+                // Clear any new requests and update whether or not we should
+                // remove alarms
+                synchronized (mAlarmLock) {
+                    mRemoveAlarms = mRemoveAlarms || mRemoveAlarmsOnRerun;
+                    mRerunAlarmScheduler = false;
+                    mRemoveAlarmsOnRerun = false;
+                }
+                // Run the update
+                try {
+                    Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+                    runScheduleNextAlarm(mRemoveAlarms);
+                } catch (SQLException e) {
+                    if (Log.isLoggable(TAG, Log.ERROR)) {
+                        Log.e(TAG, "runScheduleNextAlarm() failed", e);
+                    }
+                }
+                // Check if anyone requested another alarm change while we were busy.
+                // if not clear everything out and exit.
+                synchronized (mAlarmLock) {
+                    if (!mRerunAlarmScheduler) {
+                        mAlarmScheduler = null;
+                        mRerunAlarmScheduler = false;
+                        mRemoveAlarmsOnRerun = false;
+                        context.stopService(new Intent(context, EmptyService.class));
+                        return;
+                    }
                 }
             }
         }
     }
+
+    private static AlarmScheduler mAlarmScheduler;
+
+    private static boolean mRerunAlarmScheduler = false;
+    private static boolean mRemoveAlarmsOnRerun = false;
 
     /**
      * We search backward in time for event reminders that we may have missed
@@ -3184,8 +3229,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * This method runs the alarm scheduler in a background thread.
      */
     void scheduleNextAlarm(boolean removeAlarms) {
-        Thread thread = new AlarmScheduler(removeAlarms);
-        thread.start();
+        synchronized (mAlarmLock) {
+            if (mAlarmScheduler == null) {
+                mAlarmScheduler = new AlarmScheduler(removeAlarms);
+                mAlarmScheduler.start();
+            } else {
+                mRerunAlarmScheduler = true;
+                // removing the alarms is a stronger action so it has
+                // precedence.
+                mRemoveAlarmsOnRerun = mRemoveAlarmsOnRerun || removeAlarms;
+            }
+        }
     }
 
     /**

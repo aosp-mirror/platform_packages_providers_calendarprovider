@@ -46,6 +46,10 @@
                 android:readPermission="android.permission.READ_CALENDAR"
                 android:writePermission="android.permission.WRITE_CALENDAR" />
 
+        <!-- This is used to keep the provider alive long enough to send update
+            intent broadcasts. -->
+        <service android:name=".EmptyService" />
+
         <activity android:name="CalendarContentProviderTests" android:label="Calendar Content Provider">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

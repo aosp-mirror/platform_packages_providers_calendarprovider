@@ -1994,13 +1994,8 @@ public class CalendarProvider2Test extends ProviderTestCase2<CalendarProvider2Fo
         // check timezone database version
         assertEquals(MOCK_TIME_ZONE_DATABASE_VERSION, getProvider().getTimezoneDatabaseVersion());
 
-        // check if the inserted event as been updated with the timezone information
-        // there is 1h time difference between America/LosAngeles and America/Anchorage
-        long deltaMillisForTimezones = 3600000L;
-        checkEvent(1, events[0].mTitle,
-                events[0].mDtstart + deltaMillisForTimezones,
-                events[0].mDtend + deltaMillisForTimezones,
-                events[0].mAllDay);
+        // check that the inserted event has *not* been updated
+        checkEvent(1, events[0].mTitle, events[0].mDtstart, events[0].mDtend, events[0].mAllDay);
     }
 
     public static final Uri PROPERTIES_CONTENT_URI =

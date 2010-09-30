@@ -629,6 +629,8 @@ import java.util.TimeZone;
             } finally {
                 cursor.close();
             }
+            // Also clean the CalendarCache table
+            db.execSQL("DELETE FROM CalendarCache;");
         }
         initCalendarCacheTable(db, oldTimezoneDbVersion);
     }

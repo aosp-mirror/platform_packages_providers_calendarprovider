@@ -57,7 +57,6 @@ import android.provider.Calendar.Reminders;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.text.format.Time;
-import android.util.Config;
 import android.util.Log;
 import android.util.TimeFormatException;
 import android.util.TimeUtils;
@@ -3285,8 +3284,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                                     mCalendarCache.writeTimezoneInstances(previousTimezone);
                                 }
                                 // Regenerate Instances if the "home" timezone has changed
+                                // and notify widgets
                                 if (!timezoneInstancesBeforeUpdate.equals(previousTimezone) ) {
                                     regenerateInstancesTable();
+                                    sendUpdateNotification(callerIsSyncAdapter);
                                 }
                             }
                             // if we are setting timezone type to "auto"
@@ -3295,6 +3296,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                                 mCalendarCache.writeTimezoneInstances(localTimezone);
                                 if (!timezoneInstancesBeforeUpdate.equals(localTimezone)) {
                                     regenerateInstancesTable();
+                                    sendUpdateNotification(callerIsSyncAdapter);
                                 }
                             }
                         }
@@ -3307,9 +3309,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                             // Update the previous value
                             mCalendarCache.writeTimezoneInstancesPrevious(timezoneInstances);
                             // Recompute Instances if the "home" timezone has changed
+                            // and send notifications to any widgets
                             if (timezoneInstancesBeforeUpdate != null &&
                                     !timezoneInstancesBeforeUpdate.equals(timezoneInstances)) {
                                 regenerateInstancesTable();
+                                sendUpdateNotification(callerIsSyncAdapter);
                             }
                         }
                     }

@@ -173,6 +173,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     protected static final String EXT_PROP_ORIGINAL_TIMEZONE =
         "CalendarSyncAdapter#originalTimezone";
 
+    private static final String SQL_SELECT_EVENTSRAWTIMES = "SELECT " +
+            Calendar.EventsRawTimesColumns.EVENT_ID + ", " +
+            Calendar.EventsRawTimesColumns.DTSTART_2445 + ", " +
+            Calendar.EventsRawTimesColumns.DTEND_2445 + ", " +
+            Events.EVENT_TIMEZONE +
+            " FROM " +
+            "EventsRawTimes" + ", " +
+            "Events" +
+            " WHERE " +
+            Calendar.EventsRawTimesColumns.EVENT_ID + " = " + "Events." + Events._ID;
+
     public static final class TimeRange {
         public long begin;
         public long end;
@@ -548,7 +559,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     protected void doProcessEventRawTimes(String localTimezone, String timeZoneDatabaseVersion) {
         mDb.beginTransaction();
         try {
-            updateEventsStartEndFromEventRawTimesLocked(localTimezone);
+            updateEventsStartEndFromEventRawTimesLocked();
             updateTimezoneDatabaseVersion(timeZoneDatabaseVersion);
             mCalendarCache.writeTimezoneInstances(localTimezone);
             regenerateInstancesTable();
@@ -558,24 +569,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     }
 
-    private void updateEventsStartEndFromEventRawTimesLocked(String timezone) {
-        Cursor cursor = mDb.query("EventsRawTimes",
-                            new String[] {
-                                    Calendar.EventsRawTimesColumns.EVENT_ID,
-                                    Calendar.EventsRawTimesColumns.DTSTART_2445,
-                                    Calendar.EventsRawTimesColumns.DTEND_2445
-                            } /* projection */,
-                            null /* selection */,
-                            null /* selection args */,
-                            null /* group by */,
-                            null /* having */,
-                            null /* order by */
-                );
+    private void updateEventsStartEndFromEventRawTimesLocked() {
+        Cursor cursor = mDb.rawQuery(SQL_SELECT_EVENTSRAWTIMES, null /* selection args */);
         try {
             while (cursor.moveToNext()) {
                 long eventId = cursor.getLong(0);
                 String dtStart2445 = cursor.getString(1);
                 String dtEnd2445 = cursor.getString(2);
+                String eventTimezone = cursor.getString(3);
                 if (dtStart2445 == null && dtEnd2445 == null) {
                     if (Log.isLoggable(TAG, Log.ERROR)) {
                         Log.e(TAG, "Event " + eventId + " has dtStart2445 and dtEnd2445 null "
@@ -584,7 +585,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     continue;
                 }
                 updateEventsStartEndLocked(eventId,
-                        timezone,
+                        eventTimezone,
                         dtStart2445,
                         dtEnd2445);
             }

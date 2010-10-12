@@ -18,7 +18,7 @@ package com.android.providers.calendar;
 
 import com.google.common.annotations.VisibleForTesting;
 
-import com.android.internal.content.SyncStateContentProviderHelper;
+import com.android.common.content.SyncStateContentProviderHelper;
 
 import android.accounts.Account;
 import android.content.ContentResolver;

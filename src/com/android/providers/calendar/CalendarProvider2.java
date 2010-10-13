@@ -178,33 +178,82 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Calendar.EventsRawTimesColumns.DTEND_2445 + ", " +
             Events.EVENT_TIMEZONE +
             " FROM " +
-            "EventsRawTimes" + ", " +
-            "Events" +
+            Tables.EVENTS_RAW_TIMES + ", " +
+            Tables.EVENTS +
             " WHERE " +
-            Calendar.EventsRawTimesColumns.EVENT_ID + " = " + "Events." + Events._ID;
+            Calendar.EventsRawTimesColumns.EVENT_ID + " = " + Tables.EVENTS + "." + Events._ID;
 
-    public static final class TimeRange {
-        public long begin;
-        public long end;
-        public boolean allDay;
+    private static final String SQL_UPDATE_EVENT_SET_DIRTY = "UPDATE " +
+            Tables.EVENTS +
+            " SET " + Events._SYNC_DIRTY + "=1" +
+            " WHERE " + Events._ID + "=?";
+
+    private static final String SQL_WHERE_ID = BaseColumns._ID + "=?";
+    private static final String SQL_WHERE_EVENT_ID = "event_id=?";
+    private static final String SQL_WHERE_ORIGINAL_EVENT = Events.ORIGINAL_EVENT + "=?";
+    private static final String SQL_WHERE_ATTENDEES_ID =
+            Tables.ATTENDEES + "." + Attendees._ID + "=? AND " +
+            Tables.EVENTS + "." + Events._ID + "=" + Tables.ATTENDEES + "." + Attendees.EVENT_ID;
+
+    private static final String SQL_WHERE_REMINDERS_ID =
+            Tables.REMINDERS + "." + Reminders._ID + "=? AND " +
+            Tables.EVENTS + "." + Events._ID + "=" + Tables.REMINDERS + "." + Reminders.EVENT_ID;
+
+    private static final String SQL_WHERE_CALENDAR_ALERT =
+            Views.EVENTS + "." + BaseColumns._ID + "=" +
+                    Tables.CALENDAR_ALERTS + "." + CalendarAlerts.EVENT_ID;
+
+    private static final String SQL_WHERE_CALENDAR_ALERT_ID =
+            Views.EVENTS + "." + BaseColumns._ID + "=" +
+                    Tables.CALENDAR_ALERTS + "." + CalendarAlerts.EVENT_ID +
+            " AND " +
+            Tables.CALENDAR_ALERTS + "." + CalendarAlerts._ID + "=?";
+
+    private static final String SQL_WHERE_EXTENDED_PROPERTIES_ID =
+            Tables.EXTENDED_PROPERTIES + "." + Calendar.ExtendedProperties._ID + "=?";
+
+    private static final String SQL_WHERE_GET_EVENTS_ENTRIES =
+            "((" + Events.DTSTART + " <= ? AND "
+                    + "(" + Events.LAST_DATE + " IS NULL OR " + Events.LAST_DATE + " >= ?)) OR " +
+            "(" + Events.ORIGINAL_INSTANCE_TIME + " IS NOT NULL AND " +
+                    Events.ORIGINAL_INSTANCE_TIME + " <= ? AND " +
+                    Events.ORIGINAL_INSTANCE_TIME + " >= ?)) AND " +
+            "(" + Calendars.SYNC_EVENTS + " != 0)";
+
+    private static final String SQL_SELECT_EVENTS_SYNC_ID =
+            "SELECT " + Events._SYNC_ID +
+            " FROM " + Tables.EVENTS +
+            " WHERE " + SQL_WHERE_ID;
+
+    private static final String SQL_DELETE_FROM_CALENDARS = "DELETE FROM " + Tables.CALENDARS +
+                " WHERE " + Calendar.SyncColumns._SYNC_ACCOUNT + "=? AND " +
+                    Calendar.SyncColumns._SYNC_ACCOUNT_TYPE + "=?";
+
+    private static final String SQL_WHERE_ID_FROM_INSTANCES_NOT_SYNCED =
+            BaseColumns._ID + " IN " +
+            "(SELECT " + Tables.INSTANCES + "." + BaseColumns._ID + " as _id" +
+            " FROM " + Tables.INSTANCES +
+            " INNER JOIN " + Tables.EVENTS +
+            " ON (" +
+            Tables.EVENTS + "." + Events._ID + "=" + Tables.INSTANCES + "." + Instances.EVENT_ID +
+            ")" +
+            " WHERE " + Tables.EVENTS + "." + Events._ID + "=?)";
+
+    private static final String SQL_WHERE_ID_FROM_INSTANCES_SYNCED =
+            BaseColumns._ID + " IN " +
+            "(SELECT " + Tables.INSTANCES + "." + BaseColumns._ID + " as _id" +
+            " FROM " + Tables.INSTANCES +
+            " INNER JOIN " + Tables.EVENTS +
+            " ON (" +
+            Tables.EVENTS + "." + Events._ID + "=" + Tables.INSTANCES + "." + Instances.EVENT_ID +
+            ")" +
+            " WHERE " + Tables.EVENTS + "." + Events._SYNC_ID + "=?" + " OR " +
+                    Tables.EVENTS + "." + Events.ORIGINAL_EVENT + "=?)";
+
+    public static final class InstancesList extends ArrayList<ContentValues> {
     }
 
-    public static final class InstancesRange {
-        public long begin;
-        public long end;
-
-        public InstancesRange(long begin, long end) {
-            this.begin = begin;
-            this.end = end;
-        }
-    }
-
-    public static final class InstancesList
-            extends ArrayList<ContentValues> {
-    }
-
-    public static final class EventInstancesMap
-            extends HashMap<String, InstancesList> {
+    public static final class EventInstancesMap extends HashMap<String, InstancesList> {
         public void add(String syncIdKey, ContentValues values) {
             InstancesList instances = get(syncIdKey);
             if (instances == null) {
@@ -274,9 +323,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final String[] sCalendarsIdProjection = new String[] { Calendars._ID };
     private static final int CALENDARS_INDEX_ID = 0;
 
-    // Allocate the string constant once here instead of on the heap
-    private static final String CALENDAR_ID_SELECTION = "calendar_id=?";
-
     private static final String INSTANCE_QUERY_TABLES =
         CalendarDatabaseHelper.Tables.INSTANCES + " INNER JOIN " +
         CalendarDatabaseHelper.Views.EVENTS + " AS " +
@@ -300,11 +346,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         CalendarDatabaseHelper.Tables.EVENTS + "."
         + Calendar.Events._ID + ")";
 
-    private static final String BETWEEN_DAY_WHERE =
+    private static final String SQL_WHERE_INSTANCES_BETWEEN_DAY =
         Calendar.Instances.START_DAY + "<=? AND " +
         Calendar.Instances.END_DAY + ">=?";
 
-    private static final String BETWEEN_WHERE =
+    private static final String SQL_WHERE_INSTANCES_BETWEEN =
         Calendar.Instances.BEGIN + "<=? AND " +
         Calendar.Instances.END + ">=?";
 
@@ -617,10 +663,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             String timezone, String dtStart2445, String dtEnd2445) {
 
         ContentValues values = new ContentValues();
-        values.put("dtstart", get2445ToMillis(timezone, dtStart2445));
-        values.put("dtend", get2445ToMillis(timezone, dtEnd2445));
+        values.put(Events.DTSTART, get2445ToMillis(timezone, dtStart2445));
+        values.put(Events.DTEND, get2445ToMillis(timezone, dtEnd2445));
 
-        int result = mDb.update("Events", values, "_id=?",
+        int result = mDb.update(Tables.EVENTS, values, SQL_WHERE_ID,
                 new String[] {String.valueOf(eventId)});
         if (0 == result) {
             if (Log.isLoggable(TAG, Log.VERBOSE)) {
@@ -760,7 +806,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 qb.setTables(CalendarDatabaseHelper.Views.EVENTS);
                 qb.setProjectionMap(sEventsProjectionMap);
                 selectionArgs = insertSelectionArg(selectionArgs, uri.getPathSegments().get(1));
-                qb.appendWhere("_id=?");
+                qb.appendWhere(SQL_WHERE_ID);
                 break;
 
             case EVENT_ENTITIES:
@@ -772,19 +818,19 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 qb.setTables(CalendarDatabaseHelper.Views.EVENTS);
                 qb.setProjectionMap(sEventEntitiesProjectionMap);
                 selectionArgs = insertSelectionArg(selectionArgs, uri.getPathSegments().get(1));
-                qb.appendWhere("_id=?");
+                qb.appendWhere(SQL_WHERE_ID);
                 break;
 
             case CALENDARS:
             case CALENDAR_ENTITIES:
-                qb.setTables("Calendars");
+                qb.setTables(Tables.CALENDARS);
                 appendAccountFromParameter(qb, uri);
                 break;
             case CALENDARS_ID:
             case CALENDAR_ENTITIES_ID:
-                qb.setTables("Calendars");
+                qb.setTables(Tables.CALENDARS);
                 selectionArgs = insertSelectionArg(selectionArgs, uri.getPathSegments().get(1));
-                qb.appendWhere("_id=?");
+                qb.appendWhere(SQL_WHERE_ID);
                 break;
             case INSTANCES:
             case INSTANCES_BY_DAY:
@@ -846,55 +892,53 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 return handleEventDayQuery(qb, startDay, endDay, projection, selection,
                         instancesTimezone, isHomeTimezone());
             case ATTENDEES:
-                qb.setTables("Attendees, Events");
+                qb.setTables(Tables.ATTENDEES + ", " + Tables.EVENTS);
                 qb.setProjectionMap(sAttendeesProjectionMap);
-                qb.appendWhere("Events._id=Attendees.event_id");
+                qb.appendWhere(Tables.EVENTS + "." + Events._ID + "="
+                        + Tables.ATTENDEES + "." + Attendees.EVENT_ID);
                 break;
             case ATTENDEES_ID:
-                qb.setTables("Attendees, Events");
+                qb.setTables(Tables.ATTENDEES + ", " + Tables.EVENTS);
                 qb.setProjectionMap(sAttendeesProjectionMap);
                 selectionArgs = insertSelectionArg(selectionArgs, uri.getPathSegments().get(1));
-                qb.appendWhere("Attendees._id=?  AND Events._id=Attendees.event_id");
+                qb.appendWhere(SQL_WHERE_ATTENDEES_ID);
                 break;
             case REMINDERS:
-                qb.setTables("Reminders");
+                qb.setTables(Tables.REMINDERS);
                 break;
             case REMINDERS_ID:
-                qb.setTables("Reminders, Events");
+                qb.setTables(Tables.REMINDERS + ", " + Tables.EVENTS);
                 qb.setProjectionMap(sRemindersProjectionMap);
                 selectionArgs = insertSelectionArg(selectionArgs, uri.getLastPathSegment());
-                qb.appendWhere("Reminders._id=? AND Events._id=Reminders.event_id");
+                qb.appendWhere(SQL_WHERE_REMINDERS_ID);
                 break;
             case CALENDAR_ALERTS:
-                qb.setTables("CalendarAlerts, " + CalendarDatabaseHelper.Views.EVENTS);
+                qb.setTables(Tables.CALENDAR_ALERTS + ", " + CalendarDatabaseHelper.Views.EVENTS);
                 qb.setProjectionMap(sCalendarAlertsProjectionMap);
-                qb.appendWhere(CalendarDatabaseHelper.Views.EVENTS +
-                        "._id=CalendarAlerts.event_id");
+                qb.appendWhere(SQL_WHERE_CALENDAR_ALERT);
                 break;
             case CALENDAR_ALERTS_BY_INSTANCE:
-                qb.setTables("CalendarAlerts, " + CalendarDatabaseHelper.Views.EVENTS);
+                qb.setTables(Tables.CALENDAR_ALERTS + ", " + CalendarDatabaseHelper.Views.EVENTS);
                 qb.setProjectionMap(sCalendarAlertsProjectionMap);
-                qb.appendWhere(CalendarDatabaseHelper.Views.EVENTS +
-                        "._id=CalendarAlerts.event_id");
+                qb.appendWhere(SQL_WHERE_CALENDAR_ALERT);
                 groupBy = CalendarAlerts.EVENT_ID + "," + CalendarAlerts.BEGIN;
                 break;
             case CALENDAR_ALERTS_ID:
-                qb.setTables("CalendarAlerts, " + CalendarDatabaseHelper.Views.EVENTS);
+                qb.setTables(Tables.CALENDAR_ALERTS + ", " + CalendarDatabaseHelper.Views.EVENTS);
                 qb.setProjectionMap(sCalendarAlertsProjectionMap);
                 selectionArgs = insertSelectionArg(selectionArgs, uri.getLastPathSegment());
-                qb.appendWhere(CalendarDatabaseHelper.Views.EVENTS +
-                        "._id=CalendarAlerts.event_id AND CalendarAlerts._id=?");
+                qb.appendWhere(SQL_WHERE_CALENDAR_ALERT_ID);
                 break;
             case EXTENDED_PROPERTIES:
-                qb.setTables("ExtendedProperties");
+                qb.setTables(Tables.EXTENDED_PROPERTIES);
                 break;
             case EXTENDED_PROPERTIES_ID:
-                qb.setTables("ExtendedProperties");
+                qb.setTables(Tables.EXTENDED_PROPERTIES);
                 selectionArgs = insertSelectionArg(selectionArgs, uri.getPathSegments().get(1));
-                qb.appendWhere("ExtendedProperties._id=?");
+                qb.appendWhere(SQL_WHERE_EXTENDED_PROPERTIES_ID);
                 break;
             case PROVIDER_PROPERTIES:
-                qb.setTables("CalendarCache");
+                qb.setTables(Tables.CALENDAR_CACHE);
                 qb.setProjectionMap(sCalendarCacheProjectionMap);
                 break;
             default:
@@ -960,12 +1004,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             // will lock the database.
             acquireInstanceRange(beginMs, endMs, true /* use minimum expansion window */,
                     forceExpansion, instancesTimezone, isHomeTimezone);
-            qb.appendWhere(BETWEEN_DAY_WHERE);
+            qb.appendWhere(SQL_WHERE_INSTANCES_BETWEEN_DAY);
         } else {
             // will lock the database.
             acquireInstanceRange(rangeBegin, rangeEnd, true /* use minimum expansion window */,
                     forceExpansion, instancesTimezone, isHomeTimezone);
-            qb.appendWhere(BETWEEN_WHERE);
+            qb.appendWhere(SQL_WHERE_INSTANCES_BETWEEN);
         }
         String selectionArgs[] = new String[] {String.valueOf(rangeEnd),
                 String.valueOf(rangeBegin)};
@@ -1102,7 +1146,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     instancesTimezone,
                     isHomeTimezone
             );
-            qb.appendWhere(BETWEEN_DAY_WHERE);
+            qb.appendWhere(SQL_WHERE_INSTANCES_BETWEEN_DAY);
         } else {
             // will lock the database.
             // we expand the instances here because we might be searching over
@@ -1113,7 +1157,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     instancesTimezone,
                     isHomeTimezone
             );
-            qb.appendWhere(BETWEEN_WHERE);
+            qb.appendWhere(SQL_WHERE_INSTANCES_BETWEEN);
         }
 
         return qb.query(mDb, projection, selection, selectionArgs,
@@ -1135,7 +1179,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         acquireInstanceRange(beginMs, endMs, true,
                 false /* do not force Instances expansion */, instancesTimezone, isHomeTimezone);
-        qb.appendWhere(BETWEEN_DAY_WHERE);
+        qb.appendWhere(SQL_WHERE_INSTANCES_BETWEEN_DAY);
         String selectionArgs[] = new String[] {String.valueOf(end), String.valueOf(begin)};
 
         return qb.query(mDb, projection, selection, selectionArgs,
@@ -1221,7 +1265,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // if "auto", then timezoneChanged, if !instancesTimezone.equals(localTimezone);
         if (maxInstance == 0 || timezoneChanged || forceExpansion) {
             // Empty the Instances table and expand from scratch.
-            mDb.execSQL("DELETE FROM Instances;");
+            mDb.execSQL("DELETE FROM " + Tables.INSTANCES + ";");
             if (Log.isLoggable(TAG, Log.VERBOSE)) {
                 Log.v(TAG, "acquireInstanceRangeLocked() deleted Instances,"
                         + " timezone changed: " + timezoneChanged);
@@ -1350,9 +1394,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // instance lasts no longer than 1 week.
         // also filter with syncable state (we dont want the entries from a non syncable account)
         // TODO: compute the originalInstanceEndTime or get this from the server.
-        qb.appendWhere("((dtstart <= ? AND (lastDate IS NULL OR lastDate >= ?)) OR " +
-                "(originalInstanceTime IS NOT NULL AND originalInstanceTime <= ? AND " +
-                "originalInstanceTime >= ?)) AND (sync_events != 0)");
+        qb.appendWhere(SQL_WHERE_GET_EVENTS_ENTRIES);
         String selectionArgs[] = new String[] {endString, beginString, endString,
                 String.valueOf(begin - MAX_ASSUMED_DURATION)};
         Cursor c = qb.query(mDb, EXPAND_COLUMNS, null /* selection */,
@@ -2025,7 +2067,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                             // Update the Event for saying it has some extended properties
                             ContentValues eventValues = new ContentValues();
                             eventValues.put(Events.HAS_EXTENDED_PROPERTIES, "1");
-                            int result = mDb.update("Events", eventValues, "_id=?",
+                            int result = mDb.update("Events", eventValues, SQL_WHERE_ID,
                                     new String[] {String.valueOf(id)});
                             if (result <= 0) {
                                 if (Log.isLoggable(TAG, Log.ERROR)) {
@@ -2186,7 +2228,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     private void setEventDirty(int eventId) {
-        mDb.execSQL("UPDATE Events SET _sync_dirty=1 where _id=?", new Integer[] {eventId});
+        mDb.execSQL(SQL_UPDATE_EVENT_SET_DIRTY, new Integer[] {eventId});
     }
 
     /**
@@ -2339,7 +2381,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         ContentValues values = new ContentValues();
         values.put(Events.SELF_ATTENDEE_STATUS, status);
-        db.update("Events", values, "_id=?", new String[] {String.valueOf(eventId)});
+        db.update(Tables.EVENTS, values, SQL_WHERE_ID,
+                new String[] {String.valueOf(eventId)});
     }
 
     /**
@@ -2380,7 +2423,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             // For recurrence or exception, more deletion may happen below if we
             // do an instance expansion.  This deletion will suffice if the exception
             // is moved outside the window, for instance.
-            db.delete("Instances", "event_id=?", new String[] {String.valueOf(rowId)});
+            db.delete(Tables.INSTANCES, Instances.EVENT_ID + "=?",
+                    new String[] {String.valueOf(rowId)});
         }
 
         if (isRecurrenceEvent(values))  {
@@ -2458,11 +2502,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         qb.setProjectionMap(sEventsProjectionMap);
         String selectionArgs[];
         if (recurrenceSyncId == null) {
-            String where = "_id =?";
+            String where = SQL_WHERE_ID;
             qb.appendWhere(where);
             selectionArgs = new String[] {String.valueOf(rowId)};
         } else {
-            String where = "_sync_id = ? OR originalEvent = ?";
+            String where = Events._SYNC_ID + "=? OR " + Events.ORIGINAL_EVENT + "=?";
             qb.appendWhere(where);
             selectionArgs = new String[] {recurrenceSyncId, recurrenceSyncId};
         }
@@ -2495,8 +2539,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             recurrenceSyncId = originalEvent;
         } else {
             // Get the recurrence's sync id from the database
-            recurrenceSyncId = DatabaseUtils.stringForQuery(db, "SELECT _sync_id FROM Events"
-                    + " WHERE _id=?", new String[] {String.valueOf(rowId)});
+            recurrenceSyncId = DatabaseUtils.stringForQuery(db,
+                    SQL_SELECT_EVENTS_SYNC_ID, new String[] {String.valueOf(rowId)});
         }
         // recurrenceSyncId is the _sync_id of the underlying recurrence
         // If the recurrence hasn't gone to the server, it will be null.
@@ -2505,21 +2549,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (recurrenceSyncId == null) {
             // Creating updating a recurrence that hasn't gone to the server.
             // Need to delete based on row id
-            String where = "_id IN (SELECT Instances._id as _id"
-                    + " FROM Instances INNER JOIN Events"
-                    + " ON (Events._id = Instances.event_id)"
-                    + " WHERE Events._id =?)";
-            db.delete("Instances", where, new String[]{"" + rowId});
+            String where = SQL_WHERE_ID_FROM_INSTANCES_NOT_SYNCED;
+            db.delete(Tables.INSTANCES, where, new String[]{"" + rowId});
         } else {
             // Creating or modifying a recurrence or exception.
             // Delete instances for recurrence (_sync_id = recurrenceSyncId)
             // and all exceptions (originalEvent = recurrenceSyncId)
-            String where = "_id IN (SELECT Instances._id as _id"
-                    + " FROM Instances INNER JOIN Events"
-                    + " ON (Events._id = Instances.event_id)"
-                    + " WHERE Events._sync_id =?"
-                    + " OR Events.originalEvent =?)";
-            db.delete("Instances", where, new String[]{recurrenceSyncId, recurrenceSyncId});
+            String where = SQL_WHERE_ID_FROM_INSTANCES_SYNCED;
+            db.delete(Tables.INSTANCES, where, new String[]{recurrenceSyncId, recurrenceSyncId});
         }
 
         // Now do instance expansion
@@ -2634,7 +2671,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private void updateEventRawTimesLocked(long eventId, ContentValues values) {
         ContentValues rawValues = new ContentValues();
 
-        rawValues.put("event_id", eventId);
+        rawValues.put(Calendar.EventsRawTimes.EVENT_ID, eventId);
 
         String timezone = values.getAsString(Events.EVENT_TIMEZONE);
 
@@ -2654,13 +2691,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         Long dtstartMillis = values.getAsLong(Events.DTSTART);
         if (dtstartMillis != null) {
             time.set(dtstartMillis);
-            rawValues.put("dtstart2445", time.format2445());
+            rawValues.put(Calendar.EventsRawTimesColumns.DTSTART_2445, time.format2445());
         }
 
         Long dtendMillis = values.getAsLong(Events.DTEND);
         if (dtendMillis != null) {
             time.set(dtendMillis);
-            rawValues.put("dtend2445", time.format2445());
+            rawValues.put(Calendar.EventsRawTimesColumns.DTEND_2445, time.format2445());
         }
 
         Long originalInstanceMillis = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
@@ -2673,14 +2710,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 time.allDay = allDayInteger != 0;
             }
             time.set(originalInstanceMillis);
-            rawValues.put("originalInstanceTime2445", time.format2445());
+            rawValues.put(Calendar.EventsRawTimesColumns.ORIGINAL_INSTANCE_TIME_2445,
+                    time.format2445());
         }
 
         Long lastDateMillis = values.getAsLong(Events.LAST_DATE);
         if (lastDateMillis != null) {
             time.allDay = allDay;
             time.set(lastDateMillis);
-            rawValues.put("lastDate2445", time.format2445());
+            rawValues.put(Calendar.EventsRawTimesColumns.LAST_DATE_2445, time.format2445());
         }
 
         mDbHelper.eventsRawTimesReplace(rawValues);
@@ -2712,7 +2750,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 selection = appendAccountToSelection(uri, selection);
 
                 // Query this event to get the ids to delete.
-                Cursor cursor = mDb.query("Events", ID_ONLY_PROJECTION,
+                Cursor cursor = mDb.query(Tables.EVENTS, ID_ONLY_PROJECTION,
                         selection, selectionArgs, null /* groupBy */,
                         null /* having */, null /* sortOrder */);
                 try {
@@ -2741,9 +2779,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case ATTENDEES:
             {
                 if (callerIsSyncAdapter) {
-                    return mDb.delete("Attendees", selection, selectionArgs);
+                    return mDb.delete(Tables.ATTENDEES, selection, selectionArgs);
                 } else {
-                    return deleteFromTable("Attendees", uri, selection, selectionArgs);
+                    return deleteFromTable(Tables.ATTENDEES, uri, selection, selectionArgs);
                 }
             }
             case ATTENDEES_ID:
@@ -2753,18 +2791,19 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 if (callerIsSyncAdapter) {
                     long id = ContentUris.parseId(uri);
-                    return mDb.delete("Attendees", "_id=?", new String[] {String.valueOf(id)});
+                    return mDb.delete(Tables.ATTENDEES, SQL_WHERE_ID,
+                            new String[] {String.valueOf(id)});
                 } else {
-                    return deleteFromTable("Attendees", uri, null /* selection */,
+                    return deleteFromTable(Tables.ATTENDEES, uri, null /* selection */,
                                            null /* selectionArgs */);
                 }
             }
             case REMINDERS:
             {
                 if (callerIsSyncAdapter) {
-                    return mDb.delete("Reminders", selection, selectionArgs);
+                    return mDb.delete(Tables.REMINDERS, selection, selectionArgs);
                 } else {
-                    return deleteFromTable("Reminders", uri, selection, selectionArgs);
+                    return deleteFromTable(Tables.REMINDERS, uri, selection, selectionArgs);
                 }
             }
             case REMINDERS_ID:
@@ -2774,18 +2813,20 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 if (callerIsSyncAdapter) {
                     long id = ContentUris.parseId(uri);
-                    return mDb.delete("Reminders", "_id=?", new String[] {String.valueOf(id)});
+                    return mDb.delete(Tables.REMINDERS, SQL_WHERE_ID,
+                            new String[] {String.valueOf(id)});
                 } else {
-                    return deleteFromTable("Reminders", uri, null /* selection */,
+                    return deleteFromTable(Tables.REMINDERS, uri, null /* selection */,
                                            null /* selectionArgs */);
                 }
             }
             case EXTENDED_PROPERTIES:
             {
                 if (callerIsSyncAdapter) {
-                    return mDb.delete("ExtendedProperties", selection, selectionArgs);
+                    return mDb.delete(Tables.EXTENDED_PROPERTIES, selection, selectionArgs);
                 } else {
-                    return deleteFromTable("ExtendedProperties", uri, selection, selectionArgs);
+                    return deleteFromTable(Tables.EXTENDED_PROPERTIES, uri, selection,
+                            selectionArgs);
                 }
             }
             case EXTENDED_PROPERTIES_ID:
@@ -2795,19 +2836,19 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 if (callerIsSyncAdapter) {
                     long id = ContentUris.parseId(uri);
-                    return mDb.delete("ExtendedProperties", "_id=?",
+                    return mDb.delete(Tables.EXTENDED_PROPERTIES, SQL_WHERE_ID,
                             new String[] {String.valueOf(id)});
                 } else {
-                    return deleteFromTable("ExtendedProperties", uri, null /* selection */,
+                    return deleteFromTable(Tables.EXTENDED_PROPERTIES, uri, null /* selection */,
                                            null /* selectionArgs */);
                 }
             }
             case CALENDAR_ALERTS:
             {
                 if (callerIsSyncAdapter) {
-                    return mDb.delete("CalendarAlerts", selection, selectionArgs);
+                    return mDb.delete(Tables.CALENDAR_ALERTS, selection, selectionArgs);
                 } else {
-                    return deleteFromTable("CalendarAlerts", uri, selection, selectionArgs);
+                    return deleteFromTable(Tables.CALENDAR_ALERTS, uri, selection, selectionArgs);
                 }
             }
             case CALENDAR_ALERTS_ID:
@@ -2818,12 +2859,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // Note: dirty bit is not set for Alerts because it is not synced.
                 // It is generated from Reminders, which is synced.
                 long id = ContentUris.parseId(uri);
-                return mDb.delete("CalendarAlerts", "_id=?", new String[] {String.valueOf(id)});
+                return mDb.delete(Tables.CALENDAR_ALERTS, SQL_WHERE_ID,
+                        new String[] {String.valueOf(id)});
             }
             case DELETED_EVENTS:
                 throw new UnsupportedOperationException("Cannot delete that URL: " + uri);
             case CALENDARS_ID:
-                StringBuilder selectionSb = new StringBuilder("_id=");
+                StringBuilder selectionSb = new StringBuilder(BaseColumns._ID + "=");
                 selectionSb.append(uri.getPathSegments().get(1));
                 if (!TextUtils.isEmpty(selection)) {
                     selectionSb.append(" AND (");
@@ -2850,8 +2892,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         String selectionArgs[] = new String[] {String.valueOf(id)};
 
         // Query this event to get the fields needed for deleting.
-        Cursor cursor = mDb.query("Events", EVENTS_PROJECTION,
-                "_id=?", selectionArgs,
+        Cursor cursor = mDb.query(Tables.EVENTS, EVENTS_PROJECTION,
+                SQL_WHERE_ID, selectionArgs,
                 null /* groupBy */,
                 null /* having */, null /* sortOrder */);
         try {
@@ -2863,7 +2905,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 boolean emptySyncId = TextUtils.isEmpty(syncId);
                 if (!emptySyncId && !emptyRRule) {
                     // Delete exceptions to this event as well.
-                    mDb.delete("Events", "originalEvent=?", new String[] {syncId});
+                    mDb.delete(Tables.EVENTS, SQL_WHERE_ORIGINAL_EVENT,
+                            new String[] {syncId});
                 }
 
                 // If this was a recurring event or a recurrence
@@ -2880,20 +2923,21 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // we clean the Events and Attendees table if the caller is CalendarSyncAdapter
                 // or if the event is local (no syncId)
                 if (callerIsSyncAdapter || emptySyncId) {
-                    mDb.delete("Events", "_id=?", selectionArgs);
+                    mDb.delete(Tables.EVENTS, SQL_WHERE_ID, selectionArgs);
                 } else {
                     ContentValues values = new ContentValues();
                     values.put(Events.DELETED, 1);
                     values.put(Events._SYNC_DIRTY, 1);
-                    mDb.update("Events", values, "_id=?", selectionArgs);
+                    mDb.update(Tables.EVENTS, values, SQL_WHERE_ID, selectionArgs);
 
                     // Delete associated data; attendees, however, are deleted with the actual event
                     //  so that the sync adapter is able to notify attendees of the cancellation.
-                    mDb.delete("Instances", "event_id=?", selectionArgs);
-                    mDb.delete("EventsRawTimes", "event_id=?", selectionArgs);
-                    mDb.delete("Reminders", "event_id=?", selectionArgs);
-                    mDb.delete("CalendarAlerts", "event_id=?", selectionArgs);
-                    mDb.delete("ExtendedProperties", "event_id=?", selectionArgs);
+                    mDb.delete(Tables.INSTANCES, SQL_WHERE_EVENT_ID, selectionArgs);
+                    mDb.delete(Tables.EVENTS_RAW_TIMES, SQL_WHERE_EVENT_ID, selectionArgs);
+                    mDb.delete(Tables.REMINDERS, SQL_WHERE_EVENT_ID, selectionArgs);
+                    mDb.delete(Tables.CALENDAR_ALERTS, SQL_WHERE_EVENT_ID, selectionArgs);
+                    mDb.delete(Tables.EXTENDED_PROPERTIES, SQL_WHERE_EVENT_ID,
+                            selectionArgs);
                 }
             }
         } finally {
@@ -2926,8 +2970,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             while(c.moveToNext()) {
                 long id = c.getLong(ID_INDEX);
                 long event_id = c.getLong(EVENT_ID_INDEX);
-                mDb.delete(table, "_id=?", new String[] {String.valueOf(id)});
-                mDb.update("Events", values, "_id=?", new String[] {String.valueOf(event_id)});
+                mDb.delete(table, SQL_WHERE_ID, new String[] {String.valueOf(id)});
+                mDb.update(Tables.EVENTS, values, SQL_WHERE_ID,
+                        new String[] {String.valueOf(event_id)});
                 count++;
             }
         } finally {
@@ -2956,8 +3001,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             while(c.moveToNext()) {
                 long id = c.getLong(ID_INDEX);
                 long event_id = c.getLong(EVENT_ID_INDEX);
-                mDb.update(table, values, "_id=?", new String[] {String.valueOf(id)});
-                mDb.update("Events", dirtyValues, "_id=?", new String[] {String.valueOf(event_id)});
+                mDb.update(table, values, SQL_WHERE_ID, new String[] {String.valueOf(id)});
+                mDb.update(Tables.EVENTS, dirtyValues, SQL_WHERE_ID,
+                        new String[] {String.valueOf(event_id)});
                 count++;
             }
         } finally {
@@ -2971,7 +3017,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // - delete calendar subscription
         // - delete calendar
 
-        Cursor c = mDb.query("Calendars", sCalendarsIdProjection, where,
+        Cursor c = mDb.query(Tables.CALENDARS, sCalendarsIdProjection, where,
                 null /* selectionArgs */, null /* groupBy */,
                 null /* having */, null /* sortOrder */);
         if (c == null) {
@@ -2985,7 +3031,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         } finally {
             c.close();
         }
-        return mDb.delete("Calendars", where, null /* whereArgs */);
+        return mDb.delete(Tables.CALENDARS, where, null /* whereArgs */);
     }
 
     // TODO: call calculateLastDate()!
@@ -3002,8 +3048,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // TODO: remove this restriction
         if (!TextUtils.isEmpty(selection) && match != CALENDAR_ALERTS
                 && match != EVENTS && match != CALENDARS && match != PROVIDER_PROPERTIES) {
-            throw new IllegalArgumentException(
-                    "WHERE based updates not supported");
+            throw new IllegalArgumentException("WHERE based updates not supported");
         }
         switch (match) {
             case SYNCSTATE:
@@ -3041,7 +3086,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         // adding the id to the URL, so parse that out here.
                         id = Long.parseLong(selection.substring(4));
                     } else {
-                        return mDb.update("Calendars", values, selection, selectionArgs);
+                        return mDb.update(Tables.CALENDARS, values, selection, selectionArgs);
                     }
                 }
                 if (!callerIsSyncAdapter) {
@@ -3052,7 +3097,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     modifyCalendarSubscription(id, syncEvents == 1);
                 }
 
-                int result = mDb.update("Calendars", values, "_id=?",
+                int result = mDb.update(Tables.CALENDARS, values, SQL_WHERE_ID,
                         new String[] {String.valueOf(id)});
 
                 if (result > 0) {
@@ -3139,7 +3184,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     }
                 }
 
-                int result = mDb.update("Events", updatedValues, "_id=?",
+                int result = mDb.update(Tables.EVENTS, updatedValues, SQL_WHERE_ID,
                         new String[] {String.valueOf(id)});
                 if (result > 0) {
                     updateEventRawTimesLocked(id, updatedValues);
@@ -3156,7 +3201,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
                     sendUpdateNotification(id, callerIsSyncAdapter);
                 }
-
                 return result;
             }
             case ATTENDEES_ID: {
@@ -3168,10 +3212,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
                 if (callerIsSyncAdapter) {
                     long id = ContentUris.parseId(uri);
-                    return mDb.update("Attendees", values, "_id=?",
+                    return mDb.update(Tables.ATTENDEES, values, SQL_WHERE_ID,
                             new String[] {String.valueOf(id)});
                 } else {
-                    return updateInTable("Attendees", values, uri, null /* selection */,
+                    return updateInTable(Tables.ATTENDEES, values, uri, null /* selection */,
                             null /* selectionArgs */);
                 }
             }
@@ -3182,13 +3226,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // Note: dirty bit is not set for Alerts because it is not synced.
                 // It is generated from Reminders, which is synced.
                 long id = ContentUris.parseId(uri);
-                return mDb.update("CalendarAlerts", values, "_id=?",
+                return mDb.update(Tables.CALENDAR_ALERTS, values, SQL_WHERE_ID,
                         new String[] {String.valueOf(id)});
             }
             case CALENDAR_ALERTS: {
                 // Note: dirty bit is not set for Alerts because it is not synced.
                 // It is generated from Reminders, which is synced.
-                return mDb.update("CalendarAlerts", values, selection, selectionArgs);
+                return mDb.update(Tables.CALENDAR_ALERTS, values, selection, selectionArgs);
             }
             case REMINDERS_ID: {
                 if (selection != null) {
@@ -3196,10 +3240,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 if (callerIsSyncAdapter) {
                     long id = ContentUris.parseId(uri);
-                    count = mDb.update("Reminders", values, "_id=?",
+                    count = mDb.update(Tables.REMINDERS, values, SQL_WHERE_ID,
                             new String[] {String.valueOf(id)});
                 } else {
-                    count = updateInTable("Reminders", values, uri, null /* selection */,
+                    count = updateInTable(Tables.REMINDERS, values, uri, null /* selection */,
                             null /* selectionArgs */);
                 }
 
@@ -3217,11 +3261,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 if (callerIsSyncAdapter) {
                     long id = ContentUris.parseId(uri);
-                    return mDb.update("ExtendedProperties", values, "_id=?",
+                    return mDb.update(Tables.EXTENDED_PROPERTIES, values, SQL_WHERE_ID,
                             new String[] {String.valueOf(id)});
                 } else {
-                    return updateInTable("ExtendedProperties", values, uri, null /* selection */,
-                            null /* selectionArgs */);
+                    return updateInTable(Tables.EXTENDED_PROPERTIES, values, uri,
+                            null /* selection */, null /* selectionArgs */);
                 }
             }
             // TODO: replace the SCHEDULE_ALARM private URIs with a
@@ -3255,7 +3299,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
                 // Update the database with the provided values (this call may change the value
                 // of timezone Instances)
-                int result = mDb.update("CalendarCache", values, selection, selectionArgs);
+                int result = mDb.update(Tables.CALENDAR_CACHE, values, selection, selectionArgs);
 
                 // if successful, do some house cleaning:
                 // if the timezone type is set to "home", set the Instances timezone to the previous
@@ -3616,7 +3660,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         String query = "SELECT *"
                 + " FROM (" + allDayQuery + " UNION ALL " + nonAllDayQuery + ")"
                 // avoid rescheduling existing alarms
-                + " WHERE 0=(SELECT count(*) from " + Tables.CALENDAR_ALERTS + " CA"
+                + " WHERE 0=(SELECT count(*) FROM " + Tables.CALENDAR_ALERTS + " CA"
                          + " WHERE CA." + CalendarAlerts.EVENT_ID + "=eventId"
                          + " AND CA." + CalendarAlerts.BEGIN + "=" + Instances.BEGIN
                          + " AND CA." + CalendarAlerts.ALARM_TIME + "=myAlarmTime)"
@@ -3827,12 +3871,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
         getContext().sendBroadcast(intent, null);
     }
-
-    private static String sEventsTable = "Events";
-    private static String sAttendeesTable = "Attendees";
-    private static String sRemindersTable = "Reminders";
-    private static String sCalendarAlertsTable = "CalendarAlerts";
-    private static String sExtendedPropertiesTable = "ExtendedProperties";
 
     private static final int EVENTS = 1;
     private static final int EVENTS_ID = 2;
@@ -4075,7 +4113,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         mDb.beginTransaction();
         try {
 
-            for (String table : new String[]{"Calendars"}) {
+            for (String table : new String[]{Tables.CALENDARS}) {
                 // Find all the accounts the calendar DB knows about, mark the ones that aren't
                 // in the valid set for deletion.
                 Cursor c = mDb.rawQuery("SELECT DISTINCT " +
@@ -4099,10 +4137,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     Log.d(TAG, "removing data for removed account " + account);
                 }
                 String[] params = new String[]{account.name, account.type};
-                mDb.execSQL("DELETE FROM Calendars" +
-                            " WHERE " +
-                                Calendar.SyncColumns._SYNC_ACCOUNT + "= ? AND " +
-                                Calendar.SyncColumns._SYNC_ACCOUNT_TYPE + "= ?", params);
+                mDb.execSQL(SQL_DELETE_FROM_CALENDARS, params);
             }
             mDbHelper.getSyncState().onAccountsChanged(mDb, accounts);
             mDb.setTransactionSuccessful();

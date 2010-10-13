@@ -724,11 +724,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     @Override
-    protected void notifyChange() {
+    protected void notifyChange(boolean syncToNetwork) {
         // Note that semantics are changed: notification is for CONTENT_URI, not the specific
         // Uri that was modified.
         getContext().getContentResolver().notifyChange(Calendar.CONTENT_URI, null,
-                true /* syncToNetwork */);
+                syncToNetwork);
     }
 
     @Override
@@ -1943,17 +1943,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     @Override
-    protected Uri insertInTransaction(Uri uri, ContentValues values) {
+    protected Uri insertInTransaction(Uri uri, ContentValues values, boolean callerIsSyncAdapter) {
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "insertInTransaction: " + uri);
         }
 
-        final boolean callerIsSyncAdapter =
-                readBooleanQueryParameter(uri, Calendar.CALLER_IS_SYNCADAPTER, false);
-
-        final int match = sUriMatcher.match(uri);
         long id = 0;
 
+        final int match = sUriMatcher.match(uri);
         switch (match) {
               case SYNCSTATE:
                 id = mDbHelper.getSyncState().insert(mDb, values);
@@ -2690,12 +2687,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     @Override
-    protected int deleteInTransaction(Uri uri, String selection, String[] selectionArgs) {
+    protected int deleteInTransaction(Uri uri, String selection, String[] selectionArgs,
+            boolean callerIsSyncAdapter) {
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "deleteInTransaction: " + uri);
         }
-        final boolean callerIsSyncAdapter =
-                readBooleanQueryParameter(uri, Calendar.CALLER_IS_SYNCADAPTER, false);
         final int match = sUriMatcher.match(uri);
         switch (match) {
             case SYNCSTATE:
@@ -2995,17 +2991,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     // TODO: call calculateLastDate()!
     @Override
     protected int updateInTransaction(Uri uri, ContentValues values, String selection,
-            String[] selectionArgs) {
+            String[] selectionArgs, boolean callerIsSyncAdapter) {
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "updateInTransaction: " + uri);
         }
 
         int count = 0;
-
         final int match = sUriMatcher.match(uri);
-
-        final boolean callerIsSyncAdapter =
-                readBooleanQueryParameter(uri, Calendar.CALLER_IS_SYNCADAPTER, false);
 
         // TODO: remove this restriction
         if (!TextUtils.isEmpty(selection) && match != CALENDAR_ALERTS
@@ -3327,8 +3319,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     private void appendAccountFromParameter(SQLiteQueryBuilder qb, Uri uri) {
-        final String accountName = getQueryParameter(uri, Calendar.EventsEntity.ACCOUNT_NAME);
-        final String accountType = getQueryParameter(uri, Calendar.EventsEntity.ACCOUNT_TYPE);
+        final String accountName = QueryParameterUtils.getQueryParameter(uri,
+                Calendar.EventsEntity.ACCOUNT_NAME);
+        final String accountType = QueryParameterUtils.getQueryParameter(uri,
+                Calendar.EventsEntity.ACCOUNT_TYPE);
         if (!TextUtils.isEmpty(accountName)) {
             qb.appendWhere(Calendar.Calendars._SYNC_ACCOUNT + "="
                     + DatabaseUtils.sqlEscapeString(accountName) + " AND "
@@ -3340,8 +3334,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     private String appendAccountToSelection(Uri uri, String selection) {
-        final String accountName = getQueryParameter(uri, Calendar.EventsEntity.ACCOUNT_NAME);
-        final String accountType = getQueryParameter(uri, Calendar.EventsEntity.ACCOUNT_TYPE);
+        final String accountName = QueryParameterUtils.getQueryParameter(uri,
+                Calendar.EventsEntity.ACCOUNT_NAME);
+        final String accountType = QueryParameterUtils.getQueryParameter(uri,
+                Calendar.EventsEntity.ACCOUNT_TYPE);
         if (!TextUtils.isEmpty(accountName)) {
             StringBuilder selectionSb = new StringBuilder(Calendar.Calendars._SYNC_ACCOUNT + "="
                     + DatabaseUtils.sqlEscapeString(accountName) + " AND "
@@ -4116,57 +4112,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         // make sure the widget reflects the account changes
         sendUpdateNotification(false);
-    }
-
-    /* package */ static boolean readBooleanQueryParameter(Uri uri, String name,
-            boolean defaultValue) {
-        final String flag = getQueryParameter(uri, name);
-        return flag == null
-                ? defaultValue
-                : (!"false".equals(flag.toLowerCase()) && !"0".equals(flag.toLowerCase()));
-    }
-
-    // Duplicated from ContactsProvider2.  TODO: a utility class for shared code
-    /**
-     * A fast re-implementation of {@link Uri#getQueryParameter}
-     */
-    /* package */ static String getQueryParameter(Uri uri, String parameter) {
-        String query = uri.getEncodedQuery();
-        if (query == null) {
-            return null;
-        }
-
-        int queryLength = query.length();
-        int parameterLength = parameter.length();
-
-        String value;
-        int index = 0;
-        while (true) {
-            index = query.indexOf(parameter, index);
-            if (index == -1) {
-                return null;
-            }
-
-            index += parameterLength;
-
-            if (queryLength == index) {
-                return null;
-            }
-
-            if (query.charAt(index) == '=') {
-                index++;
-                break;
-            }
-        }
-
-        int ampIndex = query.indexOf('&', index);
-        if (ampIndex == -1) {
-            value = query.substring(index);
-        } else {
-            value = query.substring(index, ampIndex);
-        }
-
-        return Uri.decode(value);
     }
 
     /**

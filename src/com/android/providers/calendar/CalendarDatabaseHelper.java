@@ -122,6 +122,11 @@ import java.util.TimeZone;
             " WHERE " + Calendar.Events.CALENDAR_ID + "=" +
                 "old." + Calendar.Events._ID + ";";
 
+    private static final String SELECT_CALENDAR_CACHE_SQL =
+            "SELECT " + Calendar.CalendarCache.VALUE +
+            " FROM " + Tables.CALENDAR_CACHE +
+            " WHERE " + Calendar.CalendarCache.KEY + "=?";
+
     private static final String SCHEMA_HTTPS = "https://";
     private static final String SCHEMA_HTTP = "http://";
 
@@ -515,7 +520,10 @@ import java.util.TimeZone;
                 oldTimezoneDbVersion : CalendarCache.DEFAULT_TIMEZONE_DATABASE_VERSION;
 
         // Set the default timezone database version
-        db.execSQL("INSERT OR REPLACE INTO CalendarCache (_id, key, value) VALUES (" +
+        db.execSQL("INSERT OR REPLACE INTO " + Tables.CALENDAR_CACHE +
+                " (" + CalendarCache.COLUMN_NAME_ID + ", " +
+                CalendarCache.COLUMN_NAME_KEY + ", " +
+                CalendarCache.COLUMN_NAME_VALUE + ") VALUES (" +
                 CalendarCache.KEY_TIMEZONE_DATABASE_VERSION.hashCode() + "," +
                 "'" + CalendarCache.KEY_TIMEZONE_DATABASE_VERSION + "',"  +
                 "'" + timezoneDbVersion + "'" +
@@ -524,7 +532,10 @@ import java.util.TimeZone;
 
     private void updateCalendarCacheTableTo203(SQLiteDatabase db) {
         // Define the default timezone type for Instances timezone management
-        db.execSQL("INSERT INTO CalendarCache (_id, key, value) VALUES (" +
+        db.execSQL("INSERT INTO " + Tables.CALENDAR_CACHE +
+                " (" + CalendarCache.COLUMN_NAME_ID + ", " +
+                CalendarCache.COLUMN_NAME_KEY + ", " +
+                CalendarCache.COLUMN_NAME_VALUE + ") VALUES (" +
                 CalendarCache.KEY_TIMEZONE_TYPE.hashCode() + "," +
                 "'" + CalendarCache.KEY_TIMEZONE_TYPE + "',"  +
                 "'" + CalendarCache.TIMEZONE_TYPE_AUTO + "'" +
@@ -533,14 +544,20 @@ import java.util.TimeZone;
         String defaultTimezone = TimeZone.getDefault().getID();
 
         // Define the default timezone for Instances
-        db.execSQL("INSERT INTO CalendarCache (_id, key, value) VALUES (" +
+        db.execSQL("INSERT INTO " + Tables.CALENDAR_CACHE +
+                " (" + CalendarCache.COLUMN_NAME_ID + ", " +
+                CalendarCache.COLUMN_NAME_KEY + ", " +
+                CalendarCache.COLUMN_NAME_VALUE + ") VALUES (" +
                 CalendarCache.KEY_TIMEZONE_INSTANCES.hashCode() + "," +
                 "'" + CalendarCache.KEY_TIMEZONE_INSTANCES + "',"  +
                 "'" + defaultTimezone + "'" +
                 ");");
 
         // Define the default previous timezone for Instances
-        db.execSQL("INSERT INTO CalendarCache (_id, key, value) VALUES (" +
+        db.execSQL("INSERT INTO " + Tables.CALENDAR_CACHE +
+                " (" + CalendarCache.COLUMN_NAME_ID + ", " +
+                CalendarCache.COLUMN_NAME_KEY + ", " +
+                CalendarCache.COLUMN_NAME_VALUE + ") VALUES (" +
                 CalendarCache.KEY_TIMEZONE_INSTANCES_PREVIOUS.hashCode() + "," +
                 "'" + CalendarCache.KEY_TIMEZONE_INSTANCES_PREVIOUS + "',"  +
                 "'" + defaultTimezone + "'" +
@@ -721,7 +738,7 @@ import java.util.TimeZone;
     @VisibleForTesting
     void upgradeToVersion203(SQLiteDatabase db) {
         // Same as Gingerbread version 100
-        Cursor cursor = db.rawQuery("SELECT value from CalendarCache WHERE key=?",
+        Cursor cursor = db.rawQuery(SELECT_CALENDAR_CACHE_SQL,
                 new String[] {"timezoneDatabaseVersion"});
 
         String oldTimezoneDbVersion = null;
@@ -732,7 +749,7 @@ import java.util.TimeZone;
                 cursor.close();
             }
             // Also clean the CalendarCache table
-            db.execSQL("DELETE FROM CalendarCache;");
+            db.execSQL("DELETE FROM " + Tables.CALENDAR_CACHE + ";");
         }
         initCalendarCacheTable(db, oldTimezoneDbVersion);
 
@@ -1207,13 +1224,15 @@ import java.util.TimeZone;
         db.execSQL("DROP TABLE IF EXISTS CalendarCache;");
 
         // IF NOT EXISTS should be normal pattern for table creation
-        db.execSQL("CREATE TABLE IF NOT EXISTS CalendarCache (" +
-                "_id INTEGER PRIMARY KEY," +
-                "key TEXT NOT NULL," +
-                "value TEXT" +
+        db.execSQL("CREATE TABLE IF NOT EXISTS " + Tables.CALENDAR_CACHE + " (" +
+                CalendarCache.COLUMN_NAME_ID + " INTEGER PRIMARY KEY," +
+                CalendarCache.COLUMN_NAME_KEY + " TEXT NOT NULL," +
+                CalendarCache.COLUMN_NAME_VALUE + " TEXT" +
                 ");");
 
-        db.execSQL("INSERT INTO CalendarCache (key, value) VALUES (" +
+        db.execSQL("INSERT INTO " + Tables.CALENDAR_CACHE + " (" +
+                CalendarCache.COLUMN_NAME_KEY + ", " +
+                CalendarCache.COLUMN_NAME_VALUE + ") VALUES (" +
                 "'" + CalendarCache.KEY_TIMEZONE_DATABASE_VERSION + "',"  +
                 "'" + CalendarCache.DEFAULT_TIMEZONE_DATABASE_VERSION + "'" +
                 ");");

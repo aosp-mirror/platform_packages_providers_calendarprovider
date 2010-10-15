@@ -438,6 +438,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
             try {
                 doUpdateTimezoneDependentFields();
+                triggerAppWidgetUpdate(-1 /*changedEventId*/ );
             } catch (SQLException e) {
                 if (Log.isLoggable(TAG, Log.ERROR)) {
                     Log.e(TAG, "doUpdateTimezoneDependentFields() failed", e);

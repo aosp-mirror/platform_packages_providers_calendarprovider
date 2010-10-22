@@ -3,6 +3,7 @@ package com.android.providers.calendar;
 import android.accounts.Account;
 
 public class CalendarProvider2ForTesting extends CalendarProvider2 {
+
     /**
      * For testing, don't want to start the TimezoneCheckerThread, as it results
      * in race conditions.  Thus updateTimezoneDependentFields is stubbed out.
@@ -20,5 +21,9 @@ public class CalendarProvider2ForTesting extends CalendarProvider2 {
 
     @Override
     protected void doUpdateTimezoneDependentFields() {
+    }
+
+    @Override
+    protected void postInitialize() {
     }
 }

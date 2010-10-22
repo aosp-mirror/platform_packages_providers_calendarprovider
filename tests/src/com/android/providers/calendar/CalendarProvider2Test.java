@@ -45,9 +45,7 @@ import android.test.suitebuilder.annotation.Suppress;
 import android.text.format.DateUtils;
 import android.text.format.Time;
 import android.util.Log;
-
 import com.android.common.ArrayListCursor;
-import com.android.providers.calendar.CalendarProvider2Test.MockProvider;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -100,6 +98,9 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
     private static final String MOCK_TIME_ZONE_DATABASE_VERSION = "2010a";
 
+    private static final long ONE_MINUTE_MILLIS = 60*1000;
+    private static final long ONE_HOUR_MILLIS = 3600*1000;
+    private static final long ONE_WEEK_MILLIS = 7 * 24 * 3600 * 1000;
 
     /**
      * We need a few more stub methods so that our tests can run
@@ -914,12 +915,12 @@ public class CalendarProvider2Test extends AndroidTestCase {
         mResolver.addProvider("subscribedfeeds", new MockProvider("subscribedfeeds"));
         mResolver.addProvider("sync", new MockProvider("sync"));
 
-        CalendarDatabaseHelper helper = (CalendarDatabaseHelper) getProvider().getDatabaseHelper();
-        mDb = helper.getWritableDatabase();
-        wipeData(mDb);
         mMetaData = getProvider().mMetaData;
         mForceDtend = false;
-        initCalendarCache();
+
+        CalendarDatabaseHelper helper = (CalendarDatabaseHelper) getProvider().getDatabaseHelper();
+        mDb = helper.getWritableDatabase();
+        wipeAndInitData(helper, mDb);
     }
 
     @Override
@@ -934,17 +935,48 @@ public class CalendarProvider2Test extends AndroidTestCase {
         super.tearDown();
     }
 
-    public void wipeData(SQLiteDatabase db) {
-        db.execSQL("DELETE FROM Calendars;");
-        db.execSQL("DELETE FROM Events;");
-        db.execSQL("DELETE FROM EventsRawTimes;");
-        db.execSQL("DELETE FROM Instances;");
-        db.execSQL("DELETE FROM CalendarMetaData;");
-        db.execSQL("DELETE FROM CalendarCache;");
-        db.execSQL("DELETE FROM Attendees;");
-        db.execSQL("DELETE FROM Reminders;");
-        db.execSQL("DELETE FROM CalendarAlerts;");
-        db.execSQL("DELETE FROM ExtendedProperties;");
+    public void wipeAndInitData(SQLiteOpenHelper helper, SQLiteDatabase db)
+            throws CalendarCache.CacheException {
+        db.beginTransaction();
+
+        // Clean tables
+        db.delete("Calendars", null, null);
+        db.delete("Events", null, null);
+        db.delete("EventsRawTimes", null, null);
+        db.delete("Instances", null, null);
+        db.delete("CalendarMetaData", null, null);
+        db.delete("CalendarCache", null, null);
+        db.delete("Attendees", null, null);
+        db.delete("Reminders", null, null);
+        db.delete("CalendarAlerts", null, null);
+        db.delete("ExtendedProperties", null, null);
+
+        // Set CalendarCache data
+        initCalendarCacheLocked(helper, db);
+
+        // set CalendarMetaData data
+        long now = System.currentTimeMillis();
+        ContentValues values = new ContentValues();
+        values.put("localTimezone", "America/Los_Angeles");
+        values.put("minInstance", 1207008000000L); // 1st April 2008
+        values.put("maxInstance", now + ONE_WEEK_MILLIS);
+        db.insert("CalendarMetaData", null, values);
+
+        db.setTransactionSuccessful();
+        db.endTransaction();
+    }
+
+    private void initCalendarCacheLocked(SQLiteOpenHelper helper, SQLiteDatabase db)
+            throws CalendarCache.CacheException {
+        CalendarCache cache = new CalendarCache(helper);
+
+        String localTimezone = TimeZone.getDefault().getID();
+
+        // Set initial values
+        cache.writeDataLocked(db, CalendarCache.KEY_TIMEZONE_DATABASE_VERSION, "2010k");
+        cache.writeDataLocked(db, CalendarCache.KEY_TIMEZONE_TYPE, CalendarCache.TIMEZONE_TYPE_AUTO);
+        cache.writeDataLocked(db, CalendarCache.KEY_TIMEZONE_INSTANCES, localTimezone);
+        cache.writeDataLocked(db, CalendarCache.KEY_TIMEZONE_INSTANCES_PREVIOUS, localTimezone);
     }
 
     protected CalendarProvider2ForTesting getProvider() {
@@ -1135,20 +1167,6 @@ public class CalendarProvider2Test extends AndroidTestCase {
     private void deleteAllEvents() {
         mDb.execSQL("DELETE FROM Events;");
         mMetaData.clearInstanceRange();
-    }
-
-    private void initCalendarCache() throws CalendarCache.CacheException {
-        CalendarDatabaseHelper helper = (CalendarDatabaseHelper) getProvider().getDatabaseHelper();
-        cleanCalendarDataTable(helper);
-        CalendarCache cache = new CalendarCache(helper);
-
-        String localTimezone = TimeZone.getDefault().getID();
-
-        // Set initial values
-        cache.writeTimezoneDatabaseVersion("2010k");
-        cache.writeTimezoneType(CalendarCache.TIMEZONE_TYPE_AUTO);
-        cache.writeTimezoneInstances(localTimezone);
-        cache.writeTimezoneInstancesPrevious(localTimezone);
     }
 
     public void testInsertNormalEvents() throws Exception {
@@ -1755,6 +1773,14 @@ public class CalendarProvider2Test extends AndroidTestCase {
         cursor.close();
     }
 
+    void checkEvents(int count, SQLiteDatabase db) {
+        Cursor cursor = db.query("Events", null, null, null, null, null, null);
+        try {
+            assertEquals(count, cursor.getCount());
+        } finally {
+            cursor.close();
+        }
+    }
     /**
      * Test attendee processing
      * @throws Exception
@@ -1762,7 +1788,9 @@ public class CalendarProvider2Test extends AndroidTestCase {
     public void testAttendees() throws Exception {
         mCalendarId = insertCal("Calendar0", DEFAULT_TIMEZONE);
 
+        checkEvents(0, mDb);
         Uri eventUri = insertEvent(mCalendarId, findEvent("daily0"));
+        checkEvents(1, mDb);
         long eventId = ContentUris.parseId(eventUri);
 
         ContentValues attendee = new ContentValues();
@@ -1776,11 +1804,11 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
         Cursor cursor = mResolver.query(Calendar.Attendees.CONTENT_URI, null,
                 "event_id=" + eventId, null, null);
-        assertEquals("Created event is missing", 1, cursor.getCount());
+        assertEquals("Created event is missing - cannot find EventUri = " + eventUri, 1, cursor.getCount());
         cursor.close();
 
         cursor = mResolver.query(eventUri, null, null, null, null);
-        assertEquals("Created event is missing", 1, cursor.getCount());
+        assertEquals("Created event is missing - cannot find EventUri = " + eventUri, 1, cursor.getCount());
         int selfColumn = cursor.getColumnIndex(Calendar.Events.SELF_ATTENDEE_STATUS);
         cursor.moveToNext();
         long selfAttendeeStatus = cursor.getInt(selfColumn);
@@ -1892,7 +1920,17 @@ public class CalendarProvider2Test extends AndroidTestCase {
     private void internalTestDirty(boolean syncAdapter) throws Exception {
         mCalendarId = insertCal("Calendar0", DEFAULT_TIMEZONE);
 
-        Uri eventUri = insertEvent(mCalendarId, findEvent("daily0"));
+        long now = System.currentTimeMillis();
+        long begin = (now / 1000) * 1000;
+        long end = begin + ONE_HOUR_MILLIS;
+        Time time = new Time(DEFAULT_TIMEZONE);
+        time.set(begin);
+        String startDate = time.format3339(false);
+        time.set(end);
+        String endDate = time.format3339(false);
+
+        EventInfo eventInfo = new EventInfo("current", startDate, endDate, false);
+        Uri eventUri = insertEvent(mCalendarId, eventInfo);
 
         long eventId = ContentUris.parseId(eventUri);
         testAndClearDirty(eventId, 1);
@@ -1912,7 +1950,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         testQueryCount(Calendar.Attendees.CONTENT_URI, "event_id=" + eventId, 1);
 
         ContentValues reminder = new ContentValues();
-        reminder.put(Calendar.Reminders.MINUTES, 10);
+        reminder.put(Calendar.Reminders.MINUTES, 30);
         reminder.put(Calendar.Reminders.METHOD, Calendar.Reminders.METHOD_EMAIL);
         reminder.put(Calendar.Attendees.EVENT_ID, eventId);
 
@@ -1921,13 +1959,15 @@ public class CalendarProvider2Test extends AndroidTestCase {
         testAndClearDirty(eventId, syncAdapter ? 0 : 1);
         testQueryCount(Calendar.Reminders.CONTENT_URI, "event_id=" + eventId, 1);
 
+        long alarmTime = begin + 5 * ONE_MINUTE_MILLIS;
+
         ContentValues alert = new ContentValues();
-        alert.put(Calendar.CalendarAlerts.BEGIN, 10);
-        alert.put(Calendar.CalendarAlerts.END, 20);
-        alert.put(Calendar.CalendarAlerts.ALARM_TIME, 30);
-        alert.put(Calendar.CalendarAlerts.CREATION_TIME, 40);
-        alert.put(Calendar.CalendarAlerts.RECEIVED_TIME, 50);
-        alert.put(Calendar.CalendarAlerts.NOTIFY_TIME, 60);
+        alert.put(Calendar.CalendarAlerts.BEGIN, begin);
+        alert.put(Calendar.CalendarAlerts.END, end);
+        alert.put(Calendar.CalendarAlerts.ALARM_TIME, alarmTime);
+        alert.put(Calendar.CalendarAlerts.CREATION_TIME, now);
+        alert.put(Calendar.CalendarAlerts.RECEIVED_TIME, now);
+        alert.put(Calendar.CalendarAlerts.NOTIFY_TIME, now);
         alert.put(Calendar.CalendarAlerts.STATE, Calendar.CalendarAlerts.SCHEDULED);
         alert.put(Calendar.CalendarAlerts.MINUTES, 30);
         alert.put(Calendar.CalendarAlerts.EVENT_ID, eventId);
@@ -1960,14 +2000,6 @@ public class CalendarProvider2Test extends AndroidTestCase {
         testAndClearDirty(eventId, syncAdapter ? 0 : 1);
 
         testQueryCount(Calendar.Attendees.CONTENT_URI, "event_id=" + eventId, 1);
-
-        reminder = new ContentValues();
-        reminder.put(Calendar.Reminders.MINUTES, 20);
-
-        assertEquals("update", 1, mResolver.update(updatedUri(reminderUri, syncAdapter), reminder,
-                null /* where */, null /* selectionArgs */));
-        testAndClearDirty(eventId, syncAdapter ? 0 : 1);
-        testQueryCount(Calendar.Reminders.CONTENT_URI, "event_id=" + eventId, 1);
 
         alert = new ContentValues();
         alert.put(Calendar.CalendarAlerts.STATE, Calendar.CalendarAlerts.DISMISSED);

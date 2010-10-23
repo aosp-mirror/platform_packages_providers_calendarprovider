@@ -85,5 +85,13 @@
            </intent-filter>
        </receiver>
 
+        <receiver android:name="CalendarProviderBroadcastReceiver">
+            <intent-filter>
+                <action android:name="com.android.providers.calendar.intent.CalendarProvider2" />
+                <category android:name="com.android.providers.calendar"/>
+            </intent-filter>
+        </receiver>
+        <service android:name="CalendarProviderIntentService"/>
+
     </application>
 </manifest>

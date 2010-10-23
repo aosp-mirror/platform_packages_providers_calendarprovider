@@ -17,6 +17,8 @@
 
 package com.android.providers.calendar;
 
+import android.os.PowerManager;
+import android.os.SystemClock;
 import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
 import com.android.providers.calendar.CalendarDatabaseHelper.Views;
 import com.google.common.annotations.VisibleForTesting;
@@ -68,6 +70,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -77,7 +80,7 @@ import java.util.regex.Pattern;
  */
 public class CalendarProvider2 extends SQLiteContentProvider implements OnAccountsUpdateListener {
 
-    private static final String TAG = "CalendarProvider2";
+    protected static final String TAG = "CalendarProvider2";
 
     private static final String TIMEZONE_GMT = "GMT";
 
@@ -159,6 +162,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Uri.withAppendedPath(Calendar.CONTENT_URI, SCHEDULE_ALARM_PATH);
     /* package */ static final Uri SCHEDULE_ALARM_REMOVE_URI =
             Uri.withAppendedPath(Calendar.CONTENT_URI, SCHEDULE_ALARM_REMOVE_PATH);
+
+    private static final String REMOVE_ALARM_VALUE = "removeAlarms";
 
     // To determine if a recurrence exception originally overlapped the
     // window, we need to assume a maximum duration, since we only know
@@ -250,6 +255,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             " WHERE " + Tables.EVENTS + "." + Events._SYNC_ID + "=?" + " OR " +
                     Tables.EVENTS + "." + Events.ORIGINAL_EVENT + "=?)";
 
+    private final AtomicBoolean mNextAlarmCheckScheduled = new AtomicBoolean(false);
+    private final AtomicBoolean mNeedRemoveAlarms = new AtomicBoolean(false);
+
+    protected static final String ACTION_CHECK_NEXT_ALARM =
+            "com.android.providers.calendar.intent.CalendarProvider2";
+
     public static final class InstancesList extends ArrayList<ContentValues> {
     }
 
@@ -261,28 +272,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 put(syncIdKey, instances);
             }
             instances.add(values);
-        }
-    }
-
-    // A thread that runs in the background and schedules the next
-    // calendar event alarm.
-    private class AlarmScheduler extends Thread {
-        boolean mRemoveAlarms;
-
-        public AlarmScheduler(boolean removeAlarms) {
-            mRemoveAlarms = removeAlarms;
-        }
-
-        @Override
-        public void run() {
-            try {
-                Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
-                runScheduleNextAlarm(mRemoveAlarms);
-            } catch (SQLException e) {
-                if (Log.isLoggable(TAG, Log.ERROR)) {
-                    Log.e(TAG, "runScheduleNextAlarm() failed", e);
-                }
-            }
         }
     }
 
@@ -311,8 +300,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final long CLEAR_OLD_ALARM_THRESHOLD =
             7 * DateUtils.DAY_IN_MILLIS + SCHEDULE_ALARM_SLACK;
 
-    // A lock for synchronizing access to fields that are shared
-    // with the AlarmScheduler thread.
+    // A lock for synchronizing access to the AlarmManager
     private Object mAlarmLock = new Object();
 
     // Make sure we load at least two months worth of data.
@@ -428,6 +416,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         30 * DateUtils.SECOND_IN_MILLIS;
 
     private Context mContext;
+    private static CalendarProvider2 mInstance;
+
+    private volatile PowerManager.WakeLock mScheduleNextAlarmWakeLock;
+    private static final String SCHEDULE_NEXT_ALARM_WAKE_LOCK = "ScheduleNextAlarmWakeLock";
 
     private final Handler mBroadcastHandler = new Handler() {
         @Override
@@ -480,6 +472,18 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         return CalendarDatabaseHelper.getInstance(context);
     }
 
+    protected static CalendarProvider2 getInstance() {
+        return mInstance;
+    }
+
+    protected void acquireScheduleNextAlarmWakeLock() {
+        mScheduleNextAlarmWakeLock.acquire();
+    }
+
+    protected void releaseScheduleNextAlarmWakeLock() {
+        mScheduleNextAlarmWakeLock.release();
+    }
+
     @Override
     public boolean onCreate() {
         super.onCreate();
@@ -494,6 +498,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     private boolean initialize() {
+        mInstance = this;
+
         mContext = getContext();
         mDbHelper = (CalendarDatabaseHelper)getDatabaseHelper();
         mDb = mDbHelper.getWritableDatabase();
@@ -516,6 +522,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         mCalendarCache = new CalendarCache(mDbHelper);
 
         postInitialize();
+
+        PowerManager powerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
+        // Create a wake lock that will be used when we are actually scheduling the next alarm
+        mScheduleNextAlarmWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
+                SCHEDULE_NEXT_ALARM_WAKE_LOCK);
+        mScheduleNextAlarmWakeLock.setReferenceCounted(true);
 
         return true;
     }
@@ -3509,19 +3521,37 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         manager.set(AlarmManager.RTC_WAKEUP, triggerTime, pending);
     }
 
-    /*
-     * This method runs the alarm scheduler in a background thread.
-     */
     void scheduleNextAlarm(boolean removeAlarms) {
-        Thread thread = new AlarmScheduler(removeAlarms);
-        thread.start();
+        // We aggregate first the "remove alarm flag". Whenever it is to true, it will be sticky
+        mNeedRemoveAlarms.set(mNeedRemoveAlarms.get() || removeAlarms);
+        if (!mNextAlarmCheckScheduled.getAndSet(true)) {
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "Scheduling check of next Alarm");
+            }
+            Intent intent = new Intent(ACTION_CHECK_NEXT_ALARM);
+            intent.putExtra(REMOVE_ALARM_VALUE, removeAlarms);
+            PendingIntent pending = PendingIntent.getBroadcast(mContext,
+                    0 /* ignored */, intent, PendingIntent.FLAG_NO_CREATE);
+            if (pending != null) {
+                // Cancel any previous Alarm check requests
+                getAlarmManager().cancel(pending);
+            }
+            pending = PendingIntent.getBroadcast(mContext,
+                    0 /* ignored */, intent, PendingIntent.FLAG_CANCEL_CURRENT);
+
+            // Trigger the check in 5s from now
+            long triggerAtTime = SystemClock.elapsedRealtime() + 5000;
+            getAlarmManager().set(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtTime, pending);
+        }
     }
 
     /**
      * This method runs in a background thread and schedules an alarm for
      * the next calendar event, if necessary.
      */
-    private void runScheduleNextAlarm(boolean removeAlarms) {
+    void runScheduleNextAlarm(boolean removeAlarms) {
+        // Reset so that we can accept other schedules of next alarm
+        mNextAlarmCheckScheduled.set(false);
         final SQLiteDatabase db = mDbHelper.getWritableDatabase();
         db.beginTransaction();
         try {

@@ -151,8 +151,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private CalendarDatabaseHelper mDbHelper;
 
-    private static final Uri SYNCSTATE_CONTENT_URI = Uri.parse("content://syncstate/state");
-    //
     // SCHEDULE_ALARM_URI runs scheduleNextAlarm(false)
     // SCHEDULE_ALARM_REMOVE_URI runs scheduleNextAlarm(true)
     // TODO: use a service to schedule alarms rather than private URI
@@ -260,6 +258,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     protected static final String ACTION_CHECK_NEXT_ALARM =
             "com.android.providers.calendar.intent.CalendarProvider2";
+    private static final int ALARM_CHECK_DELAY_MILLIS = 5000;
 
     public static final class InstancesList extends ArrayList<ContentValues> {
     }
@@ -396,7 +395,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         ATTENDEES_NAME_CONCAT
     };
 
-    private AlarmManager mAlarmManager;
+    private CalendarAlarmManager mAlarmManager;
 
     /**
      * Arbitrary integer that we assign to the messages that we send to this
@@ -416,6 +415,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         30 * DateUtils.SECOND_IN_MILLIS;
 
     private Context mContext;
+    private ContentResolver mContentResolver;
+
     private static CalendarProvider2 mInstance;
 
     private volatile PowerManager.WakeLock mScheduleNextAlarmWakeLock;
@@ -476,12 +477,34 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         return mInstance;
     }
 
-    protected void acquireScheduleNextAlarmWakeLock() {
-        mScheduleNextAlarmWakeLock.acquire();
+    PowerManager.WakeLock getScheduleNextAlarmWakeLock() {
+        if (mScheduleNextAlarmWakeLock == null) {
+            PowerManager powerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
+            // Create a wake lock that will be used when we are actually scheduling the next alarm
+            mScheduleNextAlarmWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
+                    SCHEDULE_NEXT_ALARM_WAKE_LOCK);
+            // We want the Wake Lock to be reference counted (so that we dont need to take care
+            // about its reference counting)
+            mScheduleNextAlarmWakeLock.setReferenceCounted(true);
+        }
+        return mScheduleNextAlarmWakeLock;
     }
 
-    protected void releaseScheduleNextAlarmWakeLock() {
-        mScheduleNextAlarmWakeLock.release();
+    void acquireScheduleNextAlarmWakeLock() {
+        getScheduleNextAlarmWakeLock().acquire();
+    }
+
+    void releaseScheduleNextAlarmWakeLock() {
+        getScheduleNextAlarmWakeLock().release();
+    }
+
+    @Override
+    public void shutdown() {
+        if (mDbHelper != null) {
+            mDbHelper.close();
+            mDbHelper = null;
+            mDb = null;
+        }
     }
 
     @Override
@@ -501,6 +524,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         mInstance = this;
 
         mContext = getContext();
+        mContentResolver = mContext.getContentResolver();
+
         mDbHelper = (CalendarDatabaseHelper)getDatabaseHelper();
         mDb = mDbHelper.getWritableDatabase();
 
@@ -510,26 +535,34 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
         filter.addAction(Intent.ACTION_DEVICE_STORAGE_OK);
         filter.addAction(Intent.ACTION_TIME_CHANGED);
-        final Context c = getContext();
 
         // We don't ever unregister this because this thread always wants
         // to receive notifications, even in the background.  And if this
         // thread is killed then the whole process will be killed and the
         // memory resources will be reclaimed.
-        c.registerReceiver(mIntentReceiver, filter);
+        mContext.registerReceiver(mIntentReceiver, filter);
 
         mMetaData = new MetaData(mDbHelper);
         mCalendarCache = new CalendarCache(mDbHelper);
 
+        getOrCreateCalendarAlarmManager();
+
+        getScheduleNextAlarmWakeLock();
+
         postInitialize();
 
-        PowerManager powerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
-        // Create a wake lock that will be used when we are actually scheduling the next alarm
-        mScheduleNextAlarmWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
-                SCHEDULE_NEXT_ALARM_WAKE_LOCK);
-        mScheduleNextAlarmWakeLock.setReferenceCounted(true);
-
         return true;
+    }
+
+    protected CalendarAlarmManager createCalendarAlarmManager() {
+        return new CalendarAlarmManager(mContext);
+    }
+
+    synchronized CalendarAlarmManager getOrCreateCalendarAlarmManager() {
+        if (mAlarmManager == null) {
+            mAlarmManager = createCalendarAlarmManager();
+        }
+        return mAlarmManager;
     }
 
     protected void postInitialize() {
@@ -761,32 +794,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     private void rescheduleMissedAlarms() {
-        AlarmManager manager = getAlarmManager();
-        if (manager != null) {
-            Context context = getContext();
-            ContentResolver cr = context.getContentResolver();
-            CalendarAlerts.rescheduleMissedAlarms(cr, context, manager);
-        }
-    }
-
-    /**
-     * Appends comma separated ids.
-     * @param ids Should not be empty
-     */
-    private void appendIds(StringBuilder sb, HashSet<Long> ids) {
-        for (long id : ids) {
-            sb.append(id).append(',');
-        }
-
-        sb.setLength(sb.length() - 1); // Yank the last comma
+        getOrCreateCalendarAlarmManager().rescheduleMissedAlarms(mContentResolver);
     }
 
     @Override
     protected void notifyChange(boolean syncToNetwork) {
         // Note that semantics are changed: notification is for CONTENT_URI, not the specific
         // Uri that was modified.
-        getContext().getContentResolver().notifyChange(Calendar.CONTENT_URI, null,
-                syncToNetwork);
+        mContentResolver.notifyChange(Calendar.CONTENT_URI, null, syncToNetwork);
     }
 
     @Override
@@ -977,7 +992,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 sortOrder, limit);
         if (c != null) {
             // TODO: is this the right notification Uri?
-            c.setNotificationUri(getContext().getContentResolver(), Calendar.Events.CONTENT_URI);
+            c.setNotificationUri(mContentResolver, Calendar.Events.CONTENT_URI);
         }
         return c;
     }
@@ -3462,53 +3477,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         mDbHelper.scheduleSync(account, !syncEvents, calendarUrl);
     }
 
-    // TODO: is this needed
-//    @Override
-//    public void onSyncStop(SyncContext context, boolean success) {
-//        super.onSyncStop(context, success);
-//        if (Log.isLoggable(TAG, Log.DEBUG)) {
-//            Log.d(TAG, "onSyncStop() success: " + success);
-//        }
-//        scheduleNextAlarm(false /* do not remove alarms */);
-//        triggerAppWidgetUpdate(-1);
-//    }
-
-    /* Retrieve and cache the alarm manager */
-    private AlarmManager getAlarmManager() {
-        synchronized(mAlarmLock) {
-            if (mAlarmManager == null) {
-                Context context = getContext();
-                if (context == null) {
-                    if (Log.isLoggable(TAG, Log.ERROR)) {
-                        Log.e(TAG, "getAlarmManager() cannot get Context");
-                    }
-                    return null;
-                }
-                Object service = context.getSystemService(Context.ALARM_SERVICE);
-                mAlarmManager = (AlarmManager) service;
-            }
-            return mAlarmManager;
-        }
-    }
-
     void scheduleNextAlarmCheck(long triggerTime) {
-        AlarmManager manager = getAlarmManager();
-        if (manager == null) {
-            if (Log.isLoggable(TAG, Log.ERROR)) {
-                Log.e(TAG, "scheduleNextAlarmCheck() cannot get AlarmManager");
-            }
-            return;
-        }
-        Context context = getContext();
         Intent intent = new Intent(CalendarReceiver.SCHEDULE);
-        intent.setClass(context, CalendarReceiver.class);
-        PendingIntent pending = PendingIntent.getBroadcast(context,
+        intent.setClass(mContext, CalendarReceiver.class);
+        PendingIntent pending = PendingIntent.getBroadcast(mContext,
                 0, intent, PendingIntent.FLAG_NO_CREATE);
         if (pending != null) {
             // Cancel any previous alarms that do the same thing.
-            manager.cancel(pending);
+            getOrCreateCalendarAlarmManager().cancel(pending);
         }
-        pending = PendingIntent.getBroadcast(context,
+        pending = PendingIntent.getBroadcast(mContext,
                 0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
 
         if (Log.isLoggable(TAG, Log.DEBUG)) {
@@ -3518,7 +3496,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Log.d(TAG, "scheduleNextAlarmCheck at: " + triggerTime + timeStr);
         }
 
-        manager.set(AlarmManager.RTC_WAKEUP, triggerTime, pending);
+        getOrCreateCalendarAlarmManager().set(AlarmManager.RTC_WAKEUP, triggerTime, pending);
     }
 
     void scheduleNextAlarm(boolean removeAlarms) {
@@ -3534,14 +3512,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     0 /* ignored */, intent, PendingIntent.FLAG_NO_CREATE);
             if (pending != null) {
                 // Cancel any previous Alarm check requests
-                getAlarmManager().cancel(pending);
+                getOrCreateCalendarAlarmManager().cancel(pending);
             }
             pending = PendingIntent.getBroadcast(mContext,
                     0 /* ignored */, intent, PendingIntent.FLAG_CANCEL_CURRENT);
 
             // Trigger the check in 5s from now
-            long triggerAtTime = SystemClock.elapsedRealtime() + 5000;
-            getAlarmManager().set(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtTime, pending);
+            long triggerAtTime = SystemClock.elapsedRealtime() + ALARM_CHECK_DELAY_MILLIS;
+            getOrCreateCalendarAlarmManager().set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    triggerAtTime, pending);
         }
     }
 
@@ -3552,16 +3531,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     void runScheduleNextAlarm(boolean removeAlarms) {
         // Reset so that we can accept other schedules of next alarm
         mNextAlarmCheckScheduled.set(false);
-        final SQLiteDatabase db = mDbHelper.getWritableDatabase();
-        db.beginTransaction();
+        mDb.beginTransaction();
         try {
             if (removeAlarms) {
-                removeScheduledAlarmsLocked(db);
+                removeScheduledAlarmsLocked(mDb);
             }
-            scheduleNextAlarmLocked(db);
-            db.setTransactionSuccessful();
+            scheduleNextAlarmLocked(mDb);
+            mDb.setTransactionSuccessful();
         } finally {
-            db.endTransaction();
+            mDb.endTransaction();
         }
     }
 
@@ -3593,18 +3571,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      */
     private void scheduleNextAlarmLocked(SQLiteDatabase db) {
         Time time = new Time();
-        AlarmManager alarmManager = getAlarmManager();
-        if (alarmManager == null) {
-            if (Log.isLoggable(TAG, Log.ERROR)) {
-                Log.e(TAG, "Failed to find the AlarmManager. Could not schedule the next alarm!");
-            }
-            return;
-        }
 
         final long currentMillis = System.currentTimeMillis();
         final long start = currentMillis - SCHEDULE_ALARM_SLACK;
         final long end = start + (24 * 60 * 60 * 1000);
-        ContentResolver cr = getContext().getContentResolver();
         if (Log.isLoggable(TAG, Log.DEBUG)) {
             time.set(start);
             String startTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
@@ -3625,7 +3595,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             db.delete(CalendarAlerts.TABLE_NAME, INVALID_CALENDARALERTS_SELECTOR, selectArg);
 
         long nextAlarmTime = end;
-        final long tmpAlarmTime = CalendarAlerts.findNextAlarmTime(cr, currentMillis);
+        final long tmpAlarmTime = CalendarAlerts.findNextAlarmTime(mContentResolver, currentMillis);
         if (tmpAlarmTime != -1 && tmpAlarmTime < nextAlarmTime) {
             nextAlarmTime = tmpAlarmTime;
         }
@@ -3765,7 +3735,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
                 // Avoid an SQLiteContraintException by checking if this alarm
                 // already exists in the table.
-                if (CalendarAlerts.alarmExists(cr, eventId, startTime, alarmTime)) {
+                if (CalendarAlerts.alarmExists(mContentResolver, eventId, startTime, alarmTime)) {
                     if (Log.isLoggable(TAG, Log.DEBUG)) {
                         int titleIndex = cursor.getColumnIndex(Events.TITLE);
                         String title = cursor.getString(titleIndex);
@@ -3775,7 +3745,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
 
                 // Insert this alarm into the CalendarAlerts table
-                Uri uri = CalendarAlerts.insert(cr, eventId, startTime,
+                Uri uri = CalendarAlerts.insert(mContentResolver, eventId, startTime,
                         endTime, alarmTime, minutes);
                 if (uri == null) {
                     if (Log.isLoggable(TAG, Log.ERROR)) {
@@ -3785,7 +3755,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     continue;
                 }
 
-                CalendarAlerts.scheduleAlarm(getContext(), alarmManager, alarmTime);
+                getOrCreateCalendarAlarmManager().scheduleAlarm(alarmTime);
             }
         } finally {
             if (cursor != null) {
@@ -3795,7 +3765,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         // Refresh notification bar
         if (rowsDeleted > 0) {
-            CalendarAlerts.scheduleAlarm(getContext(), alarmManager, currentMillis);
+            getOrCreateCalendarAlarmManager().scheduleAlarm(currentMillis);
         }
 
         // If we scheduled an event alarm, then schedule the next alarm check
@@ -3899,7 +3869,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (Log.isLoggable(TAG, Log.INFO)) {
             Log.i(TAG, "Sending notification intent: " + intent);
         }
-        getContext().sendBroadcast(intent, null);
+        mContext.sendBroadcast(intent, null);
     }
 
     private static final int EVENTS = 1;

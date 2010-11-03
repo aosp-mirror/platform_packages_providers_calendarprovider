@@ -21,13 +21,12 @@ import android.app.PendingIntent;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.provider.Calendar;
-import android.util.Log;
 
 /**
  * We are using the CalendarAlertManager to be able to mock the AlarmManager as the AlarmManager
  * cannot be extended.
  *
- * CalendarAlertManager is delegating its calls to the real AlarmService. When mocking
+ * CalendarAlertManager is delegating its calls to the real AlarmService.
  */
 public class CalendarAlarmManager {
 
@@ -45,71 +44,19 @@ public class CalendarAlarmManager {
         mAlarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
     }
 
-    protected boolean checkAlarmService() {
-        if (mAlarmManager == null) {
-            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                Log.d(TAG, "AlarmService is not set");
-            }
-            return false;
-        }
-        return true;
-    }
-
     public void set(int type, long triggerAtTime, PendingIntent operation) {
-        if (!checkAlarmService()) {
-            return;
-        }
         mAlarmManager.set(type, triggerAtTime, operation);
     }
 
-    public void setRepeating(int type, long triggerAtTime, long interval,
-            PendingIntent operation) {
-        if (!checkAlarmService()) {
-            return;
-        }
-        mAlarmManager.setRepeating(type, triggerAtTime, interval, operation);
-    }
-
-    public void setInexactRepeating(int type, long triggerAtTime, long interval,
-            PendingIntent operation) {
-        if (!checkAlarmService()) {
-            return;
-        }
-        mAlarmManager.setInexactRepeating(type, triggerAtTime, interval, operation);
-    }
-
     public void cancel(PendingIntent operation) {
-        if (!checkAlarmService()) {
-            return;
-        }
         mAlarmManager.cancel(operation);
     }
 
-    public void setTime(long millis) {
-        if (!checkAlarmService()) {
-            return;
-        }
-        mAlarmManager.setTime(millis);
-    }
-
-    public void setTimeZone(String timeZone) {
-        if (!checkAlarmService()) {
-            return;
-        }
-        mAlarmManager.setTimeZone(timeZone);
-    }
-
     public void scheduleAlarm(long alarmTime) {
-        if (!checkAlarmService()) {
-            return;
-        }
         Calendar.CalendarAlerts.scheduleAlarm(mContext, mAlarmManager, alarmTime);
     }
 
     public void rescheduleMissedAlarms(ContentResolver cr) {
-        if (!checkAlarmService()) {
-            return;
-        }
         Calendar.CalendarAlerts.rescheduleMissedAlarms(cr, mContext, mAlarmManager);
     }
 }

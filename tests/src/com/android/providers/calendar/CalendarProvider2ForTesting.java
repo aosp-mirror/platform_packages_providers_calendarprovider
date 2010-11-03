@@ -1,6 +1,8 @@
 package com.android.providers.calendar;
 
 import android.accounts.Account;
+import android.app.PendingIntent;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.os.PowerManager;
 
@@ -57,6 +59,22 @@ public class CalendarProvider2ForTesting extends CalendarProvider2 {
 
         @Override
         protected void initializeWithContext(Context context) {
+        }
+
+        @Override
+        public void set(int type, long triggerAtTime, PendingIntent operation) {
+        }
+
+        @Override
+        public void cancel(PendingIntent operation) {
+        }
+
+        @Override
+        public void scheduleAlarm(long alarmTime) {
+        }
+
+        @Override
+        public void rescheduleMissedAlarms(ContentResolver cr) {
         }
     }
 }

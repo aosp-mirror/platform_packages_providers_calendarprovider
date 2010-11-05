@@ -58,7 +58,7 @@ import java.util.TimeZone;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    static final int DATABASE_VERSION = 203;
+    static final int DATABASE_VERSION = 204;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -696,6 +696,10 @@ import java.util.TimeZone;
                 upgradeToVersion203(db);
                 oldVersion += 1;
             }
+            if (oldVersion == 203) {
+                upgradeToVersion204(db);
+                oldVersion += 1;
+            }
             if (oldVersion != DATABASE_VERSION) {
                 Log.e(TAG, "Need to recreate Calendar schema because of "
                         + "unknown Calendar database version: " + oldVersion);
@@ -733,6 +737,12 @@ import java.util.TimeZone;
             return true;
         }
         return false;
+    }
+
+    @VisibleForTesting
+    void upgradeToVersion204(SQLiteDatabase db) {
+        // Recreate the Events Views as the new SYNC_ADAPTER_DATA column needs to be added
+        createEventsView(db);
     }
 
     @VisibleForTesting
@@ -1622,7 +1632,8 @@ import java.util.TimeZone;
                 + " AS " + Calendar.Events._SYNC_MARK + ","
                 + Calendar.Calendars.SYNC1 + ","
                 + Calendar.Calendars.OWNER_ACCOUNT + ","
-                + Calendar.Calendars.SYNC_EVENTS
+                + Calendar.Calendars.SYNC_EVENTS  + ","
+                + Calendar.Events.SYNC_ADAPTER_DATA
                 + " FROM " + Tables.EVENTS + " JOIN " + Tables.CALENDARS
                 + " ON (" + Tables.EVENTS + "." + Calendar.Events.CALENDAR_ID
                 + "=" + Tables.CALENDARS + "." + Calendar.Calendars._ID

@@ -2058,6 +2058,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                                 "allDay is true but sec, min, hour were not 0.");
                     }
                 }
+                // Insert the row
                 id = mDbHelper.eventsInsert(updatedValues);
                 if (id != -1) {
                     updateEventRawTimesLocked(id, updatedValues);
@@ -4045,6 +4046,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventEntitiesProjectionMap.put(Events._SYNC_VERSION, Events._SYNC_VERSION);
         sEventEntitiesProjectionMap.put(Events._SYNC_DIRTY, Events._SYNC_DIRTY);
         sEventEntitiesProjectionMap.put(Calendars.SYNC1, Calendars.SYNC1);
+        sEventEntitiesProjectionMap.put(Events.SYNC_ADAPTER_DATA, Events.SYNC_ADAPTER_DATA);
 
         // Instances columns
         sInstancesProjectionMap.put(Events.DELETED, "Events.deleted as deleted");

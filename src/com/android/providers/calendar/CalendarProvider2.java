@@ -1281,6 +1281,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         continue;
                     }
 
+                    if (deleted) {
+                        if (Log.isLoggable(TAG, Log.DEBUG)) {
+                            Log.d(TAG, "Found deleted recurring event in "
+                                    + "Events table.  Ignoring.");
+                        }
+                        continue;
+                    }
+
                     // need to parse the event into a local calendar.
                     eventTime.timezone = eventTimezone;
                     eventTime.set(dtstartMillis);
@@ -2639,14 +2647,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             if (cursor.moveToNext()) {
                 result = 1;
                 String syncId = cursor.getString(EVENTS_SYNC_ID_INDEX);
+                String rRule = cursor.getString(EVENTS_RRULE_INDEX);
                 boolean emptySyncId = TextUtils.isEmpty(syncId);
-                if (!emptySyncId) {
-
-                    // TODO: we may also want to delete exception
-                    // events for this event (in case this was a
-                    // recurring event).  We can do that with the
-                    // following code:
-                    // mDb.delete("Events", "originalEvent=?", new String[] {syncId});
+                boolean emptyRRule = TextUtils.isEmpty(rRule);
+                if (!emptySyncId && !emptyRRule) {
+                    // Delete exceptions to this event as well.
+                    mDb.delete("Events", "originalEvent=?", new String[] {syncId});
                 }
 
                 // If this was a recurring event or a recurrence
@@ -2664,12 +2670,19 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // or if the event is local (no syncId)
                 if (callerIsSyncAdapter || emptySyncId) {
                     mDb.delete("Events", "_id=?", selectionArgs);
-                    mDb.delete("Attendees", "event_id=?", selectionArgs);
                 } else {
                     ContentValues values = new ContentValues();
                     values.put(Events.DELETED, 1);
                     values.put(Events._SYNC_DIRTY, 1);
                     mDb.update("Events", values, "_id=?", selectionArgs);
+
+                    // Delete associated data; attendees, however, are deleted with the actual event
+                    // so that the sync adapter is able to notify attendees of the cancellation.
+                    mDb.delete("Instances", "event_id=?", selectionArgs);
+                    mDb.delete("EventsRawTimes", "event_id=?", selectionArgs);
+                    mDb.delete("Reminders", "event_id=?", selectionArgs);
+                    mDb.delete("CalendarAlerts", "event_id=?", selectionArgs);
+                    mDb.delete("ExtendedProperties", "event_id=?", selectionArgs);
                 }
             }
         } finally {
@@ -2682,13 +2695,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             triggerAppWidgetUpdate(-1 /* changedEventId */);
         }
 
-        // Delete associated data; attendees, however, are deleted with the actual event so
-        // that the sync adapter is able to notify attendees of the cancellation.
-        mDb.delete("Instances", "event_id=?", selectionArgs);
-        mDb.delete("EventsRawTimes", "event_id=?", selectionArgs);
-        mDb.delete("Reminders", "event_id=?", selectionArgs);
-        mDb.delete("CalendarAlerts", "event_id=?", selectionArgs);
-        mDb.delete("ExtendedProperties", "event_id=?", selectionArgs);
         return result;
     }
 

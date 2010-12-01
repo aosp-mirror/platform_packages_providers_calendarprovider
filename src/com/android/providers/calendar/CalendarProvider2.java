@@ -1572,7 +1572,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         continue;
                     }
                     if (deleted) {
-                        // Don't expand deleted recurring events
+                        if (Log.isLoggable(TAG, Log.DEBUG)) {
+                            Log.d(TAG, "Found deleted recurring event in "
+                                    + "Events table.  Ignoring.");
+                        }
                         continue;
                     }
 

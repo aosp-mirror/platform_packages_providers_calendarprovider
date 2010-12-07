@@ -497,6 +497,29 @@ public class EventRecurrenceTest extends TestCase {
         );
     }
 
+    // Sample coming from bug #1640517
+    public void test19() throws Exception {
+        verifyRecurType("FREQ=YEARLY;BYMONTH=3;BYDAY=TH",
+                /* int freq */         EventRecurrence.YEARLY,
+                /* String until */     null,
+                /* int count */        0,
+                /* int interval */     0,
+                /* int[] bysecond */   null,
+                /* int[] byminute */   null,
+                /* int[] byhour */     null,
+                /* int[] byday */      new int[] {
+                        EventRecurrence.TH
+                },
+                /* int[] bydayNum */   new int[] { 0 },
+                /* int[] bymonthday */ null,
+                /* int[] byyearday */  null,
+                /* int[] byweekno */   null,
+                /* int[] bymonth */    new int[] { 3 },
+                /* int[] bysetpos */   null,
+                /* int wkst */         EventRecurrence.MO
+        );
+    }
+
     // for your copying pleasure
     public void fakeTestXX() throws Exception {
         verifyRecurType("FREQ=DAILY;",

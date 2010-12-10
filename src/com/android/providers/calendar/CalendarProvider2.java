@@ -253,6 +253,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             " WHERE " + Tables.EVENTS + "." + Events._SYNC_ID + "=?" + " OR " +
                     Tables.EVENTS + "." + Events.ORIGINAL_EVENT + "=?)";
 
+    private static final String SQL_SELECT_COUNT_FOR_SYNC_ID =
+            "SELECT COUNT(*) FROM " + Tables.EVENTS + " WHERE " + Events._SYNC_ID + "=?";
+
     private final AtomicBoolean mNextAlarmCheckScheduled = new AtomicBoolean(false);
     private final AtomicBoolean mNeedRemoveAlarms = new AtomicBoolean(false);
 
@@ -1879,10 +1882,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     }
 
-    public static boolean isRecurrenceEvent(ContentValues values) {
-        return (!TextUtils.isEmpty(values.getAsString(Events.RRULE))||
-                !TextUtils.isEmpty(values.getAsString(Events.RDATE))||
-                !TextUtils.isEmpty(values.getAsString(Events.ORIGINAL_EVENT)));
+    public static boolean isRecurrenceEvent(String rrule, String rdate, String originalEvent) {
+        return (!TextUtils.isEmpty(rrule)||
+                !TextUtils.isEmpty(rdate)||
+                !TextUtils.isEmpty(originalEvent));
     }
 
     /**
@@ -2458,7 +2461,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     new String[] {String.valueOf(rowId)});
         }
 
-        if (isRecurrenceEvent(values))  {
+        String rrule = values.getAsString(Events.RRULE);
+        String rdate = values.getAsString(Events.RDATE);
+        String originalEvent = values.getAsString(Events.ORIGINAL_EVENT);
+        if (isRecurrenceEvent(rrule, rdate, originalEvent))  {
             // The recurrence or exception needs to be (re-)expanded if:
             // a) Exception or recurrence that falls inside window
             boolean insideWindow = dtstartMillis <= fields.maxInstance &&
@@ -2931,14 +2937,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             if (cursor.moveToNext()) {
                 result = 1;
                 String syncId = cursor.getString(EVENTS_SYNC_ID_INDEX);
-                String rRule = cursor.getString(EVENTS_RRULE_INDEX);
-                boolean emptyRRule = TextUtils.isEmpty(rRule);
                 boolean emptySyncId = TextUtils.isEmpty(syncId);
-                if (!emptySyncId && !emptyRRule) {
-                    // Delete exceptions to this event as well.
-                    mDb.delete(Tables.EVENTS, SQL_WHERE_ORIGINAL_EVENT,
-                            new String[] {syncId});
-                }
 
                 // If this was a recurring event or a recurrence
                 // exception, then force a recalculation of the
@@ -2946,8 +2945,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 String rrule = cursor.getString(EVENTS_RRULE_INDEX);
                 String rdate = cursor.getString(EVENTS_RDATE_INDEX);
                 String origEvent = cursor.getString(EVENTS_ORIGINAL_EVENT_INDEX);
-                if (!TextUtils.isEmpty(rrule) || !TextUtils.isEmpty(rdate)
-                        || !TextUtils.isEmpty(origEvent)) {
+                if (isRecurrenceEvent(rrule, rdate, origEvent)) {
                     mMetaData.clearInstanceRange();
                 }
 
@@ -3065,6 +3063,71 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         return mDb.delete(Tables.CALENDARS, where, null /* whereArgs */);
     }
 
+    private Cursor getCursorForEventIdAndProjection(String eventId, String[] projection) {
+        return mDb.query(Tables.EVENTS,
+                projection,
+                SQL_WHERE_ID,
+                new String[] { eventId },
+                null /* group by */,
+                null /* having */,
+                null /* order by*/);
+    }
+
+    private boolean doesEventExistForSyncId(String syncId) {
+        if (syncId == null) {
+            if (Log.isLoggable(TAG, Log.WARN)) {
+                Log.w(TAG, "SyncID cannot be null: " + syncId);
+            }
+            return false;
+        }
+        long count = DatabaseUtils.longForQuery(mDb, SQL_SELECT_COUNT_FOR_SYNC_ID,
+                new String[] { syncId });
+        return (count > 0);
+    }
+
+    // Check if an UPDATE with STATUS_CANCEL means that we will need to do an Update (instead of
+    // a Deletion)
+    //
+    // Deletion will be done only and only if:
+    // - event status = canceled
+    // - event is a recurrence exception that does not have its original (parent) event anymore
+    //
+    // This is due to the Server semantics that generate STATUS_CANCELED for both creation
+    // and deletion of a recurrence exception
+    // See bug #3218104
+    private boolean doesStatusCancelUpdateMeanUpdate(String eventId, ContentValues values) {
+        boolean isStatusCanceled = values.containsKey(Events.STATUS) &&
+                (values.getAsInteger(Events.STATUS) == Events.STATUS_CANCELED);
+        if (isStatusCanceled) {
+            Cursor cursor = null;
+            try {
+                cursor = getCursorForEventIdAndProjection(eventId,
+                        new String[] { Events.RRULE, Events.RDATE, Events.ORIGINAL_EVENT });
+                if (!cursor.moveToFirst()) {
+                    if (Log.isLoggable(TAG, Log.WARN)) {
+                        Log.w(TAG, "Cannot find Event with id: " + eventId);
+                    }
+                    return false;
+                }
+                String rrule = cursor.getString(0);
+                String rdate = cursor.getString(1);
+                String originalEvent = cursor.getString(2);
+
+                boolean isRecurrenceException =
+                        isRecurrenceEvent(rrule, rdate, originalEvent) &&
+                        !TextUtils.isEmpty(originalEvent);
+
+                if (isRecurrenceException) {
+                    return doesEventExistForSyncId(originalEvent);
+                }
+            } finally {
+                cursor.close();
+            }
+        }
+        // This is the normal case, we just want an UPDATE
+        return true;
+    }
+
     // TODO: call calculateLastDate()!
     @Override
     protected int updateInTransaction(Uri uri, ContentValues values, String selection,
@@ -3081,6 +3144,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 && match != EVENTS && match != CALENDARS && match != PROVIDER_PROPERTIES) {
             throw new IllegalArgumentException("WHERE based updates not supported");
         }
+
         switch (match) {
             case SYNCSTATE:
                 return mDbHelper.getSyncState().update(mDb, values,
@@ -3192,6 +3256,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                             + Events.HTML_URI
                             + " in Events table is not allowed.");
                 }
+                String strId = String.valueOf(id);
+                // For taking care about recurrences exceptions cancelations, check if this needs
+                //  to be an UPDATE or a DELETE
+                boolean isUpdate = doesStatusCancelUpdateMeanUpdate(strId, values);
                 ContentValues updatedValues = new ContentValues(values);
                 // TODO: should extend validateEventData to work with updates and call it here
                 updatedValues = updateLastDate(updatedValues);
@@ -3215,23 +3283,32 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     }
                 }
 
-                int result = mDb.update(Tables.EVENTS, updatedValues, SQL_WHERE_ID,
-                        new String[] {String.valueOf(id)});
-                if (result > 0) {
-                    updateEventRawTimesLocked(id, updatedValues);
-                    updateInstancesLocked(updatedValues, id, false /* not a new event */, mDb);
+                int result;
 
-                    if (values.containsKey(Events.DTSTART)) {
-                        // The start time of the event changed, so run the
-                        // event alarm scheduler.
-                        if (Log.isLoggable(TAG, Log.DEBUG)) {
-                            Log.d(TAG, "updateInternal() changing event");
+                if (isUpdate) {
+                    result = mDb.update(Tables.EVENTS, updatedValues, SQL_WHERE_ID,
+                            new String[] { strId });
+                    if (result > 0) {
+                        updateEventRawTimesLocked(id, updatedValues);
+                        updateInstancesLocked(updatedValues, id, false /* not a new event */, mDb);
+
+                        if (values.containsKey(Events.DTSTART)) {
+                            // The start time of the event changed, so run the
+                            // event alarm scheduler.
+                            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                                Log.d(TAG, "updateInternal() changing event");
+                            }
+                            scheduleNextAlarm(false /* do not remove alarms */);
                         }
-                        scheduleNextAlarm(false /* do not remove alarms */);
-                    }
 
-                    sendUpdateNotification(id, callerIsSyncAdapter);
+                        sendUpdateNotification(id, callerIsSyncAdapter);
+                    }
+                } else {
+                    result = deleteEventInternal(id, callerIsSyncAdapter, true /* isBatch */);
+                    scheduleNextAlarm(false /* do not remove alarms */);
+                    sendUpdateNotification(callerIsSyncAdapter);
                 }
+
                 return result;
             }
             case ATTENDEES_ID: {

@@ -22,6 +22,7 @@ import android.pim.RecurrenceSet;
 import android.test.suitebuilder.annotation.LargeTest;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
+import android.text.TextUtils;
 import android.text.format.Time;
 import android.util.Log;
 import android.util.TimeFormatException;
@@ -139,7 +140,11 @@ public class RecurrenceProcessorTest extends TestCase {
             }
         }
 
-        long lastOccur = rp.getLastOccurence(dtstart, recur);
+        long lastOccur = rp.getLastOccurence(dtstart, rangeEnd, recur);
+        if (lastOccur == 0 && out.length == 0) {
+            // No occurrence found and 0 returned for lastOccur, this is ok.
+            return;
+        }
         long lastMillis = -1;
         long expectedMillis = -1;
         String lastStr = "";
@@ -998,7 +1003,7 @@ public class RecurrenceProcessorTest extends TestCase {
                         "20081002T070000",
                         "20081102T070000",
                         "20081202T070000",
-                }, "");
+                }, "20081202T070000");
     }
 
     @MediumTest
@@ -1124,7 +1129,7 @@ public class RecurrenceProcessorTest extends TestCase {
                         "20080103T100000",
                         "20080603T100000",
                         "20081103T100000",
-                }, "");
+                }, "20081103T100000");
     }
 
     @MediumTest
@@ -1370,7 +1375,7 @@ public class RecurrenceProcessorTest extends TestCase {
                         "20081223T040000",
                         "20081225T040000",
                         "20081230T040000",
-                }, "");
+                }, "20081230T040000");
     }
 
     @MediumTest
@@ -1746,7 +1751,7 @@ public class RecurrenceProcessorTest extends TestCase {
                         "20070930T060000",
                         "20071001T060000",
                         "20071002T060000",
-                }, "");
+                }, "20071002T060000");
     }
 
     @MediumTest
@@ -2031,7 +2036,7 @@ public class RecurrenceProcessorTest extends TestCase {
                         "20081224T080000",
                         "20081227T080000",
                         "20081230T080000",
-                }, "");
+                }, "20081230T080000");
     }
 
     @SmallTest
@@ -2045,7 +2050,7 @@ public class RecurrenceProcessorTest extends TestCase {
                         "20061004T130000",
                         "20071004T130000",
                         "20081004T130000",
-                }, "");
+                }, "20081004T130000");
     }
 
     @MediumTest
@@ -2083,7 +2088,7 @@ public class RecurrenceProcessorTest extends TestCase {
                         "20081027T170000",
                         "20081124T170000",
                         "20081229T170000",
-                }, "");
+                }, "20081229T170000");
     }
 
     @SmallTest
@@ -2127,7 +2132,7 @@ public class RecurrenceProcessorTest extends TestCase {
                         "20081031T160000",
                         "20081231T160000",
                 },
-                "");
+                "20081231T160000");
     }
 
     @SmallTest
@@ -2153,7 +2158,7 @@ public class RecurrenceProcessorTest extends TestCase {
                         "20081007T110000",
                         "20081202T110000",
                 },
-                "");
+                "20081202T110000");
     }
 
     @SmallTest
@@ -2360,7 +2365,20 @@ public class RecurrenceProcessorTest extends TestCase {
                 null /* rdate */, null /* exrule */, null /* exdate */,
                 "20100101T000000", "20100301T000000",
                 new String[]{},
-                "20100526T153000" /* last */);
+                null /* last */);
+    }
+
+    /**
+     * Test repeating weekly event with dtstart and dtend (only one occurrence)
+     * See bug #3267616
+     * @throws Exception
+     */
+    public void testWeekly13() throws Exception {
+        verifyRecurrence("20101117T150000",
+                "FREQ=WEEKLY;BYDAY=WE",
+                null /* rdate */, null /* exrule */, null /* exdate */,
+                "20101117T150000", "20101117T160000",
+                new String[]{ "20101117T150000" });
     }
 
     // These recurrence rules are used in the loop that measures the performance

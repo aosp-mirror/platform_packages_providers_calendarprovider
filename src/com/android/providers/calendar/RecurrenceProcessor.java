@@ -48,11 +48,11 @@ public class RecurrenceProcessor
      * or -1 if the event repeats forever.  If there are no occurrences
      * (because the exrule or exdates cancel all the occurrences) and the
      * event does not repeat forever, then 0 is returned.
-     * 
+     *
      * This computes a conservative estimate of the last occurrence. That is,
      * the time of the actual last occurrence might be earlier than the time
      * returned by this method.
-     * 
+     *
      * @param dtstart the time of the first occurrence
      * @param recur the recurrence
      * @return an estimate of the time (in UTC milliseconds) of the last
@@ -61,7 +61,28 @@ public class RecurrenceProcessor
      */
     public long getLastOccurence(Time dtstart,
                                  RecurrenceSet recur) throws DateException {
+        return getLastOccurence(dtstart, null /* no limit */, recur);
+    }
 
+    /**
+     * Returns the time (millis since epoch) of the last occurrence,
+     * or -1 if the event repeats forever.  If there are no occurrences
+     * (because the exrule or exdates cancel all the occurrences) and the
+     * event does not repeat forever, then 0 is returned.
+     *
+     * This computes a conservative estimate of the last occurrence. That is,
+     * the time of the actual last occurrence might be earlier than the time
+     * returned by this method.
+     *
+     * @param dtstart the time of the first occurrence
+     * @param maxtime the max possible time of the last occurrence. null means no limit
+     * @param recur the recurrence
+     * @return an estimate of the time (in UTC milliseconds) of the last
+     * occurrence, which may be greater than the actual last occurrence
+     * @throws DateException
+     */
+    public long getLastOccurence(Time dtstart, Time maxtime,
+                                 RecurrenceSet recur) throws DateException {
         long lastTime = -1;
         boolean hasCount = false;
 
@@ -78,10 +99,6 @@ public class RecurrenceProcessor
                     if (untilTime > lastTime) {
                         lastTime = untilTime;
                     }
-                } else {
-                    // This rrule has no "count" or "until" so it repeats
-                    // forever.
-                    return -1;
                 }
             }
             if (lastTime != -1 && recur.rdates != null) {
@@ -110,12 +127,13 @@ public class RecurrenceProcessor
 
         // Expand the complete recurrence if there were any counts specified,
         // or if there were rdates specified.
-        if (hasCount || recur.rdates != null) {
+        if (hasCount || recur.rdates != null || maxtime != null) {
             // The expansion might not contain any dates if the exrule or
             // exdates cancel all the generated dates.
             long[] dates = expand(dtstart, recur,
                     dtstart.toMillis(false /* use isDst */) /* range start */,
-                    -1 /* range end */);
+                    (maxtime != null) ?
+                            maxtime.toMillis(false /* use isDst */) : -1 /* range end */);
 
             // The expansion might not contain any dates if exrule or exdates
             // cancel all the generated dates.

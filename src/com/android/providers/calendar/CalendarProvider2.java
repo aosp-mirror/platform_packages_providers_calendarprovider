@@ -17,8 +17,6 @@
 
 package com.android.providers.calendar;
 
-import android.os.PowerManager;
-import android.os.SystemClock;
 import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
 import com.android.providers.calendar.CalendarDatabaseHelper.Views;
 import com.google.common.annotations.VisibleForTesting;
@@ -45,7 +43,9 @@ import android.net.Uri;
 import android.os.Debug;
 import android.os.Handler;
 import android.os.Message;
+import android.os.PowerManager;
 import android.os.Process;
+import android.os.SystemClock;
 import android.pim.EventRecurrence;
 import android.pim.RecurrenceSet;
 import android.provider.BaseColumns;
@@ -3292,7 +3292,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         updateEventRawTimesLocked(id, updatedValues);
                         updateInstancesLocked(updatedValues, id, false /* not a new event */, mDb);
 
-                        if (values.containsKey(Events.DTSTART)) {
+                        if (values.containsKey(Events.DTSTART) ||
+                                values.containsKey(Events.STATUS)) {
+                            // If this is a cancellation knock it out
+                            // of the instances table
+                            if (values.containsKey(Events.STATUS) &&
+                                    values.getAsInteger(Events.STATUS) == Events.STATUS_CANCELED) {
+                                String[] args = new String[] {String.valueOf(id)};
+                                mDb.delete(Tables.INSTANCES, SQL_WHERE_EVENT_ID, args);
+                            }
+
                             // The start time of the event changed, so run the
                             // event alarm scheduler.
                             if (Log.isLoggable(TAG, Log.DEBUG)) {

@@ -16,6 +16,8 @@
 
 package com.android.providers.calendar;
 
+import com.android.common.ArrayListCursor;
+
 import android.content.ComponentName;
 import android.content.ContentProvider;
 import android.content.ContentUris;
@@ -45,7 +47,6 @@ import android.test.suitebuilder.annotation.Suppress;
 import android.text.format.DateUtils;
 import android.text.format.Time;
 import android.util.Log;
-import com.android.common.ArrayListCursor;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -229,7 +230,11 @@ public class CalendarProvider2Test extends AndroidTestCase {
                     map.put(pair.key, value);
                 }
             }
-            updateMatchingEvents(eventName, map);
+            if (map.size() == 1 && map.containsKey(Events.STATUS)) {
+                updateMatchingEventsStatusOnly(eventName, map);
+            } else {
+                updateMatchingEvents(eventName, map);
+            }
         }
     }
 
@@ -1163,6 +1168,32 @@ public class CalendarProvider2Test extends AndroidTestCase {
         cursor.close();
         return numRows;
     }
+
+    /**
+     * Updates the status of all the events that match the given title.
+     * @param title the given title to match events on
+     * @return the number of rows updated
+     */
+    private int updateMatchingEventsStatusOnly(String title, ContentValues values) {
+        String[] projection = new String[] {
+                Events._ID,
+        };
+        if (values.size() != 1 && !values.containsKey(Events.STATUS)) {
+            return 0;
+        }
+        Cursor cursor = mResolver.query(mEventsUri, projection,
+                "title=?", new String[] { title }, null);
+        int numRows = 0;
+        while (cursor.moveToNext()) {
+            long id = cursor.getLong(0);
+
+            Uri uri = ContentUris.withAppendedId(Events.CONTENT_URI, id);
+            numRows += mResolver.update(uri, values, null, null);
+        }
+        cursor.close();
+        return numRows;
+    }
+
 
     private void deleteAllEvents() {
         mDb.execSQL("DELETE FROM Events;");

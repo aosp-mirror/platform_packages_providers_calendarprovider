@@ -82,6 +82,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
     private Context mContext;
     private MockContentResolver mResolver;
     private Uri mEventsUri = Events.CONTENT_URI;
+    private Uri mCalendarsUri = Calendars.CONTENT_URI;
     private int mCalendarId;
 
     protected boolean mWipe = false;
@@ -1026,9 +1027,13 @@ public class CalendarProvider2Test extends AndroidTestCase {
         m.put(Calendars._SYNC_ACCOUNT_TYPE,  "com.google");
         m.put(Calendars.SYNC_EVENTS,  1);
 
-        Uri url = mResolver.insert(Calendar.Calendars.CONTENT_URI, m);
+        Uri url = mResolver.insert(mCalendarsUri, m);
         String id = url.getLastPathSegment();
         return Integer.parseInt(id);
+    }
+
+    private int deleteMatchingCalendars(String selection, String[] selectionArgs) {
+        return mResolver.delete(mCalendarsUri, selection, selectionArgs);
     }
 
     private Uri insertEvent(int calId, EventInfo event) {
@@ -2602,5 +2607,89 @@ public class CalendarProvider2Test extends AndroidTestCase {
         } finally {
             cursor.close();
         }
+    }
+
+    private void checkCalendarCount(int expectedCount) {
+        Cursor cursor = mResolver.query(mCalendarsUri,
+                null /* projection */,
+                null /* selection */,
+                null /* selectionArgs */,
+                null /* sortOrder */);
+        assertEquals(expectedCount, cursor.getCount());
+        cursor.close();
+    }
+
+    private void checkCalendarExists(int calId) {
+        assertTrue(isCalendarExists(calId));
+    }
+
+    private void checkCalendarDoesNotExists(int calId) {
+        assertFalse(isCalendarExists(calId));
+    }
+
+    private boolean isCalendarExists(int calId) {
+        Cursor cursor = mResolver.query(mCalendarsUri,
+                new String[] {Calendars._ID},
+                null /* selection */,
+                null /* selectionArgs */,
+                null /* sortOrder */);
+        boolean found = false;
+        while (cursor.moveToNext()) {
+            if (calId == cursor.getInt(0)) {
+                found = true;
+                break;
+            }
+        }
+        cursor.close();
+        return found;
+    }
+
+    public void testDeleteAllCalendars() {
+        checkCalendarCount(0);
+
+        insertCal("Calendar1", "America/Los_Angeles");
+        insertCal("Calendar2", "America/Los_Angeles");
+
+        checkCalendarCount(2);
+
+        deleteMatchingCalendars(null /* selection */, null /* selectionArgs*/);
+        checkCalendarCount(0);
+    }
+
+    public void testDeleteCalendarsWithSelection() {
+        checkCalendarCount(0);
+
+        int calId1 = insertCal("Calendar1", "America/Los_Angeles");
+        int calId2 = insertCal("Calendar2", "America/Los_Angeles");
+
+        checkCalendarCount(2);
+        checkCalendarExists(calId1);
+        checkCalendarExists(calId2);
+
+        deleteMatchingCalendars(Calendars._ID + "=" + calId2, null /* selectionArgs*/);
+        checkCalendarCount(1);
+        checkCalendarExists(calId1);
+        checkCalendarDoesNotExists(calId2);
+    }
+
+    public void testDeleteCalendarsWithSelectionAndArgs() {
+        checkCalendarCount(0);
+
+        int calId1 = insertCal("Calendar1", "America/Los_Angeles");
+        int calId2 = insertCal("Calendar2", "America/Los_Angeles");
+
+        checkCalendarCount(2);
+        checkCalendarExists(calId1);
+        checkCalendarExists(calId2);
+
+        deleteMatchingCalendars(Calendars._ID + "=?",
+                new String[] { Integer.toString(calId2) });
+        checkCalendarCount(1);
+        checkCalendarExists(calId1);
+        checkCalendarDoesNotExists(calId2);
+
+        deleteMatchingCalendars(Calendars._ID + "=?" + " AND " + Calendars.NAME + "=?",
+                new String[] { Integer.toString(calId1), "Calendar1" });
+        checkCalendarCount(0);
     }
 }

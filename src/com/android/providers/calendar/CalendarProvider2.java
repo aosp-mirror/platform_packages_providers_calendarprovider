@@ -2913,7 +2913,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // fall through to CALENDARS for the actual delete
             case CALENDARS:
                 selection = appendAccountToSelection(uri, selection);
-                return deleteMatchingCalendars(selection); // TODO: handle in sync adapter
+                return deleteMatchingCalendars(selection, selectionArgs);
             case INSTANCES:
             case INSTANCES_BY_DAY:
             case EVENT_DAYS:
@@ -3041,14 +3041,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         return count;
     }
 
-    private int deleteMatchingCalendars(String where) {
+    private int deleteMatchingCalendars(String selection, String[] selectionArgs) {
         // query to find all the calendars that match, for each
         // - delete calendar subscription
         // - delete calendar
-
-        Cursor c = mDb.query(Tables.CALENDARS, sCalendarsIdProjection, where,
-                null /* selectionArgs */, null /* groupBy */,
-                null /* having */, null /* sortOrder */);
+        Cursor c = mDb.query(Tables.CALENDARS, sCalendarsIdProjection, selection,
+                selectionArgs,
+                null /* groupBy */,
+                null /* having */,
+                null /* sortOrder */);
         if (c == null) {
             return 0;
         }
@@ -3060,7 +3061,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         } finally {
             c.close();
         }
-        return mDb.delete(Tables.CALENDARS, where, null /* whereArgs */);
+        return mDb.delete(Tables.CALENDARS, selection, selectionArgs);
     }
 
     private Cursor getCursorForEventIdAndProjection(String eventId, String[] projection) {

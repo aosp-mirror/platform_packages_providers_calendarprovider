@@ -88,6 +88,49 @@ public class ICalendarTest extends TestCase {
     }
 
     @SmallTest
+    public void testParseQuotedParam() throws Exception {
+        ICalendar.Component component
+                = new ICalendar.Component("DUMMY", null /* parent */);
+        ICalendar.parseComponent(
+                component,
+                "DTSTART;TZID=\"GMT+03:00\";TEST=test1;TEST=\"test2\":20101221T090000");
+        ICalendar.Property property = component.getFirstProperty("DTSTART");
+        assertEquals(2, property.getParameterNames().size());
+        assertEquals("GMT+03:00", property.getFirstParameter("TZID").value);
+        final List<ICalendar.Parameter> testParameters = property.getParameters("TEST");
+        assertEquals(2, testParameters.size());
+        assertEquals("test1", testParameters.get(0).value);
+        assertEquals("test2", testParameters.get(1).value);
+        assertEquals("20101221T090000", component.getFirstProperty("DTSTART").getValue());
+    }
+
+    @SmallTest
+    public void testParseBadQuotedParam() throws Exception {
+        ICalendar.Component component
+                = new ICalendar.Component("DUMMY", null /* parent */);
+
+        ICalendar.parseComponent(
+                component,
+                "FOO;PARAM1=\"param1\"\";PARAM=quote-before-param:value");
+        assertNull("Invalid quote before param value", component.getFirstProperty("FOO"));
+
+        ICalendar.parseComponent(
+                component,
+                "FOO;PARAM\"=expected-equal:value");
+        assertNull("Expected equal in param", component.getFirstProperty("FOO"));
+
+        ICalendar.parseComponent(
+                component,
+                "FOO;PARAM=text-not-allowed\"before-quote:value");
+        assertNull("Invalid quote in param value", component.getFirstProperty("FOO"));
+
+        ICalendar.parseComponent(
+                component,
+                "FOO;PARAM=\"missing-end-quote:value");
+        assertNull("missing-end-quote", component.getFirstProperty("FOO"));
+    }
+
+    @SmallTest
     public void testParseChildComponent() throws Exception {
         String childText = "BEGIN:CHILD\n" +
                 "PROP1;PARAM1=foo;PARAM2=bar:VALUE1\n" +

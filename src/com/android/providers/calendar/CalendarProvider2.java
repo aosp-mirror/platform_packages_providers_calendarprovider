@@ -19,6 +19,7 @@ package com.android.providers.calendar;
 
 import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
 import com.android.providers.calendar.CalendarDatabaseHelper.Views;
+
 import com.google.common.annotations.VisibleForTesting;
 
 import android.accounts.Account;
@@ -982,6 +983,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private Cursor query(final SQLiteDatabase db, SQLiteQueryBuilder qb, String[] projection,
             String selection, String[] selectionArgs, String sortOrder, String groupBy,
             String limit) {
+
+        if (projection != null && projection.length == 1
+                && BaseColumns._COUNT.equals(projection[0])) {
+            qb.setProjectionMap(sCountProjectionMap);
+        }
 
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "query sql - projection: " + Arrays.toString(projection) +
@@ -4001,6 +4007,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final HashMap<String, String> sRemindersProjectionMap;
     private static final HashMap<String, String> sCalendarAlertsProjectionMap;
     private static final HashMap<String, String> sCalendarCacheProjectionMap;
+    private static final HashMap<String, String> sCountProjectionMap;
 
     static {
         sUriMatcher.addURI(Calendar.AUTHORITY, "instances/when/*/*", INSTANCES);
@@ -4035,6 +4042,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sUriMatcher.addURI(Calendar.AUTHORITY, "time/#", TIME);
         sUriMatcher.addURI(Calendar.AUTHORITY, "time", TIME);
         sUriMatcher.addURI(Calendar.AUTHORITY, "properties", PROVIDER_PROPERTIES);
+
+        /** Contains just BaseColumns._COUNT */
+        sCountProjectionMap = new HashMap<String, String>();
+        sCountProjectionMap.put(BaseColumns._COUNT, "COUNT(*)");
 
         sEventsProjectionMap = new HashMap<String, String>();
         // Events columns

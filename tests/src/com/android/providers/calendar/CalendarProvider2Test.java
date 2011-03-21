@@ -1817,16 +1817,26 @@ public class CalendarProvider2Test extends AndroidTestCase {
             cursor.close();
         }
     }
+
+    void checkEvents(int count, SQLiteDatabase db, String calendar) {
+        Cursor cursor = db.query("Events", null, Events.CALENDAR_ID + "=?", new String[] {calendar},
+                null, null, null);
+        try {
+            assertEquals(count, cursor.getCount());
+        } finally {
+            cursor.close();
+        }
+    }
     /**
      * Test attendee processing
      * @throws Exception
      */
     public void testAttendees() throws Exception {
-        mCalendarId = insertCal("Calendar0", DEFAULT_TIMEZONE);
-
-        checkEvents(0, mDb);
+        mCalendarId = insertCal("CalendarTestAttendees", DEFAULT_TIMEZONE);
+        String calendarIdString = Integer.toString(mCalendarId);
+        checkEvents(0, mDb, calendarIdString);
         Uri eventUri = insertEvent(mCalendarId, findEvent("daily0"));
-        checkEvents(1, mDb);
+        checkEvents(1, mDb, calendarIdString);
         long eventId = ContentUris.parseId(eventUri);
 
         ContentValues attendee = new ContentValues();

@@ -6,9 +6,9 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.os.PowerManager;
 
-public class CalendarProvider2ForTesting extends CalendarProvider2 {
+import java.util.concurrent.atomic.AtomicBoolean;
 
-    private MockCalendarAlarmManager mMockCalendarAlarmManager;
+public class CalendarProvider2ForTesting extends CalendarProvider2 {
 
     /**
      * For testing, don't want to start the TimezoneCheckerThread, as it results
@@ -34,31 +34,23 @@ public class CalendarProvider2ForTesting extends CalendarProvider2 {
     }
 
     @Override
-    PowerManager.WakeLock getScheduleNextAlarmWakeLock() {
-        return null;
-    }
-
-    @Override
-    void acquireScheduleNextAlarmWakeLock() {
-    }
-
-    @Override
-    void releaseScheduleNextAlarmWakeLock() {
-    }
-
-    @Override
-    protected CalendarAlarmManager createCalendarAlarmManager() {
-        return new MockCalendarAlarmManager();
+    protected void initCalendarAlarm() {
+        mCalendarAlarm = new MockCalendarAlarmManager(getContext());
+        mCalendarAlarm.getScheduleNextAlarmWakeLock();
     }
 
     private static class MockCalendarAlarmManager extends CalendarAlarmManager {
 
-        public MockCalendarAlarmManager() {
-            super(null);
+        public MockCalendarAlarmManager(Context context) {
+            super(context);
         }
 
         @Override
         protected void initializeWithContext(Context context) {
+            mContext = context;
+            mNextAlarmCheckScheduled = new AtomicBoolean(false);
+            mNeedRemoveAlarms = new AtomicBoolean(false);
+            mAlarmLock = new Object();
         }
 
         @Override
@@ -75,6 +67,20 @@ public class CalendarProvider2ForTesting extends CalendarProvider2 {
 
         @Override
         public void rescheduleMissedAlarms(ContentResolver cr) {
+        }
+
+
+        @Override
+        PowerManager.WakeLock getScheduleNextAlarmWakeLock() {
+            return null;
+        }
+
+        @Override
+        void acquireScheduleNextAlarmWakeLock() {
+        }
+
+        @Override
+        void releaseScheduleNextAlarmWakeLock() {
         }
     }
 }

@@ -34,7 +34,7 @@ public class CalendarProviderIntentService extends IntentService {
             Log.d(TAG, "Received Intent: " + intent);
         }
         final String action = intent.getAction();
-        if (!CalendarProvider2.ACTION_CHECK_NEXT_ALARM.equals(action)) {
+        if (!CalendarAlarmManager.ACTION_CHECK_NEXT_ALARM.equals(action)) {
             if (Log.isLoggable(TAG, Log.DEBUG)) {
                Log.d(TAG, "Invalid Intent action: " + action);
             }
@@ -43,8 +43,8 @@ public class CalendarProviderIntentService extends IntentService {
         final CalendarProvider2 provider = CalendarProvider2.getInstance();
         // Schedule the next alarm
         final boolean removeAlarms = intent.getBooleanExtra(REMOVE_ALARMS_VALUE, false);
-        provider.runScheduleNextAlarm(removeAlarms);
+        provider.getOrCreateCalendarAlarmManager().runScheduleNextAlarm(removeAlarms, provider);
         // Release the wake lock that was set in the Broadcast Receiver
-        provider.releaseScheduleNextAlarmWakeLock();
+        provider.getOrCreateCalendarAlarmManager().releaseScheduleNextAlarmWakeLock();
     }
 }

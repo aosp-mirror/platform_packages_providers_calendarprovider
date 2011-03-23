@@ -37,7 +37,7 @@ public class CalendarReceiver extends BroadcastReceiver {
         String action = intent.getAction();
         ContentResolver cr = context.getContentResolver();
         if (action.equals(SCHEDULE)) {
-            cr.update(CalendarProvider2.SCHEDULE_ALARM_URI, null /* values */, null /* where */,
+            cr.update(CalendarAlarmManager.SCHEDULE_ALARM_URI, null /* values */, null /* where */,
                     null /* selectionArgs */);
         } else if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
             // Remove alarms from the CalendarAlerts table that have been marked
@@ -46,8 +46,8 @@ public class CalendarReceiver extends BroadcastReceiver {
             // power turns off but we store the information in a database table
             // that persists across reboots. See the documentation for
             // scheduleNextAlarmLocked() for more information.
-            cr.update(CalendarProvider2.SCHEDULE_ALARM_REMOVE_URI,
-                    null /* values */, null /* where */, null /* selectionArgs */);
+            cr.update(CalendarAlarmManager.SCHEDULE_ALARM_REMOVE_URI, null /* values */,
+                    null /* where */, null /* selectionArgs */);
         }
     }
 }

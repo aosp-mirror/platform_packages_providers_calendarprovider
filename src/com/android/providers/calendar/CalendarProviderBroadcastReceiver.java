@@ -26,13 +26,13 @@ public class CalendarProviderBroadcastReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (!CalendarProvider2.ACTION_CHECK_NEXT_ALARM.equals(intent.getAction())) {
+        if (!CalendarAlarmManager.ACTION_CHECK_NEXT_ALARM.equals(intent.getAction())) {
             setResultCode(Activity.RESULT_CANCELED);
             return;
         }
         final CalendarProvider2 provider = CalendarProvider2.getInstance();
         // Acquire a wake lock that will be released when the launched Service is doing its work
-        provider.acquireScheduleNextAlarmWakeLock();
+        provider.getOrCreateCalendarAlarmManager().acquireScheduleNextAlarmWakeLock();
         // Set the result code
         setResultCode(Activity.RESULT_OK);
         // Launch the Service

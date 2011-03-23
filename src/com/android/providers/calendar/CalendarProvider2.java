@@ -19,14 +19,11 @@ package com.android.providers.calendar;
 
 import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
 import com.android.providers.calendar.CalendarDatabaseHelper.Views;
-
 import com.google.common.annotations.VisibleForTesting;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.accounts.OnAccountsUpdateListener;
-import android.app.AlarmManager;
-import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentUris;
@@ -44,9 +41,7 @@ import android.net.Uri;
 import android.os.Debug;
 import android.os.Handler;
 import android.os.Message;
-import android.os.PowerManager;
 import android.os.Process;
-import android.os.SystemClock;
 import android.pim.EventRecurrence;
 import android.pim.RecurrenceSet;
 import android.provider.BaseColumns;
@@ -71,7 +66,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TimeZone;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -87,23 +81,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private static final boolean PROFILE = false;
     private static final boolean MULTIPLE_ATTENDEES_PER_EVENT = true;
-
-    private static final String INVALID_CALENDARALERTS_SELECTOR =
-            "_id IN (SELECT ca." + CalendarAlerts._ID + " FROM "
-                    + Tables.CALENDAR_ALERTS + " AS ca"
-                    + " LEFT OUTER JOIN " + Tables.INSTANCES
-                    + " USING (" + Instances.EVENT_ID + ","
-                    + Instances.BEGIN + "," + Instances.END + ")"
-                    + " LEFT OUTER JOIN " + Tables.REMINDERS + " AS r ON"
-                    + " (ca." + CalendarAlerts.EVENT_ID + "=r." + Reminders.EVENT_ID
-                    + " AND ca." + CalendarAlerts.MINUTES + "=r." + Reminders.MINUTES + ")"
-                    + " LEFT OUTER JOIN " + Views.EVENTS + " AS e ON"
-                    + " (ca." + CalendarAlerts.EVENT_ID + "=e." + Events._ID + ")"
-                    + " WHERE " + Tables.INSTANCES + "." + Instances.BEGIN + " ISNULL"
-                    + "   OR ca." + CalendarAlerts.ALARM_TIME + "<?"
-                    + "   OR (r." + Reminders.MINUTES + " ISNULL"
-                    + "       AND ca." + CalendarAlerts.MINUTES + "<>0)"
-                    + "   OR e." + Calendars.SELECTED + "=0)";
 
     private static final String[] ID_ONLY_PROJECTION =
             new String[] {Events._ID};
@@ -151,18 +128,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     CalendarCache mCalendarCache;
 
     private CalendarDatabaseHelper mDbHelper;
-
-    // SCHEDULE_ALARM_URI runs scheduleNextAlarm(false)
-    // SCHEDULE_ALARM_REMOVE_URI runs scheduleNextAlarm(true)
-    // TODO: use a service to schedule alarms rather than private URI
-    /* package */ static final String SCHEDULE_ALARM_PATH = "schedule_alarms";
-    /* package */ static final String SCHEDULE_ALARM_REMOVE_PATH = "schedule_alarms_remove";
-    /* package */ static final Uri SCHEDULE_ALARM_URI =
-            Uri.withAppendedPath(Calendar.CONTENT_URI, SCHEDULE_ALARM_PATH);
-    /* package */ static final Uri SCHEDULE_ALARM_REMOVE_URI =
-            Uri.withAppendedPath(Calendar.CONTENT_URI, SCHEDULE_ALARM_REMOVE_PATH);
-
-    private static final String REMOVE_ALARM_VALUE = "removeAlarms";
 
     // To determine if a recurrence exception originally overlapped the
     // window, we need to assume a maximum duration, since we only know
@@ -257,13 +222,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final String SQL_SELECT_COUNT_FOR_SYNC_ID =
             "SELECT COUNT(*) FROM " + Tables.EVENTS + " WHERE " + Events._SYNC_ID + "=?";
 
-    private final AtomicBoolean mNextAlarmCheckScheduled = new AtomicBoolean(false);
-    private final AtomicBoolean mNeedRemoveAlarms = new AtomicBoolean(false);
-
-    protected static final String ACTION_CHECK_NEXT_ALARM =
-            "com.android.providers.calendar.intent.CalendarProvider2";
-    private static final int ALARM_CHECK_DELAY_MILLIS = 5000;
-
     public static final class InstancesList extends ArrayList<ContentValues> {
     }
 
@@ -277,34 +235,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             instances.add(values);
         }
     }
-
-    /**
-     * We search backward in time for event reminders that we may have missed
-     * and schedule them if the event has not yet expired.  The amount in
-     * the past to search backwards is controlled by this constant.  It
-     * should be at least a few minutes to allow for an event that was
-     * recently created on the web to make its way to the phone.  Two hours
-     * might seem like overkill, but it is useful in the case where the user
-     * just crossed into a new timezone and might have just missed an alarm.
-     */
-    private static final long SCHEDULE_ALARM_SLACK = 2 * DateUtils.HOUR_IN_MILLIS;
-
-    /**
-     * Alarms older than this threshold will be deleted from the CalendarAlerts
-     * table.  This should be at least a day because if the timezone is
-     * wrong and the user corrects it we might delete good alarms that
-     * appear to be old because the device time was incorrectly in the future.
-     * This threshold must also be larger than SCHEDULE_ALARM_SLACK.  We add
-     * the SCHEDULE_ALARM_SLACK to ensure this.
-     *
-     * To make it easier to find and debug problems with missed reminders,
-     * set this to something greater than a day.
-     */
-    private static final long CLEAR_OLD_ALARM_THRESHOLD =
-            7 * DateUtils.DAY_IN_MILLIS + SCHEDULE_ALARM_SLACK;
-
-    // A lock for synchronizing access to the AlarmManager
-    private Object mAlarmLock = new Object();
 
     // Make sure we load at least two months worth of data.
     // Client apps can load more data in a background thread.
@@ -399,8 +329,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         ATTENDEES_NAME_CONCAT
     };
 
-    private CalendarAlarmManager mAlarmManager;
-
     /**
      * Arbitrary integer that we assign to the messages that we send to this
      * thread's handler, indicating that these are requests to send an update
@@ -423,8 +351,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private static CalendarProvider2 mInstance;
 
-    private volatile PowerManager.WakeLock mScheduleNextAlarmWakeLock;
-    private static final String SCHEDULE_NEXT_ALARM_WAKE_LOCK = "ScheduleNextAlarmWakeLock";
+    @VisibleForTesting
+    protected CalendarAlarmManager mCalendarAlarm;
 
     private final Handler mBroadcastHandler = new Handler() {
         @Override
@@ -455,13 +383,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
             if (Intent.ACTION_TIMEZONE_CHANGED.equals(action)) {
                 updateTimezoneDependentFields();
-                scheduleNextAlarm(false /* do not remove alarms */);
+                mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
             } else if (Intent.ACTION_DEVICE_STORAGE_OK.equals(action)) {
                 // Try to clean up if things were screwy due to a full disk
                 updateTimezoneDependentFields();
-                scheduleNextAlarm(false /* do not remove alarms */);
+                mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
             } else if (Intent.ACTION_TIME_CHANGED.equals(action)) {
-                scheduleNextAlarm(false /* do not remove alarms */);
+                mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
             }
         }
     };
@@ -479,27 +407,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     protected static CalendarProvider2 getInstance() {
         return mInstance;
-    }
-
-    PowerManager.WakeLock getScheduleNextAlarmWakeLock() {
-        if (mScheduleNextAlarmWakeLock == null) {
-            PowerManager powerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
-            // Create a wake lock that will be used when we are actually scheduling the next alarm
-            mScheduleNextAlarmWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
-                    SCHEDULE_NEXT_ALARM_WAKE_LOCK);
-            // We want the Wake Lock to be reference counted (so that we dont need to take care
-            // about its reference counting)
-            mScheduleNextAlarmWakeLock.setReferenceCounted(true);
-        }
-        return mScheduleNextAlarmWakeLock;
-    }
-
-    void acquireScheduleNextAlarmWakeLock() {
-        getScheduleNextAlarmWakeLock().acquire();
-    }
-
-    void releaseScheduleNextAlarmWakeLock() {
-        getScheduleNextAlarmWakeLock().release();
     }
 
     @Override
@@ -549,24 +456,24 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         mMetaData = new MetaData(mDbHelper);
         mCalendarCache = new CalendarCache(mDbHelper);
 
-        getOrCreateCalendarAlarmManager();
-
-        getScheduleNextAlarmWakeLock();
+        // This is pulled out for testing
+        initCalendarAlarm();
 
         postInitialize();
 
         return true;
     }
 
-    protected CalendarAlarmManager createCalendarAlarmManager() {
-        return new CalendarAlarmManager(mContext);
+    protected void initCalendarAlarm() {
+        mCalendarAlarm = getOrCreateCalendarAlarmManager();
+        mCalendarAlarm.getScheduleNextAlarmWakeLock();
     }
 
     synchronized CalendarAlarmManager getOrCreateCalendarAlarmManager() {
-        if (mAlarmManager == null) {
-            mAlarmManager = createCalendarAlarmManager();
+        if (mCalendarAlarm == null) {
+            mCalendarAlarm = new CalendarAlarmManager(mContext);
         }
-        return mAlarmManager;
+        return mCalendarAlarm;
     }
 
     protected void postInitialize() {
@@ -632,7 +539,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // This code executes when the CalendarProvider2 is created and
                 // helps to catch missed alarms when the Calendar process is
                 // killed (because of low-memory conditions) and then restarted.
-                rescheduleMissedAlarms();
+                mCalendarAlarm.rescheduleMissedAlarms();
             }
         } catch (SQLException e) {
             if (Log.isLoggable(TAG, Log.ERROR)) {
@@ -794,12 +701,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
         }
 
-        rescheduleMissedAlarms();
+        mCalendarAlarm.rescheduleMissedAlarms();
     }
 
-    private void rescheduleMissedAlarms() {
-        getOrCreateCalendarAlarmManager().rescheduleMissedAlarms(mContentResolver);
-    }
 
     @Override
     protected void notifyChange(boolean syncToNetwork) {
@@ -1257,7 +1161,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * @param instancesTimezone timezone we need to use for computing the instances
      * @param isHomeTimezone if true, we are in the "home" timezone
      */
-    private void acquireInstanceRangeLocked(long begin, long end, boolean useMinimumExpansionWindow,
+    void acquireInstanceRangeLocked(long begin, long end, boolean useMinimumExpansionWindow,
             boolean forceExpansion, String instancesTimezone, boolean isHomeTimezone) {
         long expandBegin = begin;
         long expandEnd = end;
@@ -2160,7 +2064,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 if (Log.isLoggable(TAG, Log.DEBUG)) {
                     Log.d(TAG, "insertInternal() changing reminder");
                 }
-                scheduleNextAlarm(false /* do not remove alarms */);
+                mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
                 break;
             case CALENDAR_ALERTS:
                 if (!values.containsKey(CalendarAlerts.EVENT_ID)) {
@@ -2801,7 +2705,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         long id = cursor.getLong(0);
                         result += deleteEventInternal(id, callerIsSyncAdapter, true /* isBatch */);
                     }
-                    scheduleNextAlarm(false /* do not remove alarms */);
+                    mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
                     sendUpdateNotification(callerIsSyncAdapter);
                 } finally {
                     cursor.close();
@@ -2981,7 +2885,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
 
         if (!isBatch) {
-            scheduleNextAlarm(false /* do not remove alarms */);
+            mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
             sendUpdateNotification(callerIsSyncAdapter);
         }
         return result;
@@ -3209,7 +3113,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         // scheduleNextAlarmLocked will remove any alarms for
                         // non-visible events anyways. removeScheduledAlarmsLocked
                         // does not actually have the effect we want
-                        scheduleNextAlarm(false);
+                        mCalendarAlarm.scheduleNextAlarm(false);
                     }
                     // update the widget
                     sendUpdateNotification(callerIsSyncAdapter);
@@ -3314,14 +3218,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                             if (Log.isLoggable(TAG, Log.DEBUG)) {
                                 Log.d(TAG, "updateInternal() changing event");
                             }
-                            scheduleNextAlarm(false /* do not remove alarms */);
+                            mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
                         }
 
                         sendUpdateNotification(id, callerIsSyncAdapter);
                     }
                 } else {
                     result = deleteEventInternal(id, callerIsSyncAdapter, true /* isBatch */);
-                    scheduleNextAlarm(false /* do not remove alarms */);
+                    mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
                     sendUpdateNotification(callerIsSyncAdapter);
                 }
 
@@ -3376,7 +3280,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 if (Log.isLoggable(TAG, Log.DEBUG)) {
                     Log.d(TAG, "updateInternal() changing reminder");
                 }
-                scheduleNextAlarm(false /* do not remove alarms */);
+                mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
                 return count;
             }
             case EXTENDED_PROPERTIES_ID: {
@@ -3395,11 +3299,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             // TODO: replace the SCHEDULE_ALARM private URIs with a
             // service
             case SCHEDULE_ALARM: {
-                scheduleNextAlarm(false);
+                mCalendarAlarm.scheduleNextAlarm(false);
                 return 0;
             }
             case SCHEDULE_ALARM_REMOVE: {
-                scheduleNextAlarm(true);
+                mCalendarAlarm.scheduleNextAlarm(true);
                 return 0;
             }
 
@@ -3574,333 +3478,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         mDbHelper.scheduleSync(account, !syncEvents, calendarUrl);
     }
 
-    void scheduleNextAlarmCheck(long triggerTime) {
-        Intent intent = new Intent(CalendarReceiver.SCHEDULE);
-        intent.setClass(mContext, CalendarReceiver.class);
-        PendingIntent pending = PendingIntent.getBroadcast(mContext,
-                0, intent, PendingIntent.FLAG_NO_CREATE);
-        if (pending != null) {
-            // Cancel any previous alarms that do the same thing.
-            getOrCreateCalendarAlarmManager().cancel(pending);
-        }
-        pending = PendingIntent.getBroadcast(mContext,
-                0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
-
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Time time = new Time();
-            time.set(triggerTime);
-            String timeStr = time.format(" %a, %b %d, %Y %I:%M%P");
-            Log.d(TAG, "scheduleNextAlarmCheck at: " + triggerTime + timeStr);
-        }
-
-        getOrCreateCalendarAlarmManager().set(AlarmManager.RTC_WAKEUP, triggerTime, pending);
-    }
-
-    void scheduleNextAlarm(boolean removeAlarms) {
-        // We aggregate first the "remove alarm flag". Whenever it is to true, it will be sticky
-        mNeedRemoveAlarms.set(mNeedRemoveAlarms.get() || removeAlarms);
-        if (!mNextAlarmCheckScheduled.getAndSet(true)) {
-            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                Log.d(TAG, "Scheduling check of next Alarm");
-            }
-            Intent intent = new Intent(ACTION_CHECK_NEXT_ALARM);
-            intent.putExtra(REMOVE_ALARM_VALUE, removeAlarms);
-            PendingIntent pending = PendingIntent.getBroadcast(mContext,
-                    0 /* ignored */, intent, PendingIntent.FLAG_NO_CREATE);
-            if (pending != null) {
-                // Cancel any previous Alarm check requests
-                getOrCreateCalendarAlarmManager().cancel(pending);
-            }
-            pending = PendingIntent.getBroadcast(mContext,
-                    0 /* ignored */, intent, PendingIntent.FLAG_CANCEL_CURRENT);
-
-            // Trigger the check in 5s from now
-            long triggerAtTime = SystemClock.elapsedRealtime() + ALARM_CHECK_DELAY_MILLIS;
-            getOrCreateCalendarAlarmManager().set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    triggerAtTime, pending);
-        }
-    }
-
-    /**
-     * This method runs in a background thread and schedules an alarm for
-     * the next calendar event, if necessary.
-     */
-    void runScheduleNextAlarm(boolean removeAlarms) {
-        // Reset so that we can accept other schedules of next alarm
-        mNextAlarmCheckScheduled.set(false);
-        mDb.beginTransaction();
-        try {
-            if (removeAlarms) {
-                removeScheduledAlarmsLocked(mDb);
-            }
-            scheduleNextAlarmLocked(mDb);
-            mDb.setTransactionSuccessful();
-        } finally {
-            mDb.endTransaction();
-        }
-    }
-
-    /**
-     * This method looks at the 24-hour window from now for any events that it
-     * needs to schedule.  This method runs within a database transaction. It
-     * also runs in a background thread.
-     *
-     * The CalendarProvider2 keeps track of which alarms it has already scheduled
-     * to avoid scheduling them more than once and for debugging problems with
-     * alarms.  It stores this knowledge in a database table called CalendarAlerts
-     * which persists across reboots.  But the actual alarm list is in memory
-     * and disappears if the phone loses power.  To avoid missing an alarm, we
-     * clear the entries in the CalendarAlerts table when we start up the
-     * CalendarProvider2.
-     *
-     * Scheduling an alarm multiple times is not tragic -- we filter out the
-     * extra ones when we receive them. But we still need to keep track of the
-     * scheduled alarms. The main reason is that we need to prevent multiple
-     * notifications for the same alarm (on the receive side) in case we
-     * accidentally schedule the same alarm multiple times.  We don't have
-     * visibility into the system's alarm list so we can never know for sure if
-     * we have already scheduled an alarm and it's better to err on scheduling
-     * an alarm twice rather than missing an alarm.  Another reason we keep
-     * track of scheduled alarms in a database table is that it makes it easy to
-     * run an SQL query to find the next reminder that we haven't scheduled.
-     *
-     * @param db the database
-     */
-    private void scheduleNextAlarmLocked(SQLiteDatabase db) {
-        Time time = new Time();
-
-        final long currentMillis = System.currentTimeMillis();
-        final long start = currentMillis - SCHEDULE_ALARM_SLACK;
-        final long end = start + (24 * 60 * 60 * 1000);
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            time.set(start);
-            String startTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
-            Log.d(TAG, "runScheduleNextAlarm() start search: " + startTimeStr);
-        }
-
-        // Delete rows in CalendarAlert where the corresponding Instance or
-        // Reminder no longer exist.
-        // Also clear old alarms but keep alarms around for a while to prevent
-        // multiple alerts for the same reminder.  The "clearUpToTime'
-        // should be further in the past than the point in time where
-        // we start searching for events (the "start" variable defined above).
-        String selectArg[] = new String[] {
-            Long.toString(currentMillis - CLEAR_OLD_ALARM_THRESHOLD)
-        };
-
-        int rowsDeleted =
-            db.delete(CalendarAlerts.TABLE_NAME, INVALID_CALENDARALERTS_SELECTOR, selectArg);
-
-        long nextAlarmTime = end;
-        final long tmpAlarmTime = CalendarAlerts.findNextAlarmTime(mContentResolver, currentMillis);
-        if (tmpAlarmTime != -1 && tmpAlarmTime < nextAlarmTime) {
-            nextAlarmTime = tmpAlarmTime;
-        }
-
-        // Extract events from the database sorted by alarm time.  The
-        // alarm times are computed from Instances.begin (whose units
-        // are milliseconds) and Reminders.minutes (whose units are
-        // minutes).
-        //
-        // Also, ignore events whose end time is already in the past.
-        // Also, ignore events alarms that we have already scheduled.
-        //
-        // Note 1: we can add support for the case where Reminders.minutes
-        // equals -1 to mean use Calendars.minutes by adding a UNION for
-        // that case where the two halves restrict the WHERE clause on
-        // Reminders.minutes != -1 and Reminders.minutes = 1, respectively.
-        //
-        // Note 2: we have to name "myAlarmTime" different from the
-        // "alarmTime" column in CalendarAlerts because otherwise the
-        // query won't find multiple alarms for the same event.
-        //
-        // The CAST is needed in the query because otherwise the expression
-        // will be untyped and sqlite3's manifest typing will not convert the
-        // string query parameter to an int in myAlarmtime>=?, so the comparison
-        // will fail.  This could be simplified if bug 2464440 is resolved.
-
-        time.setToNow();
-        time.normalize(false);
-        long localOffset = time.gmtoff * 1000;
-
-        String allDayOffset = " -(" + localOffset + ") ";
-        String subQueryPrefix = "SELECT " + Instances.BEGIN;
-        String subQuerySuffix = " -(" + Reminders.MINUTES + "*" +
-                + DateUtils.MINUTE_IN_MILLIS + ")"
-                + " AS myAlarmTime" + "," + Tables.INSTANCES
-                + "." + Instances.EVENT_ID + " AS eventId"
-                + "," + Instances.BEGIN + "," + Instances.END
-                + "," + Instances.TITLE + "," + Instances.ALL_DAY
-                + "," + Reminders.METHOD + "," + Reminders.MINUTES
-                + " FROM " + Tables.INSTANCES
-                + " INNER JOIN " + Views.EVENTS
-                + " ON (" + Views.EVENTS + "." + Events._ID
-                + "=" + Tables.INSTANCES + "." + Instances.EVENT_ID + ")"
-                + " INNER JOIN " + Tables.REMINDERS
-                + " ON (" + Tables.INSTANCES + "." + Instances.EVENT_ID
-                + "=" + Tables.REMINDERS + "." + Reminders.EVENT_ID + ")"
-                + " WHERE " + Calendars.SELECTED + "=1"
-                + " AND myAlarmTime>=CAST(? AS INT)"
-                + " AND myAlarmTime<=CAST(? AS INT)"
-                + " AND " + Instances.END + ">=?"
-                + " AND " + Reminders.METHOD + "=" + Reminders.METHOD_ALERT;
-
-        // we query separately for all day events to convert to local time from UTC
-        // we need to /subtract/ the offset to get the correct resulting local time
-        String allDayQuery = subQueryPrefix + allDayOffset + subQuerySuffix
-                + " AND " + Instances.ALL_DAY + "=1";
-        String nonAllDayQuery = subQueryPrefix + subQuerySuffix
-                + " AND " + Instances.ALL_DAY + "=0";
-
-        // we use UNION ALL because we are guaranteed to have no dupes between
-        // the two queries, and it is less expensive
-        String query = "SELECT *"
-                + " FROM (" + allDayQuery + " UNION ALL " + nonAllDayQuery + ")"
-                // avoid rescheduling existing alarms
-                + " WHERE 0=(SELECT count(*) FROM " + Tables.CALENDAR_ALERTS + " CA"
-                         + " WHERE CA." + CalendarAlerts.EVENT_ID + "=eventId"
-                         + " AND CA." + CalendarAlerts.BEGIN + "=" + Instances.BEGIN
-                         + " AND CA." + CalendarAlerts.ALARM_TIME + "=myAlarmTime)"
-                + " ORDER BY myAlarmTime," + Instances.BEGIN + "," + Instances.TITLE;
-
-        String queryParams[] = new String[] { String.valueOf(start), String.valueOf(nextAlarmTime),
-                String.valueOf(currentMillis), String.valueOf(start), String.valueOf(nextAlarmTime),
-                String.valueOf(currentMillis) };
-
-        String instancesTimezone = mCalendarCache.readTimezoneInstances();
-        boolean isHomeTimezone = mCalendarCache.readTimezoneType().equals(
-                CalendarCache.TIMEZONE_TYPE_HOME);
-        // expand this range by a day on either end to account for all day events
-        acquireInstanceRangeLocked(start - DateUtils.DAY_IN_MILLIS,
-                end + DateUtils.DAY_IN_MILLIS,
-                false /* don't use minimum expansion windows */,
-                false /* do not force Instances deletion and expansion */,
-                instancesTimezone,
-                isHomeTimezone);
-        Cursor cursor = null;
-        try {
-            cursor = db.rawQuery(query, queryParams);
-
-            final int beginIndex = cursor.getColumnIndex(Instances.BEGIN);
-            final int endIndex = cursor.getColumnIndex(Instances.END);
-            final int eventIdIndex = cursor.getColumnIndex("eventId");
-            final int alarmTimeIndex = cursor.getColumnIndex("myAlarmTime");
-            final int minutesIndex = cursor.getColumnIndex(Reminders.MINUTES);
-
-            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                time.set(nextAlarmTime);
-                String alarmTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
-                Log.d(TAG, "cursor results: " + cursor.getCount() + " nextAlarmTime: "
-                        + alarmTimeStr);
-            }
-
-            while (cursor.moveToNext()) {
-                // Schedule all alarms whose alarm time is as early as any
-                // scheduled alarm.  For example, if the earliest alarm is at
-                // 1pm, then we will schedule all alarms that occur at 1pm
-                // but no alarms that occur later than 1pm.
-                // Actually, we allow alarms up to a minute later to also
-                // be scheduled so that we don't have to check immediately
-                // again after an event alarm goes off.
-                final long alarmTime = cursor.getLong(alarmTimeIndex);
-                final long eventId = cursor.getLong(eventIdIndex);
-                final int minutes = cursor.getInt(minutesIndex);
-                final long startTime = cursor.getLong(beginIndex);
-                final long endTime = cursor.getLong(endIndex);
-
-                if (Log.isLoggable(TAG, Log.DEBUG)) {
-                    time.set(alarmTime);
-                    String schedTime = time.format(" %a, %b %d, %Y %I:%M%P");
-                    time.set(startTime);
-                    String startTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
-
-                    Log.d(TAG, "  looking at id: " + eventId + " " + startTime + startTimeStr
-                            + " alarm: " + alarmTime + schedTime);
-                }
-
-                if (alarmTime < nextAlarmTime) {
-                    nextAlarmTime = alarmTime;
-                } else if (alarmTime >
-                           nextAlarmTime + DateUtils.MINUTE_IN_MILLIS) {
-                    // This event alarm (and all later ones) will be scheduled
-                    // later.
-                    if (Log.isLoggable(TAG, Log.DEBUG)) {
-                        Log.d(TAG, "This event alarm (and all later ones) will be scheduled later");
-                    }
-                    break;
-                }
-
-                // Avoid an SQLiteContraintException by checking if this alarm
-                // already exists in the table.
-                if (CalendarAlerts.alarmExists(mContentResolver, eventId, startTime, alarmTime)) {
-                    if (Log.isLoggable(TAG, Log.DEBUG)) {
-                        int titleIndex = cursor.getColumnIndex(Events.TITLE);
-                        String title = cursor.getString(titleIndex);
-                        Log.d(TAG, "  alarm exists for id: " + eventId + " " + title);
-                    }
-                    continue;
-                }
-
-                // Insert this alarm into the CalendarAlerts table
-                Uri uri = CalendarAlerts.insert(mContentResolver, eventId, startTime,
-                        endTime, alarmTime, minutes);
-                if (uri == null) {
-                    if (Log.isLoggable(TAG, Log.ERROR)) {
-                        Log.e(TAG, "runScheduleNextAlarm() insert into "
-                                + "CalendarAlerts table failed");
-                    }
-                    continue;
-                }
-
-                getOrCreateCalendarAlarmManager().scheduleAlarm(alarmTime);
-            }
-        } finally {
-            if (cursor != null) {
-                cursor.close();
-            }
-        }
-
-        // Refresh notification bar
-        if (rowsDeleted > 0) {
-            getOrCreateCalendarAlarmManager().scheduleAlarm(currentMillis);
-        }
-
-        // If we scheduled an event alarm, then schedule the next alarm check
-        // for one minute past that alarm.  Otherwise, if there were no
-        // event alarms scheduled, then check again in 24 hours.  If a new
-        // event is inserted before the next alarm check, then this method
-        // will be run again when the new event is inserted.
-        if (nextAlarmTime != Long.MAX_VALUE) {
-            scheduleNextAlarmCheck(nextAlarmTime + DateUtils.MINUTE_IN_MILLIS);
-        } else {
-            scheduleNextAlarmCheck(currentMillis + DateUtils.DAY_IN_MILLIS);
-        }
-    }
-
-    /**
-     * Removes the entries in the CalendarAlerts table for alarms that we have
-     * scheduled but that have not fired yet. We do this to ensure that we
-     * don't miss an alarm.  The CalendarAlerts table keeps track of the
-     * alarms that we have scheduled but the actual alarm list is in memory
-     * and will be cleared if the phone reboots.
-     *
-     * We don't need to remove entries that have already fired, and in fact
-     * we should not remove them because we need to display the notifications
-     * until the user dismisses them.
-     *
-     * We could remove entries that have fired and been dismissed, but we leave
-     * them around for a while because it makes it easier to debug problems.
-     * Entries that are old enough will be cleaned up later when we schedule
-     * new alarms.
-     */
-    private void removeScheduledAlarmsLocked(SQLiteDatabase db) {
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "removing scheduled alarms");
-        }
-        db.delete(CalendarAlerts.TABLE_NAME,
-                CalendarAlerts.STATE + "=" + CalendarAlerts.SCHEDULED, null /* whereArgs */);
-    }
-
     /**
      * Call this to trigger a broadcast of the ACTION_PROVIDER_CHANGED intent.
      * This also provides a timeout, so any calls to this method will be batched
@@ -4037,8 +3614,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                            CALENDAR_ALERTS_BY_INSTANCE);
         sUriMatcher.addURI(Calendar.AUTHORITY, "syncstate", SYNCSTATE);
         sUriMatcher.addURI(Calendar.AUTHORITY, "syncstate/#", SYNCSTATE_ID);
-        sUriMatcher.addURI(Calendar.AUTHORITY, SCHEDULE_ALARM_PATH, SCHEDULE_ALARM);
-        sUriMatcher.addURI(Calendar.AUTHORITY, SCHEDULE_ALARM_REMOVE_PATH, SCHEDULE_ALARM_REMOVE);
+        sUriMatcher.addURI(Calendar.AUTHORITY, CalendarAlarmManager.SCHEDULE_ALARM_PATH,
+                SCHEDULE_ALARM);
+        sUriMatcher.addURI(Calendar.AUTHORITY, CalendarAlarmManager.SCHEDULE_ALARM_REMOVE_PATH,
+                SCHEDULE_ALARM_REMOVE);
         sUriMatcher.addURI(Calendar.AUTHORITY, "time/#", TIME);
         sUriMatcher.addURI(Calendar.AUTHORITY, "time", TIME);
         sUriMatcher.addURI(Calendar.AUTHORITY, "properties", PROVIDER_PROPERTIES);

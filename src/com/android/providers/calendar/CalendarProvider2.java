@@ -78,6 +78,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     protected static final String TAG = "CalendarProvider2";
 
     private static final String TIMEZONE_GMT = "GMT";
+    // Allows for a calendar that isn't associated with an account on the
+    // device
+    private static final String ACCOUNT_TYPE_LOCAL = "LOCAL";
+
 
     private static final boolean PROFILE = false;
     private static final boolean MULTIPLE_ATTENDEES_PER_EVENT = true;
@@ -3087,7 +3091,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     // 1) selection to "_id=?" and pass in a selectionArgs
                     // 2) selection to "_id IN (1, 2, 3)"
                     // 3) selection to "delete=0 AND _id=1"
-                    if (selection != null && selection.startsWith("_id=")) {
+                    if (selection != null && TextUtils.equals(selection,"_id=?")) {
+                        id = Long.parseLong(selectionArgs[0]);
+                    } else if (selection != null && selection.startsWith("_id=")) {
                         // The ContentProviderOperation generates an _id=n string instead of
                         // adding the id to the URL, so parse that out here.
                         id = Long.parseLong(selection.substring(4));
@@ -3804,7 +3810,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                                             Calendar.SyncColumns._SYNC_ACCOUNT_TYPE +
                                         " FROM " + table, null);
                 while (c.moveToNext()) {
-                    if (c.getString(0) != null && c.getString(1) != null) {
+                    // ACCOUNT_TYPE_LOCAL is to store calendars not associated
+                    // with a system account. Typically, a calendar must be
+                    // associated with an account on the device or it will be
+                    // deleted.
+                    if (c.getString(0) != null && c.getString(1) != null &&
+                            !TextUtils.equals(c.getString(1), ACCOUNT_TYPE_LOCAL)) {
                         Account currAccount = new Account(c.getString(0), c.getString(1));
                         if (!validAccounts.contains(currAccount)) {
                             accountsToDelete.add(currAccount);

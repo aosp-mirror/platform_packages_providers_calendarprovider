@@ -39,6 +39,8 @@ public class CalendarCts extends InstrumentationTestCase {
 
     private static class CalendarHelper {
         private static final String CTS_TEST_TYPE = "LOCAL";
+        private static final String[] TIME_ZONES = new String[] {
+                "UTC", "America/Los_Angeles", "Asia/Beirut", "Pacific/Auckland", };
         public static final String[] CALENDARS_PROJECTION = new String[] {
                 Calendars._ID,
                 Calendars._SYNC_ACCOUNT,
@@ -65,40 +67,66 @@ public class CalendarCts extends InstrumentationTestCase {
                 Calendars.SYNC4,
                 Calendars.SYNC5, };
 
+        /**
+         * Creates a new set of values for creating a single calendar with every
+         * field.
+         *
+         * @param account The account name to create this calendar with
+         * @param seed A number used to generate the values
+         * @return A complete set of values for the calendar
+         */
         public static ContentValues getNewCalendarValues(
-                String account, String name, long accessLevel) {
+                String account, int seed) {
+            String seedString = Long.toString(seed);
             ContentValues values = new ContentValues();
             values.put(Calendars._SYNC_ACCOUNT_TYPE, CTS_TEST_TYPE);
 
             values.put(Calendars._SYNC_ACCOUNT, account);
+            values.put(Calendars._SYNC_ID, "SYNC_ID:" + seedString);
+            values.put(Calendars._SYNC_VERSION, "SYNC_V:" + seedString);
+            values.put(Calendars._SYNC_TIME, "SYNC_TIME:" + seedString);
+            values.put(Calendars._SYNC_DIRTY, 0);
+            values.put(Calendars._SYNC_MARK, 0);
             values.put(Calendars.OWNER_ACCOUNT, "OWNER_" + account);
 
-            values.put(Calendars.NAME, name);
-            values.put(Calendars.DISPLAY_NAME, "DISPLAY_" + name);
+            values.put(Calendars.NAME, seedString);
+            values.put(Calendars.DISPLAY_NAME, "DISPLAY_" + seedString);
 
-            values.put(Calendars.ACCESS_LEVEL, accessLevel);
+            values.put(Calendars.ACCESS_LEVEL, (seed % 8) * 100);
 
-            values.put(Calendars.COLOR, 0xff33ff33);
-            values.put(Calendars.SELECTED, 1);
-            values.put(Calendars.SYNC_EVENTS, 1);
+            values.put(Calendars.COLOR, 0xff000000 + seed);
+            values.put(Calendars.SELECTED, seed % 2);
+            values.put(Calendars.SYNC_EVENTS, seed % 2);
+            values.put(Calendars.LOCATION, "LOCATION:" + seedString);
+            values.put(Calendars.TIMEZONE, TIME_ZONES[seed % TIME_ZONES.length]);
+            values.put(Calendars.ORGANIZER_CAN_RESPOND, seed % 2);
+            values.put(Calendars.SYNC1, "SYNC1:" + seedString);
+            values.put(Calendars.SYNC2, "SYNC2:" + seedString);
+            values.put(Calendars.SYNC3, "SYNC3:" + seedString);
+            values.put(Calendars.SYNC4, "SYNC4:" + seedString);
+            values.put(Calendars.SYNC5, "SYNC5:" + seedString);
+
             return values;
         }
 
-        public static void updateCalendarValues(
-                ContentValues values, String account, String name, long accessLevel, int seed) {
-            values.put(Calendars._SYNC_ACCOUNT_TYPE, CTS_TEST_TYPE);
+        /**
+         * Creates a set of values with just the updates and modifies the
+         * original values to the expected values
+         */
+        public static ContentValues getUpdateCalendarValuesWithOriginal(
+                ContentValues original, int seed) {
+            ContentValues values = new ContentValues();
+            String seedString = Long.toString(seed);
 
-            values.put(Calendars._SYNC_ACCOUNT, account);
-            values.put(Calendars.OWNER_ACCOUNT, "OWNER_" + account);
-
-            values.put(Calendars.NAME, name);
-            values.put(Calendars.DISPLAY_NAME, "DISPLAY_" + name);
-
-            values.put(Calendars.ACCESS_LEVEL, accessLevel);
-
-            values.put(Calendars.COLOR, 0xffcc3333 + seed);
+            values.put(Calendars.DISPLAY_NAME, "DISPLAY_" + seedString);
+            values.put(Calendars.COLOR, 0xff000000 + seed);
             values.put(Calendars.SELECTED, seed % 2);
             values.put(Calendars.SYNC_EVENTS, seed % 2);
+
+            original.putAll(values);
+            original.put(Calendars._SYNC_DIRTY, 1);
+
+            return values;
         }
 
         public static int deleteCalendarById(ContentResolver resolver, long id) {
@@ -139,13 +167,13 @@ public class CalendarCts extends InstrumentationTestCase {
     @MediumTest
     public void testCalendarCreationAndDeletion() {
         String account = "cc1_account";
+        int seed = 0;
 
         // Clean up just in case
         CalendarHelper.deleteCalendarByAccount(mContentResolver, account);
 
         // Create a calendar
-        ContentValues values = CalendarHelper.getNewCalendarValues(
-                account, "cc1 name", Calendars.OWNER_ACCESS);
+        ContentValues values = CalendarHelper.getNewCalendarValues(account, seed++);
         Uri uri = mContentResolver.insert(Calendars.CONTENT_URI, values);
         Log.d(TAG, "uri:" + uri.toString());
         long id = ContentUris.parseId(uri);
@@ -165,40 +193,34 @@ public class CalendarCts extends InstrumentationTestCase {
     @MediumTest
     public void testCalendarUpdate() {
         String account = "cu1_account";
-        String account2 = "cu2_account";
         int seed = 0;
 
         // Clean up just in case
         CalendarHelper.deleteCalendarByAccount(mContentResolver, account);
-        CalendarHelper.deleteCalendarByAccount(mContentResolver, account2);
 
         // Create a calendar
-        ContentValues values = CalendarHelper.getNewCalendarValues(
-                account, "cu1 name", Calendars.OWNER_ACCESS);
+        ContentValues values = CalendarHelper.getNewCalendarValues(account, seed++);
         Uri uri = mContentResolver.insert(Calendars.CONTENT_URI, values);
         Log.d(TAG, "uri:" + uri.toString());
         long id = ContentUris.parseId(uri);
         assertTrue(id >= 0);
-        values.clear();
 
         // Update the calendar using the direct Uri
-        CalendarHelper.updateCalendarValues(
-                values, account2, "cu2 name", Calendars.CONTRIBUTOR_ACCESS, seed++);
-        assertEquals(1, mContentResolver.update(uri, values, null, null));
+        ContentValues updateValues = CalendarHelper.getUpdateCalendarValuesWithOriginal(
+                values, seed++);
+        assertEquals(1, mContentResolver.update(uri, updateValues, null, null));
 
-        verifyCalendar(account2, values, id);
+        verifyCalendar(account, values, id);
 
         // Update the calendar using selection + args
         String selection = Calendars._ID + "=?";
         String[] selectionArgs = new String[] { Long.toString(id) };
         Log.d(TAG, "args:" + selectionArgs.toString());
 
-        values.clear();
-        CalendarHelper.updateCalendarValues(
-                values, account, "cu3 name", Calendars.READ_ACCESS, seed++);
+        updateValues = CalendarHelper.getUpdateCalendarValuesWithOriginal(values, seed++);
 
-        assertEquals(1,
-                mContentResolver.update(Calendars.CONTENT_URI, values, selection, selectionArgs));
+        assertEquals(1, mContentResolver.update(
+                Calendars.CONTENT_URI, updateValues, selection, selectionArgs));
 
         verifyCalendar(account, values, id);
 

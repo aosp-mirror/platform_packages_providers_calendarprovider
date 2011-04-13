@@ -237,7 +237,7 @@ public class CalendarCts extends InstrumentationTestCase {
             // values.put(Events._SYNC_MARK, 0);
             values.put(Events.ORGANIZER, "ORGANIZER:" + seedString);
 
-            values.put(Events.TITLE, seedString);
+            values.put(Events.TITLE, "TITLE:" + seedString);
             values.put(Events.EVENT_LOCATION, "LOCATION_" + seedString);
 
             values.put(Events.CALENDAR_ID, calendarId);
@@ -280,6 +280,36 @@ public class CalendarCts extends InstrumentationTestCase {
             return values;
         }
 
+        public static ContentValues getUpdateEventValuesWithOriginal(ContentValues original,
+                int seed) {
+            String seedString = Long.toString(seed);
+            ContentValues values = new ContentValues();
+            values.put(Events._SYNC_ID, "SYNC_ID:" + seedString);
+            values.put(Events._SYNC_VERSION, "SYNC_V:" + seedString);
+            values.put(Events._SYNC_TIME, "SYNC_TIME:" + seedString);
+
+            values.put(Events.TITLE, "TITLE:" + seedString);
+            values.put(Events.EVENT_LOCATION, "LOCATION_" + seedString);
+            values.put(Events.DESCRIPTION, "DESCRIPTION:" + seedString);
+            values.put(Events.STATUS, seed % 3);
+
+            values.put(Events.DTSTART, seed);
+            values.put(Events.DTEND, seed + DateUtils.HOUR_IN_MILLIS);
+            values.put(Events.EVENT_TIMEZONE, TIME_ZONES[seed % TIME_ZONES.length]);
+            // values.put(Events.EVENT_TIMEZONE2, TIME_ZONES[(seed +1) %
+            // TIME_ZONES.length]);
+            values.put(Events.VISIBILITY, seed % 4);
+            values.put(Events.TRANSPARENCY, seed % 2);
+            values.put(Events.HAS_ALARM, seed % 2);
+            values.put(Events.HAS_EXTENDED_PROPERTIES, seed % 2);
+            values.put(Events.HAS_ATTENDEE_DATA, seed % 2);
+            values.put(Events.GUESTS_CAN_MODIFY, seed % 2);
+            values.put(Events.GUESTS_CAN_INVITE_OTHERS, seed % 2);
+            values.put(Events.GUESTS_CAN_SEE_GUESTS, seed % 2);
+            original.putAll(values);
+            return values;
+        }
+
         public static void addDefaultReadOnlyValues(ContentValues values, String account) {
             values.put(Events.SELF_ATTENDEE_STATUS, Events.STATUS_TENTATIVE);
             values.put(Events.DELETED, 0);
@@ -289,16 +319,15 @@ public class CalendarCts extends InstrumentationTestCase {
             values.put(Events._SYNC_ACCOUNT, account);
         }
 
-        public static void deleteEvent(ContentResolver resolver, Uri uri, ContentValues values) {
-            resolver.delete(uri, null, null);
+        public static int deleteEvent(ContentResolver resolver, Uri uri, ContentValues values) {
             values.put(Events.DELETED, 1);
+            return resolver.delete(uri, null, null);
         }
 
-        public static void deleteEventAsSyncAdapter(ContentResolver resolver, Uri uri,
-                ContentValues values) {
+        public static int deleteEventAsSyncAdapter(ContentResolver resolver, Uri uri) {
             Uri syncUri = uri.buildUpon()
                     .appendQueryParameter(Calendar.CALLER_IS_SYNCADAPTER, "true").build();
-            resolver.delete(syncUri, null, null);
+            return resolver.delete(syncUri, null, null);
         }
 
         public static Cursor getEventsByAccount(ContentResolver resolver, String account) {
@@ -314,6 +343,10 @@ public class CalendarCts extends InstrumentationTestCase {
             selectionArgs[0] = CTS_TEST_TYPE;
             return resolver.query(Events.CONTENT_URI, EVENTS_PROJECTION, selection, selectionArgs,
                     null);
+        }
+
+        public static Cursor getEventByUri(ContentResolver resolver, Uri uri) {
+            return resolver.query(uri, EVENTS_PROJECTION, null, null, null);
         }
     }
 
@@ -334,7 +367,7 @@ public class CalendarCts extends InstrumentationTestCase {
         CalendarHelper.deleteCalendarByAccount(mContentResolver, account);
         long id = createAndVerifyCalendar(account, seed++, null);
 
-        deleteAndVerifyCalendar(account, id);
+        removeAndVerifyCalendar(account, id);
     }
 
     @MediumTest
@@ -369,7 +402,7 @@ public class CalendarCts extends InstrumentationTestCase {
 
         verifyCalendar(account, values, id);
 
-        deleteAndVerifyCalendar(account, id);
+        removeAndVerifyCalendar(account, id);
     }
 
     private void verifyEvent(ContentValues values, long eventId) {
@@ -403,23 +436,61 @@ public class CalendarCts extends InstrumentationTestCase {
 
         Uri eventUri = ContentUris.withAppendedId(Events.CONTENT_URI, eventId);
 
+        removeAndVerifyEvent(eventUri, eventValues);
+
+        removeAndVerifyCalendar(account, calendarId);
+    }
+
+    @MediumTest
+    public void testEventModification() {
+
+        String account = "em1_account";
+        int seed = 0;
+
+        // Clean up just in case
+        CalendarHelper.deleteCalendarByAccount(mContentResolver, account);
+
+        // Create calendar and event
+        long calendarId = createAndVerifyCalendar(account, seed++, null);
+
+        ContentValues eventValues = EventHelper.getNewEventValues(account, seed++, calendarId);
+        long eventId = createAndVerifyEvent(account, seed, calendarId, eventValues);
+
+        Uri eventUri = ContentUris.withAppendedId(Events.CONTENT_URI, eventId);
+
+        ContentValues updateVals = EventHelper
+                .getUpdateEventValuesWithOriginal(eventValues, seed++);
+        assertEquals(1, mContentResolver.update(eventUri, updateVals, null, null));
+        verifyEvent(eventValues, eventId);
+
+        removeAndVerifyEvent(eventUri, eventValues);
+
+        // delete the calendar
+        removeAndVerifyCalendar(account, calendarId);
+    }
+
+    /**
+     * Deletes an event as app and sync adapter which removes it from the db and
+     * verifies after each.
+     *
+     * @param eventUri The uri for the event to delete
+     */
+    private void removeAndVerifyEvent(Uri eventUri, ContentValues eventValues) {
         // Delete event
         EventHelper.deleteEvent(mContentResolver, eventUri, eventValues);
         // Verify
-        verifyEvent(eventValues, eventId);
+        verifyEvent(eventValues, ContentUris.parseId(eventUri));
         // Delete as sync adapter
-        EventHelper.deleteEventAsSyncAdapter(mContentResolver, eventUri, eventValues);
+        assertEquals(1, EventHelper.deleteEventAsSyncAdapter(mContentResolver, eventUri));
         // Verify
-        Cursor c = EventHelper.getEventsByAccount(mContentResolver, account);
+        Cursor c = EventHelper.getEventByUri(mContentResolver, eventUri);
         assertEquals(0, c.getCount());
         c.close();
-
-        deleteAndVerifyCalendar(account, calendarId);
     }
 
     /**
      * Creates an event on the given calendar and verifies it.
-     * 
+     *
      * @param account
      * @param seed
      * @param calendarId
@@ -470,7 +541,9 @@ public class CalendarCts extends InstrumentationTestCase {
      * @param account
      * @param id
      */
-    private void deleteAndVerifyCalendar(String account, long id) {
+    private void removeAndVerifyCalendar(String account, long id) {
+        // TODO Add code to delete as app and sync adapter and test both
+
         // Delete
         assertEquals(1, CalendarHelper.deleteCalendarById(mContentResolver, id));
 

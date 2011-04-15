@@ -122,11 +122,6 @@ import java.util.TimeZone;
             " WHERE " + Calendar.Events.CALENDAR_ID + "=" +
                 "old." + Calendar.Events._ID + ";";
 
-    private static final String SELECT_CALENDAR_CACHE_SQL =
-            "SELECT " + Calendar.CalendarCache.VALUE +
-            " FROM " + Tables.CALENDAR_CACHE +
-            " WHERE " + Calendar.CalendarCache.KEY + "=?";
-
     private static final String SCHEMA_HTTPS = "https://";
     private static final String SCHEMA_HTTP = "http://";
 
@@ -198,7 +193,6 @@ import java.util.TimeZone;
     /* package */ CalendarDatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
         if (LOGD) Log.d(TAG, "Creating OpenHelper");
-        Resources resources = context.getResources();
 
         mContext = context;
         mSyncState = new SyncStateContentProviderHelper();
@@ -490,12 +484,92 @@ import java.util.TimeZone;
                 "END");
     }
 
+    private void createCalendarsTable201(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE Calendars (" +
+                "_id INTEGER PRIMARY KEY," +
+                "_sync_account TEXT," +
+                "_sync_account_type TEXT," +
+                "_sync_id TEXT," +
+                "_sync_version TEXT," +
+                "_sync_time TEXT," +  // UTC
+                "_sync_local_id INTEGER," +
+                "_sync_dirty INTEGER," +
+                "_sync_mark INTEGER," + // Used to filter out new rows
+                "name TEXT," +
+                "displayName TEXT," +
+                "color INTEGER," +
+                "access_level INTEGER," +
+                "selected INTEGER NOT NULL DEFAULT 1," +
+                "sync_events INTEGER NOT NULL DEFAULT 0," +
+                "location TEXT," +
+                "timezone TEXT," +
+                "ownerAccount TEXT, " +
+                "organizerCanRespond INTEGER NOT NULL DEFAULT 1," +
+                "deleted INTEGER NOT NULL DEFAULT 0," +
+                "sync1 TEXT," +
+                "sync2 TEXT," +
+                "sync3 TEXT," +
+                "sync4 TEXT," +
+                "sync5 TEXT" +
+                ");");
+
+        // Trigger to remove a calendar's events when we delete the calendar
+        db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON Calendars " +
+                "BEGIN " +
+                "DELETE FROM Events WHERE calendar_id=old._id;" +
+                "END");
+    }
+
+    private void createCalendarsTable200(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE Calendars (" +
+                "_id INTEGER PRIMARY KEY," +
+                "_sync_account TEXT," +
+                "_sync_account_type TEXT," +
+                "_sync_id TEXT," +
+                "_sync_version TEXT," +
+                "_sync_time TEXT," +  // UTC
+                "_sync_local_id INTEGER," +
+                "_sync_dirty INTEGER," +
+                "_sync_mark INTEGER," + // Used to filter out new rows
+                "name TEXT," +
+                "displayName TEXT," +
+                "hidden INTEGER NOT NULL DEFAULT 0," +
+                "color INTEGER," +
+                "access_level INTEGER," +
+                "selected INTEGER NOT NULL DEFAULT 1," +
+                "sync_events INTEGER NOT NULL DEFAULT 0," +
+                "location TEXT," +
+                "timezone TEXT," +
+                "ownerAccount TEXT, " +
+                "organizerCanRespond INTEGER NOT NULL DEFAULT 1," +
+                "deleted INTEGER NOT NULL DEFAULT 0," +
+                "sync1 TEXT," +
+                "sync2 TEXT," +
+                "sync3 TEXT" +
+                ");");
+
+        // Trigger to remove a calendar's events when we delete the calendar
+        db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON Calendars " +
+                "BEGIN " +
+                "DELETE FROM Events WHERE calendar_id=old._id;" +
+                "END");
+    }
+
     private void createCalendarMetaDataTable(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE " + Tables.CALENDAR_META_DATA + " (" +
                 Calendar.CalendarMetaData._ID + " INTEGER PRIMARY KEY," +
                 Calendar.CalendarMetaData.LOCAL_TIMEZONE + " TEXT," +
                 Calendar.CalendarMetaData.MIN_INSTANCE + " INTEGER," +      // UTC millis
                 Calendar.CalendarMetaData.MAX_INSTANCE + " INTEGER" +       // UTC millis
+                ");");
+    }
+
+    private void createCalendarMetaDataTable59(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE CalendarMetaData (" +
+                "_id INTEGER PRIMARY KEY," +
+                "localTimezone TEXT," +
+                "minInstance INTEGER," +      // UTC millis
+                "maxInstance INTEGER" +       // UTC millis
                 ");");
     }
 
@@ -512,7 +586,7 @@ import java.util.TimeZone;
                 ");");
 
         initCalendarCacheTable(db, oldTimezoneDbVersion);
-        updateCalendarCacheTableTo203(db);
+        updateCalendarCacheTable(db);
     }
 
     private void initCalendarCacheTable(SQLiteDatabase db, String oldTimezoneDbVersion) {
@@ -530,7 +604,7 @@ import java.util.TimeZone;
                 ");");
     }
 
-    private void updateCalendarCacheTableTo203(SQLiteDatabase db) {
+    private void updateCalendarCacheTable(SQLiteDatabase db) {
         // Define the default timezone type for Instances timezone management
         db.execSQL("INSERT INTO " + Tables.CALENDAR_CACHE +
                 " (" + CalendarCache.COLUMN_NAME_ID + ", " +
@@ -564,6 +638,49 @@ import java.util.TimeZone;
                 ");");
     }
 
+    private void initCalendarCacheTable203(SQLiteDatabase db, String oldTimezoneDbVersion) {
+        String timezoneDbVersion = (oldTimezoneDbVersion != null) ?
+                oldTimezoneDbVersion : "2009s";
+
+        // Set the default timezone database version
+        db.execSQL("INSERT OR REPLACE INTO CalendarCache" +
+                " (_id, " +
+                "key, " +
+                "value) VALUES (" +
+                "timezoneDatabaseVersion".hashCode() + "," +
+                "'timezoneDatabaseVersion',"  +
+                "'" + timezoneDbVersion + "'" +
+                ");");
+    }
+
+    private void updateCalendarCacheTableTo203(SQLiteDatabase db) {
+        // Define the default timezone type for Instances timezone management
+        db.execSQL("INSERT INTO CalendarCache" +
+                " (_id, key, value) VALUES (" +
+                "timezoneType".hashCode() + "," +
+                "'timezoneType',"  +
+                "'auto'" +
+                ");");
+
+        String defaultTimezone = TimeZone.getDefault().getID();
+
+        // Define the default timezone for Instances
+        db.execSQL("INSERT INTO CalendarCache" +
+                " (_id, key, value) VALUES (" +
+                "timezoneInstances".hashCode() + "," +
+                "'timezoneInstances',"  +
+                "'" + defaultTimezone + "'" +
+                ");");
+
+        // Define the default previous timezone for Instances
+        db.execSQL("INSERT INTO CalendarCache" +
+                " (_id, key, value) VALUES (" +
+                "timezoneInstancesPrevious".hashCode() + "," +
+                "'timezoneInstancesPrevious',"  +
+                "'" + defaultTimezone + "'" +
+                ");");
+    }
+
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         Log.i(TAG, "Upgrading DB from version " + oldVersion
@@ -581,6 +698,7 @@ import java.util.TimeZone;
         // This boolean helps us tracking the need to recreate the CalendarMetaData table and
         // clear the Instance table (and thus force an Instance expansion).
         boolean recreateMetaDataAndInstances = (oldVersion >= 59 && oldVersion <= 66);
+        boolean createEventsView = false;
 
         try {
             if (oldVersion < 51) {
@@ -625,6 +743,7 @@ import java.util.TimeZone;
             }
             if (oldVersion == 59) {
                 upgradeToVersion60(db);
+                createEventsView = true;
                 oldVersion += 1;
             }
             if (oldVersion == 60) {
@@ -636,7 +755,7 @@ import java.util.TimeZone;
                 oldVersion += 1;
             }
             if (oldVersion == 62) {
-                upgradeToVersion63(db);
+                createEventsView = true;
                 oldVersion += 1;
             }
             if (oldVersion == 63) {
@@ -644,7 +763,7 @@ import java.util.TimeZone;
                 oldVersion += 1;
             }
             if (oldVersion == 64) {
-                upgradeToVersion65(db);
+                createEventsView = true;
                 oldVersion += 1;
             }
             if (oldVersion == 65) {
@@ -656,7 +775,7 @@ import java.util.TimeZone;
                 oldVersion += 1;
             }
             if (recreateMetaDataAndInstances) {
-                recreateMetaDataAndInstances(db);
+                recreateMetaDataAndInstances67(db);
             }
             if (oldVersion == 67 || oldVersion == 68) {
                 upgradeToVersion69(db);
@@ -668,6 +787,7 @@ import java.util.TimeZone;
             // room for Froyo version numbers
             if(oldVersion == 69) {
                 upgradeToVersion200(db);
+                createEventsView = true;
                 oldVersion = 200;
             }
             if (oldVersion == 70) {
@@ -690,6 +810,7 @@ import java.util.TimeZone;
             }
             if (oldVersion == 201) {
                 upgradeToVersion202(db);
+                createEventsView = true;
                 oldVersion += 1;
             }
             if (oldVersion == 202 && need203Update) {
@@ -697,8 +818,11 @@ import java.util.TimeZone;
                 oldVersion += 1;
             }
             if (oldVersion == 203) {
-                upgradeToVersion204(db);
+                createEventsView = true;
                 oldVersion += 1;
+            }
+            if (createEventsView) {
+                createEventsView(db);
             }
             if (oldVersion != DATABASE_VERSION) {
                 Log.e(TAG, "Need to recreate Calendar schema because of "
@@ -719,13 +843,13 @@ import java.util.TimeZone;
      * If the user_version of the database if between 59 and 66 (those versions has been deployed
      * with no primary key for the CalendarMetaData table)
      */
-    private void recreateMetaDataAndInstances(SQLiteDatabase db) {
+    private void recreateMetaDataAndInstances67(SQLiteDatabase db) {
         // Recreate the CalendarMetaData table with correct primary key
-        db.execSQL("DROP TABLE " + Tables.CALENDAR_META_DATA + ";");
-        createCalendarMetaDataTable(db);
+        db.execSQL("DROP TABLE CalendarMetaData;");
+        createCalendarMetaDataTable59(db);
 
         // Also clean the Instance table as this table may be corrupted
-        db.execSQL("DELETE FROM " + Tables.INSTANCES + ";");
+        db.execSQL("DELETE FROM Instances;");
     }
 
     private static boolean fixAllDayTime(Time time, String timezone, Long timeInMillis) {
@@ -740,15 +864,9 @@ import java.util.TimeZone;
     }
 
     @VisibleForTesting
-    void upgradeToVersion204(SQLiteDatabase db) {
-        // Recreate the Events Views as the new SYNC_ADAPTER_DATA column needs to be added
-        createEventsView(db);
-    }
-
-    @VisibleForTesting
     void upgradeToVersion203(SQLiteDatabase db) {
         // Same as Gingerbread version 100
-        Cursor cursor = db.rawQuery(SELECT_CALENDAR_CACHE_SQL,
+        Cursor cursor = db.rawQuery("SELECT value FROM CalendarCache WHERE key=?",
                 new String[] {"timezoneDatabaseVersion"});
 
         String oldTimezoneDbVersion = null;
@@ -759,9 +877,9 @@ import java.util.TimeZone;
                 cursor.close();
             }
             // Also clean the CalendarCache table
-            db.execSQL("DELETE FROM " + Tables.CALENDAR_CACHE + ";");
+            db.execSQL("DELETE FROM CalendarCache;");
         }
-        initCalendarCacheTable(db, oldTimezoneDbVersion);
+        initCalendarCacheTable203(db, oldTimezoneDbVersion);
 
         // Same as Gingerbread version 101
         updateCalendarCacheTableTo203(db);
@@ -770,151 +888,145 @@ import java.util.TimeZone;
     @VisibleForTesting
     void upgradeToVersion202(SQLiteDatabase db) {
         // We will drop the "hidden" column from the calendar schema and add the "sync5" column
-        db.execSQL("ALTER TABLE " + Tables.CALENDARS +" RENAME TO " +
-                Tables.CALENDARS + "_Backup;");
+        db.execSQL("ALTER TABLE Calendars RENAME TO Calendars_Backup;");
 
         db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
-        createCalendarsTable(db);
+        createCalendarsTable201(db);
 
         // Populate the new Calendars table and put into the "sync5" column the value of the
         // old "hidden" column
-        db.execSQL("INSERT INTO " + Tables.CALENDARS + " (" +
-                Calendar.Calendars._ID + ", " +
-                Calendar.Calendars._SYNC_ACCOUNT + ", " +
-                Calendar.Calendars._SYNC_ACCOUNT_TYPE + ", " +
-                Calendar.Calendars._SYNC_ID + ", " +
-                Calendar.Calendars._SYNC_VERSION + ", " +
-                Calendar.Calendars._SYNC_TIME + ", " +
-                Calendar.Calendars._SYNC_DATA + ", " +
-                Calendar.Calendars._SYNC_DIRTY + ", " +
-                Calendar.Calendars._SYNC_MARK + ", " +
-                Calendar.Calendars.NAME + ", " +
-                Calendar.Calendars.DISPLAY_NAME + ", " +
-                Calendar.Calendars.COLOR + ", " +
-                Calendar.Calendars.ACCESS_LEVEL + ", " +
-                Calendar.Calendars.SELECTED + ", " +
-                Calendar.Calendars.SYNC_EVENTS + ", " +
-                Calendar.Calendars.LOCATION + ", " +
-                Calendar.Calendars.TIMEZONE + ", " +
-                Calendar.Calendars.OWNER_ACCOUNT + ", " +
-                Calendar.Calendars.ORGANIZER_CAN_RESPOND + ", " +
-                Calendar.Calendars.DELETED + ", " +
-                Calendar.Calendars.SYNC1 + ", " +
-                Calendar.Calendars.SYNC2 + ", " +
-                Calendar.Calendars.SYNC3 + ", " +
-                Calendar.Calendars.SYNC4 + ", " +
-                Calendar.Calendars.SYNC5 + ") " +
+        db.execSQL("INSERT INTO Calendars (" +
+                "_id, " +
+                "_sync_account, " +
+                "_sync_account_type, " +
+                "_sync_id, " +
+                "_sync_version, " +
+                "_sync_time, " +
+                "_sync_local_id, " +
+                "_sync_dirty, " +
+                "_sync_mark, " +
+                "name, " +
+                "displayName, " +
+                "color, " +
+                "access_level, " +
+                "selected, " +
+                "sync_events, " +
+                "location, " +
+                "timezone, " +
+                "ownerAccount, " +
+                "organizerCanRespond, " +
+                "deleted, " +
+                "sync1, " +
+                "sync2, " +
+                "sync3, " +
+                "sync4," +
+                "sync5) " +
                 "SELECT " +
-                Calendar.Calendars._ID + ", " +
-                Calendar.Calendars._SYNC_ACCOUNT + ", " +
-                Calendar.Calendars._SYNC_ACCOUNT_TYPE + ", " +
-                Calendar.Calendars._SYNC_ID + ", " +
-                Calendar.Calendars._SYNC_VERSION + ", " +
-                Calendar.Calendars._SYNC_TIME + ", " +
-                Calendar.Calendars._SYNC_DATA + ", " +
-                Calendar.Calendars._SYNC_DIRTY + ", " +
-                Calendar.Calendars._SYNC_MARK + ", " +
-                Calendar.Calendars.NAME + ", " +
-                Calendar.Calendars.DISPLAY_NAME + ", " +
-                Calendar.Calendars.COLOR + ", " +
-                Calendar.Calendars.ACCESS_LEVEL + ", " +
-                Calendar.Calendars.SELECTED + ", " +
-                Calendar.Calendars.SYNC_EVENTS + ", " +
-                Calendar.Calendars.LOCATION + ", " +
-                Calendar.Calendars.TIMEZONE + ", " +
-                Calendar.Calendars.OWNER_ACCOUNT + ", " +
-                Calendar.Calendars.ORGANIZER_CAN_RESPOND + ", " +
-                Calendar.Calendars.DELETED + ", " +
-                Calendar.Calendars.SYNC1 + ", " +
-                Calendar.Calendars.SYNC2 + ", " +
-                Calendar.Calendars.SYNC3 + ", " +
-                Calendar.Calendars.SYNC4 + " " +
-                "hidden" + " " +
-                "FROM " + Tables.CALENDARS + "_Backup" + ";"
+                "_id, " +
+                "_sync_account, " +
+                "_sync_account_type, " +
+                "_sync_id, " +
+                "_sync_version, " +
+                "_sync_time, " +
+                "_sync_local_id, " +
+                "_sync_dirty, " +
+                "_sync_mark, " +
+                "name, " +
+                "displayName, " +
+                "color, " +
+                "access_level, " +
+                "selected, " +
+                "sync_events, " +
+                "location, " +
+                "timezone, " +
+                "ownerAccount, " +
+                "organizerCanRespond, " +
+                "deleted, " +
+                "sync1, " +
+                "sync2, " +
+                "sync3, " +
+                "sync4, " +
+                "hidden " +
+                "FROM Calendars_Backup;"
         );
 
         // Drop the backup table
-        db.execSQL("DROP TABLE " + Tables.CALENDARS + "_Backup;");
-
-        // Recreate the Events Views as column "hidden" has been deleted
-        createEventsView(db);
+        db.execSQL("DROP TABLE Calendars_Backup;");
     }
 
     @VisibleForTesting
     void upgradeToVersion201(SQLiteDatabase db) {
-        db.execSQL("ALTER TABLE " + Tables.CALENDARS +
-                " ADD COLUMN " + Calendar.Calendars.SYNC4 + " TEXT;");
+        db.execSQL("ALTER TABLE Calendars ADD COLUMN sync4 TEXT;");
     }
 
     @VisibleForTesting
     void upgradeToVersion200(SQLiteDatabase db) {
         // we cannot use here a Calendar.Calendars,URL constant for "url" as we are trying to make
         // it disappear so we are keeping the hardcoded name "url" in all the SQLs
-        db.execSQL("ALTER TABLE " + Tables.CALENDARS +" RENAME TO " +
-                Tables.CALENDARS + "_Backup;");
+        db.execSQL("ALTER TABLE Calendars RENAME TO Calendars_Backup;");
 
         db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
-        createCalendarsTable(db);
+        createCalendarsTable200(db);
 
         // Populate the new Calendars table except the SYNC2 / SYNC3 columns
-        db.execSQL("INSERT INTO " + Tables.CALENDARS + " (" +
-                Calendar.Calendars._ID + ", " +
-                Calendar.Calendars._SYNC_ACCOUNT + ", " +
-                Calendar.Calendars._SYNC_ACCOUNT_TYPE + ", " +
-                Calendar.Calendars._SYNC_ID + ", " +
-                Calendar.Calendars._SYNC_VERSION + ", " +
-                Calendar.Calendars._SYNC_TIME + ", " +
-                Calendar.Calendars._SYNC_DATA + ", " +
-                Calendar.Calendars._SYNC_DIRTY + ", " +
-                Calendar.Calendars._SYNC_MARK + ", " +
-                Calendar.Calendars.NAME + ", " +
-                Calendar.Calendars.DISPLAY_NAME + ", " +
-                Calendar.Calendars.COLOR + ", " +
-                Calendar.Calendars.ACCESS_LEVEL + ", " +
-                Calendar.Calendars.SELECTED + ", " +
-                Calendar.Calendars.SYNC_EVENTS + ", " +
-                Calendar.Calendars.LOCATION + ", " +
-                Calendar.Calendars.TIMEZONE + ", " +
-                Calendar.Calendars.OWNER_ACCOUNT + ", " +
-                Calendar.Calendars.ORGANIZER_CAN_RESPOND + ", " +
-                Calendar.Calendars.DELETED + ", " +
-                Calendar.Calendars.SYNC1 + ") " +
+        db.execSQL("INSERT INTO Calendars (" +
+                "_id, " +
+                "_sync_account, " +
+                "_sync_account_type, " +
+                "_sync_id, " +
+                "_sync_version, " +
+                "_sync_time, " +
+                "_sync_local_id, " +
+                "_sync_dirty, " +
+                "_sync_mark, " +
+                "name, " +
+                "displayName, " +
+                "color, " +
+                "access_level, " +
+                "selected, " +
+                "sync_events, " +
+                "location, " +
+                "timezone, " +
+                "ownerAccount, " +
+                "organizerCanRespond, " +
+                "deleted, " +
+                "sync1) " +
                 "SELECT " +
-                Calendar.Calendars._ID + ", " +
-                Calendar.Calendars._SYNC_ACCOUNT + ", " +
-                Calendar.Calendars._SYNC_ACCOUNT_TYPE + ", " +
-                Calendar.Calendars._SYNC_ID + ", " +
-                Calendar.Calendars._SYNC_VERSION + ", " +
-                Calendar.Calendars._SYNC_TIME + ", " +
-                Calendar.Calendars._SYNC_DATA + ", " +
-                Calendar.Calendars._SYNC_DIRTY + ", " +
-                Calendar.Calendars._SYNC_MARK + ", " +
-                Calendar.Calendars.NAME + ", " +
-                Calendar.Calendars.DISPLAY_NAME + ", " +
-                Calendar.Calendars.COLOR + ", " +
-                Calendar.Calendars.ACCESS_LEVEL + ", " +
-                Calendar.Calendars.SELECTED + ", " +
-                Calendar.Calendars.SYNC_EVENTS + ", " +
-                Calendar.Calendars.LOCATION + ", " +
-                Calendar.Calendars.TIMEZONE + ", " +
-                Calendar.Calendars.OWNER_ACCOUNT + ", " +
-                Calendar.Calendars.ORGANIZER_CAN_RESPOND + ", " +
-                "0" + ", " +
-                "url" + " " +
-                "FROM " + Tables.CALENDARS + "_Backup" + ";"
+                "_id, " +
+                "_sync_account, " +
+                "_sync_account_type, " +
+                "_sync_id, " +
+                "_sync_version, " +
+                "_sync_time, " +
+                "_sync_local_id, " +
+                "_sync_dirty, " +
+                "_sync_mark, " +
+                "name, " +
+                "displayName, " +
+                "color, " +
+                "access_level, " +
+                "selected, " +
+                "sync_events, " +
+                "location, " +
+                "timezone, " +
+                "ownerAccount, " +
+                "organizerCanRespond, " +
+                "0, " +
+                "url " +
+                "FROM Calendars_Backup;"
         );
 
         // Populate SYNC2 and SYNC3 columns - SYNC1 represent the old "url" column
         // We will need to iterate over all the "com.google" type of calendars
-        String selectSql = "SELECT " + Calendar.Calendars._ID + ", " + "url" +
-                " FROM " + Tables.CALENDARS + "_Backup" +
-                " WHERE " + Calendar.Calendars._SYNC_ACCOUNT_TYPE  + "='com.google'" +
+        String selectSql = "SELECT _id, url" +
+                " FROM Calendars_Backup" +
+                " WHERE _sync_account_type='com.google'" +
                 " AND url IS NOT NULL;";
 
-        String updateSql = "UPDATE " + Tables.CALENDARS + " SET " +
-                Calendar.Calendars.SYNC2 + "=?, " + // edit Url
-                Calendar.Calendars.SYNC3 + "=? " + // self Url
-                "WHERE " + Calendar.Calendars._ID + "=?;";
+        String updateSql = "UPDATE Calendars SET " +
+                "sync2=?, " + // edit Url
+                "sync3=? " + // self Url
+                "WHERE _id=?;";
 
         Cursor cursor = db.rawQuery(selectSql, null /* selection args */);
         if (cursor != null && cursor.getCount() > 0) {
@@ -939,11 +1051,7 @@ import java.util.TimeZone;
         }
 
         // Drop the backup table
-        db.execSQL("DROP TABLE " + Tables.CALENDARS + "_Backup;");
-
-        // Recreate the Events Views as column "deleted" is now ambiguous
-        // ("deleted" is now defined in both Calendars and Events tables)
-        createEventsView(db);
+        db.execSQL("DROP TABLE Calendars_Backup;");
     }
 
     @VisibleForTesting
@@ -954,17 +1062,17 @@ import java.util.TimeZone;
         // correct timezone. Verifies that dtstart and dtend are in UTC and at midnight, that
         // eventTimezone is set to UTC, tries to make sure duration is in days, and that dtstart2
         // and dtend2 are at midnight in their timezone.
-        final String sql = "SELECT " + Calendar.Events._ID + ", " +
-                Calendar.Events.DTSTART + ", " +
-                Calendar.Events.DTEND + ", " +
-                Calendar.Events.DURATION + ", " +
-                Calendar.Events.DTSTART2 + ", " +
-                Calendar.Events.DTEND2 + ", " +
-                Calendar.Events.EVENT_TIMEZONE + ", " +
-                Calendar.Events.EVENT_TIMEZONE2 + ", " +
-                Calendar.Events.RRULE + " " +
-                "FROM " + Tables.EVENTS + " " +
-                "WHERE " + Calendar.Events.ALL_DAY + "=?";
+        final String sql = "SELECT _id, " +
+                "dtstart, " +
+                "dtend, " +
+                "duration, " +
+                "dtstart2, " +
+                "dtend2, " +
+                "eventTimezone, " +
+                "eventTimezone2, " +
+                "rrule " +
+                "FROM Events " +
+                "WHERE allDay=?";
         Cursor cursor = db.rawQuery(sql, new String[] {"1"});
         if (cursor != null) {
             try {
@@ -1032,15 +1140,15 @@ import java.util.TimeZone;
 
                         if (update) {
                             // enforce duration being null
-                            db.execSQL("UPDATE " + Tables.EVENTS + " SET " +
-                                    Calendar.Events.DTSTART + "=?, " +
-                                    Calendar.Events.DTEND + "=?, " +
-                                    Calendar.Events.DTSTART2 + "=?, " +
-                                    Calendar.Events.DTEND2 + "=?, " +
-                                    Calendar.Events.DURATION + "=?, " +
-                                    Calendar.Events.EVENT_TIMEZONE + "=?, " +
-                                    Calendar.Events.EVENT_TIMEZONE2 + "=? " +
-                                    "WHERE " + Calendar.Events._ID + "=?",
+                            db.execSQL("UPDATE Events SET " +
+                                    "dtstart=?, " +
+                                    "dtend=?, " +
+                                    "dtstart2=?, " +
+                                    "dtend2=?, " +
+                                    "duration=?, " +
+                                    "eventTimezone=?, " +
+                                    "eventTimezone2=? " +
+                                    "WHERE _id=?",
                                     new Object[] {
                                             dtstart,
                                             dtend,
@@ -1095,15 +1203,15 @@ import java.util.TimeZone;
 
                         if (update) {
                             // If there were other problems also enforce dtend being null
-                            db.execSQL("UPDATE " + Tables.EVENTS + " SET " +
-                                    Calendar.Events.DTSTART + "=?, " +
-                                    Calendar.Events.DTEND + "=?, " +
-                                    Calendar.Events.DTSTART2 + "=?, " +
-                                    Calendar.Events.DTEND2 + "=?, " +
-                                    Calendar.Events.DURATION + "=?," +
-                                    Calendar.Events.EVENT_TIMEZONE + "=?, " +
-                                    Calendar.Events.EVENT_TIMEZONE2 + "=? " +
-                                    "WHERE " + Calendar.Events._ID + "=?",
+                            db.execSQL("UPDATE Events SET " +
+                                    "dtstart=?, " +
+                                    "dtend=?, " +
+                                    "dtstart2=?, " +
+                                    "dtend2=?, " +
+                                    "duration=?," +
+                                    "eventTimezone=?, " +
+                                    "eventTimezone2=? " +
+                                    "WHERE _id=?",
                                     new Object[] {
                                             dtstart,
                                             null,
@@ -1126,57 +1234,44 @@ import java.util.TimeZone;
     private void upgradeToVersion66(SQLiteDatabase db) {
         // Add a column to indicate whether the event organizer can respond to his own events
         // The UI should not show attendee status for events in calendars with this column = 0
-        db.execSQL("ALTER TABLE " + Tables.CALENDARS +
-                " ADD COLUMN " + Calendar.Calendars.ORGANIZER_CAN_RESPOND +
-                    " INTEGER NOT NULL DEFAULT 1;");
-    }
-
-    private void upgradeToVersion65(SQLiteDatabase db) {
-        // we need to recreate the Events view
-        createEventsView(db);
+        db.execSQL("ALTER TABLE Calendars" +
+                " ADD COLUMN organizerCanRespond INTEGER NOT NULL DEFAULT 1;");
     }
 
     private void upgradeToVersion64(SQLiteDatabase db) {
         // Add a column that may be used by sync adapters
-        db.execSQL("ALTER TABLE " + Tables.EVENTS +
-                " ADD COLUMN " + Calendar.Events.SYNC_ADAPTER_DATA + " TEXT;");
-    }
-
-    private void upgradeToVersion63(SQLiteDatabase db) {
-        // we need to recreate the Events view
-        createEventsView(db);
+        db.execSQL("ALTER TABLE Events" +
+                " ADD COLUMN syncAdapterData TEXT;");
     }
 
     private void upgradeToVersion62(SQLiteDatabase db) {
         // New columns are to transition to having allDay events in the local timezone
-        db.execSQL("ALTER TABLE " + Tables.EVENTS +
-                " ADD COLUMN " + Calendar.Events.DTSTART2 + " INTEGER;");
-        db.execSQL("ALTER TABLE " + Tables.EVENTS +
-                " ADD COLUMN " + Calendar.Events.DTEND2 + " INTEGER;");
-        db.execSQL("ALTER TABLE " + Tables.EVENTS +
-                " ADD COLUMN " + Calendar.Events.EVENT_TIMEZONE2 + " TEXT;");
+        db.execSQL("ALTER TABLE Events" +
+                " ADD COLUMN dtstart2 INTEGER;");
+        db.execSQL("ALTER TABLE Events" +
+                " ADD COLUMN dtend2 INTEGER;");
+        db.execSQL("ALTER TABLE Events" +
+                " ADD COLUMN eventTimezone2 TEXT;");
 
         String[] allDayBit = new String[] {"0"};
         // Copy over all the data that isn't an all day event.
-        db.execSQL("UPDATE " + Tables.EVENTS + " SET " +
-                Calendar.Events.DTSTART2 + "=" + Calendar.Events.DTSTART + "," +
-                Calendar.Events.DTEND2 + "=" + Calendar.Events.DTEND + "," +
-                Calendar.Events.EVENT_TIMEZONE2 + "=" + Calendar.Events.EVENT_TIMEZONE + " " +
-                "WHERE " + Calendar.Events.ALL_DAY + "=?;",
+        db.execSQL("UPDATE Events SET " +
+                "dtstart2=dtstart," +
+                "dtend2=dtend," +
+                "eventTimezone2=eventTimezone " +
+                "WHERE allDay=?;",
                 allDayBit /* selection args */);
 
         // "cursor" iterates over all the calendars
         allDayBit[0] = "1";
-        Cursor cursor = db.rawQuery("SELECT " + Tables.EVENTS + "." + Calendar.Events._ID + "," +
-                Calendar.Events.DTSTART + "," +
-                Calendar.Events.DTEND + "," +
-                Calendar.Events.EVENT_TIMEZONE + "," +
-                Calendar.Calendars.TIMEZONE + " " +
-                "FROM " + Tables.EVENTS + " INNER JOIN " + Tables.CALENDARS + " " +
-                "WHERE " + Tables.EVENTS + "." + Calendar.Events.CALENDAR_ID + "=" +
-                    Tables.CALENDARS + "." + Calendar.Calendars._ID +
-                " AND "
-                    + Calendar.Events.ALL_DAY + "=?",
+        Cursor cursor = db.rawQuery("SELECT Events._id," +
+                "dtstart," +
+                "dtend," +
+                "eventTimezone," +
+                "timezone " +
+                "FROM Events INNER JOIN Calendars " +
+                "WHERE Events.calendar_id=Calendars._id" +
+                " AND allDay=?",
                 allDayBit /* selection args */);
 
         Time oldTime = new Time();
@@ -1217,11 +1312,11 @@ import java.util.TimeZone;
                     newData[1] = String.valueOf(dtend);
                     newData[2] = tz;
                     newData[3] = String.valueOf(id);
-                    db.execSQL("UPDATE " + Tables.EVENTS + " SET " +
-                            Calendar.Events.DTSTART2 + "=?, " +
-                            Calendar.Events.DTEND2 + "=?, " +
-                            Calendar.Events.EVENT_TIMEZONE2 + "=? " +
-                            "WHERE " + Calendar.Events._ID + "=?",
+                    db.execSQL("UPDATE Events SET " +
+                            "dtstart2=?, " +
+                            "dtend2=?, " +
+                            "eventTimezone2=? " +
+                            "WHERE _id=?",
                             newData);
                 }
             } finally {
@@ -1234,17 +1329,17 @@ import java.util.TimeZone;
         db.execSQL("DROP TABLE IF EXISTS CalendarCache;");
 
         // IF NOT EXISTS should be normal pattern for table creation
-        db.execSQL("CREATE TABLE IF NOT EXISTS " + Tables.CALENDAR_CACHE + " (" +
-                CalendarCache.COLUMN_NAME_ID + " INTEGER PRIMARY KEY," +
-                CalendarCache.COLUMN_NAME_KEY + " TEXT NOT NULL," +
-                CalendarCache.COLUMN_NAME_VALUE + " TEXT" +
+        db.execSQL("CREATE TABLE IF NOT EXISTS CalendarCache (" +
+                "_id INTEGER PRIMARY KEY," +
+                "key TEXT NOT NULL," +
+                "value TEXT" +
                 ");");
 
-        db.execSQL("INSERT INTO " + Tables.CALENDAR_CACHE + " (" +
-                CalendarCache.COLUMN_NAME_KEY + ", " +
-                CalendarCache.COLUMN_NAME_VALUE + ") VALUES (" +
-                "'" + CalendarCache.KEY_TIMEZONE_DATABASE_VERSION + "',"  +
-                "'" + CalendarCache.DEFAULT_TIMEZONE_DATABASE_VERSION + "'" +
+        db.execSQL("INSERT INTO CalendarCache (" +
+                "key, " +
+                "value) VALUES (" +
+                "'timezoneDatabaseVersion',"  +
+                "'2009s'" +
                 ");");
     }
 
@@ -1252,24 +1347,43 @@ import java.util.TimeZone;
         // Switch to CalendarProvider2
         upgradeSyncState(db);
         db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
-        db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON " + Tables.CALENDARS + " " +
+        db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON Calendars " +
                 "BEGIN " +
-                CALENDAR_CLEANUP_TRIGGER_SQL +
+                ("DELETE FROM Events" +
+                        " WHERE calendar_id=old._id;") +
                 "END");
-        db.execSQL("ALTER TABLE " + Tables.EVENTS +
-                " ADD COLUMN " + Calendar.Events.DELETED + " INTEGER NOT NULL DEFAULT 0;");
+        db.execSQL("ALTER TABLE Events" +
+                " ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0;");
         db.execSQL("DROP TRIGGER IF EXISTS events_insert");
         // Trigger to set event's sync_account
-        db.execSQL("CREATE TRIGGER events_insert AFTER INSERT ON " + Tables.EVENTS + " " +
+        db.execSQL("CREATE TRIGGER events_insert AFTER INSERT ON Events " +
                 "BEGIN " +
-                AFTER_EVENT_INSERT_SQL +
+                "UPDATE Events" +
+                " SET _sync_account=" +
+                " (SELECT _sync_account FROM Calendars" +
+                " WHERE Calendars._id=new.calendar_id)," +
+                "_sync_account_type=" +
+                " (SELECT _sync_account_type FROM Calendars" +
+                " WHERE Calendars._id=new.calendar_id) " +
+                "WHERE Events._id=new._id;" +
                 "END");
         db.execSQL("DROP TABLE IF EXISTS DeletedEvents;");
         db.execSQL("DROP TRIGGER IF EXISTS events_cleanup_delete");
         // Trigger to remove data tied to an event when we delete that event.
-        db.execSQL("CREATE TRIGGER events_cleanup_delete DELETE ON " + Tables.EVENTS + " " +
+        db.execSQL("CREATE TRIGGER events_cleanup_delete DELETE ON Events " +
                 "BEGIN " +
-                EVENTS_CLEANUP_TRIGGER_SQL +
+                ("DELETE FROM Instances" +
+                    " WHERE event_id=old._id;" +
+                "DELETE FROM EventsRawTimes" +
+                    " WHERE event_id=old._id;" +
+                "DELETE FROM Attendees" +
+                    " WHERE event_id=old._id;" +
+                "DELETE FROM Reminders" +
+                    " WHERE event_id=old._id;" +
+                "DELETE FROM CalendarAlerts" +
+                    " WHERE event_id=old._id;" +
+                "DELETE FROM ExtendedProperties" +
+                    " WHERE event_id=old._id;") +
                 "END");
         db.execSQL("DROP TRIGGER IF EXISTS attendees_update");
         db.execSQL("DROP TRIGGER IF EXISTS attendees_insert");
@@ -1280,94 +1394,92 @@ import java.util.TimeZone;
         db.execSQL("DROP TRIGGER IF EXISTS extended_properties_update");
         db.execSQL("DROP TRIGGER IF EXISTS extended_properties_insert");
         db.execSQL("DROP TRIGGER IF EXISTS extended_properties_delete");
-
-        createEventsView(db);
     }
 
     private void upgradeToVersion59(SQLiteDatabase db) {
         db.execSQL("DROP TABLE IF EXISTS BusyBits;");
-        db.execSQL("CREATE TEMPORARY TABLE " + Tables.CALENDAR_META_DATA + "_Backup" + "(" +
-                Calendar.CalendarMetaData._ID + "," +
-                Calendar.CalendarMetaData.LOCAL_TIMEZONE + "," +
-                Calendar.CalendarMetaData.MIN_INSTANCE + "," +
-                Calendar.CalendarMetaData.MAX_INSTANCE +
+        db.execSQL("CREATE TEMPORARY TABLE CalendarMetaData_Backup(" +
+                "_id," +
+                "localTimezone," +
+                "minInstance," +
+                "maxInstance" +
                 ");");
-        db.execSQL("INSERT INTO " + Tables.CALENDAR_META_DATA + "_Backup " +
+        db.execSQL("INSERT INTO CalendarMetaData_Backup " +
                 "SELECT " +
-                Calendar.CalendarMetaData._ID + "," +
-                Calendar.CalendarMetaData.LOCAL_TIMEZONE + "," +
-                Calendar.CalendarMetaData.MIN_INSTANCE + "," +
-                Calendar.CalendarMetaData.MAX_INSTANCE +
-                " FROM " + Tables.CALENDAR_META_DATA + ";");
-        db.execSQL("DROP TABLE " + Tables.CALENDAR_META_DATA + ";");
-        createCalendarMetaDataTable(db);
-        db.execSQL("INSERT INTO " + Tables.CALENDAR_META_DATA + " " +
+                "_id," +
+                "localTimezone," +
+                "minInstance," +
+                "maxInstance" +
+                " FROM CalendarMetaData;");
+        db.execSQL("DROP TABLE CalendarMetaData;");
+        createCalendarMetaDataTable59(db);
+        db.execSQL("INSERT INTO CalendarMetaData " +
                 "SELECT " +
-                Calendar.CalendarMetaData._ID + "," +
-                Calendar.CalendarMetaData.LOCAL_TIMEZONE + "," +
-                Calendar.CalendarMetaData.MIN_INSTANCE + "," +
-                Calendar.CalendarMetaData.MAX_INSTANCE +
-                " FROM " + Tables.CALENDAR_META_DATA + "_Backup;");
-        db.execSQL("DROP TABLE " + Tables.CALENDAR_META_DATA + "_Backup;");
+                "_id," +
+                "localTimezone," +
+                "minInstance," +
+                "maxInstance" +
+                " FROM CalendarMetaData_Backup;");
+        db.execSQL("DROP TABLE CalendarMetaData_Backup;");
     }
 
     private void upgradeToVersion57(SQLiteDatabase db) {
-        db.execSQL("ALTER TABLE " + Tables.EVENTS +
-                " ADD COLUMN " + Calendar.Events.GUESTS_CAN_MODIFY +
+        db.execSQL("ALTER TABLE Events" +
+                " ADD COLUMN guestsCanModify" +
                 " INTEGER NOT NULL DEFAULT 0;");
-        db.execSQL("ALTER TABLE " + Tables.EVENTS +
-                " ADD COLUMN " + Calendar.Events.GUESTS_CAN_INVITE_OTHERS +
+        db.execSQL("ALTER TABLE Events" +
+                " ADD COLUMN guestsCanInviteOthers" +
                 " INTEGER NOT NULL DEFAULT 1;");
-        db.execSQL("ALTER TABLE " + Tables.EVENTS +
-                " ADD COLUMN " + Calendar.Events.GUESTS_CAN_SEE_GUESTS +
+        db.execSQL("ALTER TABLE Events" +
+                " ADD COLUMN guestsCanSeeGuests" +
                 " INTEGER NOT NULL DEFAULT 1;");
-        db.execSQL("ALTER TABLE " + Tables.EVENTS +
-                " ADD COLUMN " + Calendar.Events.ORGANIZER +
+        db.execSQL("ALTER TABLE Events" +
+                " ADD COLUMN organizer" +
                 " STRING;");
-        db.execSQL("UPDATE " + Tables.EVENTS + " SET " + Calendar.Events.ORGANIZER + "=" +
-                "(SELECT " + Calendar.Attendees.ATTENDEE_EMAIL +
-                " FROM " + Tables.ATTENDEES + ""  +
+        db.execSQL("UPDATE Events SET organizer=" +
+                "(SELECT attendeeEmail" +
+                " FROM Attendees"  +
                 " WHERE " +
-                Tables.ATTENDEES + "." + Calendar.Attendees.EVENT_ID + "=" +
-                Tables.EVENTS + "." + Calendar.Events._ID +
+                "Attendees.event_id=" +
+                "Events._id" +
                 " AND " +
-                Tables.ATTENDEES + "." + Calendar.Attendees.ATTENDEE_RELATIONSHIP + "=2);");
+                "Attendees.attendeeRelationship=2);");
     }
 
     private void upgradeToVersion56(SQLiteDatabase db) {
-        db.execSQL("ALTER TABLE " + Tables.CALENDARS +
-                " ADD COLUMN " + Calendar.Calendars.OWNER_ACCOUNT + " TEXT;");
-        db.execSQL("ALTER TABLE " + Tables.EVENTS +
-                " ADD COLUMN " + Calendar.Events.HAS_ATTENDEE_DATA + " INTEGER;");
+        db.execSQL("ALTER TABLE Calendars" +
+                " ADD COLUMN ownerAccount TEXT;");
+        db.execSQL("ALTER TABLE Events" +
+                " ADD COLUMN hasAttendeeData INTEGER;");
 
         // Clear _sync_dirty to avoid a client-to-server sync that could blow away
         // server attendees.
         // Clear _sync_version to pull down the server's event (with attendees)
         // Change the URLs from full-selfattendance to full
-        db.execSQL("UPDATE " + Tables.EVENTS
-                + " SET " + Calendar.Events._SYNC_DIRTY + "=0, "
-                + Calendar.Events._SYNC_VERSION + "=NULL, "
-                + Calendar.Events._SYNC_ID + "="
-                + "REPLACE(" + Calendar.Events._SYNC_ID + ", " +
+        db.execSQL("UPDATE Events"
+                + " SET _sync_dirty=0, "
+                + "_sync_version=NULL, "
+                + "_sync_id="
+                + "REPLACE(_sync_id, " +
                     "'/private/full-selfattendance', '/private/full'),"
-                + Calendar.Events.COMMENTS_URI + "="
-                + "REPLACE(" + Calendar.Events.COMMENTS_URI + ", " +
+                + "commentsUri="
+                + "REPLACE(commentsUri, " +
                     "'/private/full-selfattendance', '/private/full');");
 
-        db.execSQL("UPDATE " + Tables.CALENDARS
-                + " SET " + "url="
-                + "REPLACE(" + "url, " + "'/private/full-selfattendance', '/private/full');");
+        db.execSQL("UPDATE Calendars"
+                + " SET url="
+                + "REPLACE(url, '/private/full-selfattendance', '/private/full');");
 
         // "cursor" iterates over all the calendars
-        Cursor cursor = db.rawQuery("SELECT " + Calendar.Calendars._ID + ", " +
-                Calendar.Calendars.URL + " FROM " + Tables.CALENDARS,
+        Cursor cursor = db.rawQuery("SELECT _id, " +
+                "url FROM Calendars",
                 null /* selection args */);
         // Add the owner column.
         if (cursor != null) {
             try {
-                final String updateSql = "UPDATE " + Tables.CALENDARS +
-                        " SET " + Calendar.Calendars.OWNER_ACCOUNT + "=?" +
-                        " WHERE " + Calendar.Calendars._ID + "=?";
+                final String updateSql = "UPDATE Calendars" +
+                        " SET ownerAccount=?" +
+                        " WHERE _id=?";
                 while (cursor.moveToNext()) {
                     Long id = cursor.getLong(0);
                     String url = cursor.getString(1);
@@ -1382,11 +1494,11 @@ import java.util.TimeZone;
 
     private void upgradeResync(SQLiteDatabase db) {
         // Delete sync state, so all records will be re-synced.
-        db.execSQL("DELETE FROM " + Tables.SYNC_STATE + ";");
+        db.execSQL("DELETE FROM _sync_state;");
 
         // "cursor" iterates over all the calendars
-        Cursor cursor = db.rawQuery("SELECT " + Calendar.Calendars._SYNC_ACCOUNT + "," +
-                Calendar.Calendars._SYNC_ACCOUNT_TYPE + ",url FROM " + Tables.CALENDARS,
+        Cursor cursor = db.rawQuery("SELECT _sync_account," +
+                "_sync_account_type,url FROM Calendars",
                 null /* selection args */);
         if (cursor != null) {
             try {
@@ -1404,42 +1516,42 @@ import java.util.TimeZone;
     }
 
     private void upgradeToVersion55(SQLiteDatabase db) {
-        db.execSQL("ALTER TABLE " + Tables.CALENDARS + " ADD COLUMN " +
-                Calendar.Calendars._SYNC_ACCOUNT_TYPE + " TEXT;");
-        db.execSQL("ALTER TABLE " + Tables.EVENTS + " ADD COLUMN " +
-                Calendar.Events._SYNC_ACCOUNT_TYPE + " TEXT;");
+        db.execSQL("ALTER TABLE Calendars ADD COLUMN " +
+                "_sync_account_type TEXT;");
+        db.execSQL("ALTER TABLE Events ADD COLUMN " +
+                "_sync_account_type TEXT;");
         db.execSQL("ALTER TABLE DeletedEvents ADD COLUMN _sync_account_type TEXT;");
-        db.execSQL("UPDATE " + Tables.CALENDARS
-                + " SET " + Calendar.Calendars._SYNC_ACCOUNT_TYPE + "='com.google'"
-                + " WHERE " + Calendar.Calendars._SYNC_ACCOUNT + " IS NOT NULL");
-        db.execSQL("UPDATE " + Tables.EVENTS
-                + " SET " + Calendar.Events._SYNC_ACCOUNT_TYPE + "='com.google'"
-                + " WHERE " + Calendar.Events._SYNC_ACCOUNT + " IS NOT NULL");
+        db.execSQL("UPDATE Calendars"
+                + " SET _sync_account_type='com.google'"
+                + " WHERE _sync_account IS NOT NULL");
+        db.execSQL("UPDATE Events"
+                + " SET _sync_account_type='com.google'"
+                + " WHERE _sync_account IS NOT NULL");
         db.execSQL("UPDATE DeletedEvents"
                 + " SET _sync_account_type='com.google'"
                 + " WHERE _sync_account IS NOT NULL");
         Log.w(TAG, "re-creating eventSyncAccountAndIdIndex");
         db.execSQL("DROP INDEX eventSyncAccountAndIdIndex");
-        db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON " + Tables.EVENTS + " ("
-                + Calendar.Events._SYNC_ACCOUNT_TYPE + ", "
-                + Calendar.Events._SYNC_ACCOUNT + ", "
-                + Calendar.Events._SYNC_ID + ");");
+        db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
+                + "_sync_account_type, "
+                + "_sync_account, "
+                + "_sync_id);");
     }
 
     private void upgradeToVersion54(SQLiteDatabase db) {
         Log.w(TAG, "adding eventSyncAccountAndIdIndex");
         db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
-                + Calendar.Events._SYNC_ACCOUNT + ", " + Calendar.Events._SYNC_ID + ");");
+                + "_sync_account, _sync_id);");
     }
 
     private void upgradeToVersion53(SQLiteDatabase db) {
         Log.w(TAG, "Upgrading CalendarAlerts table");
-        db.execSQL("ALTER TABLE " + Tables.CALENDAR_ALERTS + " ADD COLUMN " +
-                Calendar.CalendarAlerts.CREATION_TIME + " INTEGER DEFAULT 0;");
-        db.execSQL("ALTER TABLE " + Tables.CALENDAR_ALERTS + " ADD COLUMN " +
-                Calendar.CalendarAlerts.RECEIVED_TIME + " INTEGER DEFAULT 0;");
-        db.execSQL("ALTER TABLE " + Tables.CALENDAR_ALERTS + " ADD COLUMN " +
-                Calendar.CalendarAlerts.NOTIFY_TIME + " INTEGER DEFAULT 0;");
+        db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN " +
+                "creationTime INTEGER DEFAULT 0;");
+        db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN " +
+                "receivedTime INTEGER DEFAULT 0;");
+        db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN " +
+                "notifyTime INTEGER DEFAULT 0;");
     }
 
     private void upgradeToVersion52(SQLiteDatabase db) {
@@ -1449,8 +1561,8 @@ import java.util.TimeZone;
         // that we can format the date correctly for the "originalInstanceTime"
         // column when we make a change to the recurrence exception and
         // send it to the server.
-        db.execSQL("ALTER TABLE " + Tables.EVENTS + " ADD COLUMN " +
-                Calendar.Events.ORIGINAL_ALL_DAY + " INTEGER;");
+        db.execSQL("ALTER TABLE Events ADD COLUMN " +
+                "originalAllDay INTEGER;");
 
         // Iterate through the Events table and for each recurrence
         // exception, fill in the correct value for "originalAllDay",
@@ -1468,10 +1580,10 @@ import java.util.TimeZone;
         // second case should never occur.
 
         // "cursor" iterates over all the recurrences exceptions.
-        Cursor cursor = db.rawQuery("SELECT " + Calendar.Events._ID + "," +
-                Calendar.Events.ORIGINAL_EVENT +
-                " FROM " + Tables.EVENTS +
-                " WHERE " + Calendar.Events.ORIGINAL_EVENT + " IS NOT NULL",
+        Cursor cursor = db.rawQuery("SELECT _id," +
+                "originalEvent" +
+                " FROM Events" +
+                " WHERE originalEvent IS NOT NULL",
                 null /* selection args */);
         if (cursor != null) {
             try {
@@ -1480,9 +1592,9 @@ import java.util.TimeZone;
                     String originalEvent = cursor.getString(1);
 
                     // Find the original recurring event (if it exists)
-                    Cursor recur = db.rawQuery("SELECT " + Calendar.Events.ALL_DAY +
-                            " FROM " + Tables.EVENTS +
-                            " WHERE " + Calendar.Events._SYNC_ID + "=?",
+                    Cursor recur = db.rawQuery("SELECT allDay" +
+                            " FROM Events" +
+                            " WHERE _sync_id=?",
                             new String[] {originalEvent});
                     if (recur == null) {
                         continue;
@@ -1494,9 +1606,9 @@ import java.util.TimeZone;
                         // from the recurring event.
                         if (recur.moveToNext()) {
                             int allDay = recur.getInt(0);
-                            db.execSQL("UPDATE " + Tables.EVENTS +
-                                    " SET " + Calendar.Events.ORIGINAL_ALL_DAY + "=" + allDay +
-                                    " WHERE " + Calendar.Events._ID + "="+id);
+                            db.execSQL("UPDATE Events" +
+                                    " SET originalAllDay=" + allDay +
+                                    " WHERE _id="+id);
                         }
                     } finally {
                         recur.close();
@@ -1521,10 +1633,10 @@ import java.util.TimeZone;
 
         // Trigger to remove a calendar's events when we delete the calendar
         db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
-        db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON " + Tables.CALENDARS + " " +
+        db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON Calendars " +
                 "BEGIN " +
-                "DELETE FROM " + Tables.EVENTS + " WHERE " + Calendar.Events.CALENDAR_ID + "=" +
-                    "old." + Calendar.Events._ID + ";" +
+                "DELETE FROM Events WHERE calendar_id=" +
+                    "old._id;" +
                 "DELETE FROM DeletedEvents WHERE calendar_id = old._id;" +
                 "END");
         db.execSQL("DROP TRIGGER IF EXISTS event_to_deleted");

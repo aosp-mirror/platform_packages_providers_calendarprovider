@@ -15,21 +15,21 @@
  */
 package com.android.providers.calendar;
 
-import android.content.ContentValues;
-import android.content.Context;
+
+import com.android.common.content.SyncStateContentProviderHelper;
+
 import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.sqlite.SQLiteDatabase;
-import android.database.sqlite.SQLiteDatabase.CursorFactory;
-import android.provider.Calendar;
+import android.test.mock.MockContext;
 import android.test.suitebuilder.annotation.MediumTest;
-import android.test.suitebuilder.annotation.SmallTest;
 import android.text.TextUtils;
 import android.util.Log;
 
 import junit.framework.TestCase;
 
 public class CalendarDatabaseHelperTest extends TestCase {
+    private static final String TAG = "CDbHelperTest";
 
     private SQLiteDatabase mBadDb;
     private SQLiteDatabase mGoodDb;
@@ -42,6 +42,227 @@ public class CalendarDatabaseHelperTest extends TestCase {
         assertNotNull(mBadDb);
         mGoodDb = SQLiteDatabase.create(null);
         assertNotNull(mGoodDb);
+    }
+
+    protected void bootstrapDbVersion50(SQLiteDatabase db) {
+
+        // TODO remove the dependency on this system class
+        SyncStateContentProviderHelper syncStateHelper = new SyncStateContentProviderHelper();
+        syncStateHelper.createDatabase(db);
+
+        db.execSQL("CREATE TABLE Calendars (" +
+                        "_id INTEGER PRIMARY KEY," +
+                        "_sync_account TEXT," +
+                        "_sync_id TEXT," +
+                        "_sync_version TEXT," +
+                        "_sync_time TEXT," +            // UTC
+                        "_sync_local_id INTEGER," +
+                        "_sync_dirty INTEGER," +
+                        "_sync_mark INTEGER," + // Used to filter out new rows
+                        "url TEXT," +
+                        "name TEXT," +
+                        "displayName TEXT," +
+                        "hidden INTEGER NOT NULL DEFAULT 0," +
+                        "color INTEGER," +
+                        "access_level INTEGER," +
+                        "selected INTEGER NOT NULL DEFAULT 1," +
+                        "sync_events INTEGER NOT NULL DEFAULT 0," +
+                        "location TEXT," +
+                        "timezone TEXT" +
+                        ");");
+
+        // Trigger to remove a calendar's events when we delete the calendar
+        db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON Calendars " +
+                    "BEGIN " +
+                        "DELETE FROM Events WHERE calendar_id = old._id;" +
+                        "DELETE FROM DeletedEvents WHERE calendar_id = old._id;" +
+                    "END");
+
+        // TODO: do we need both dtend and duration?
+        db.execSQL("CREATE TABLE Events (" +
+                        "_id INTEGER PRIMARY KEY," +
+                        "_sync_account TEXT," +
+                        "_sync_id TEXT," +
+                        "_sync_version TEXT," +
+                        "_sync_time TEXT," +            // UTC
+                        "_sync_local_id INTEGER," +
+                        "_sync_dirty INTEGER," +
+                        "_sync_mark INTEGER," + // To filter out new rows
+                        "calendar_id INTEGER," +
+                        "htmlUri TEXT," +
+                        "title TEXT," +
+                        "eventLocation TEXT," +
+                        "description TEXT," +
+                        "eventStatus INTEGER," +
+                        "selfAttendeeStatus INTEGER NOT NULL DEFAULT 0," +
+                        "commentsUri TEXT," +
+                        "dtstart INTEGER," +               // millis since epoch
+                        "dtend INTEGER," +                 // millis since epoch
+                        "eventTimezone TEXT," +         // timezone for event
+                        "duration TEXT," +
+                        "allDay INTEGER NOT NULL DEFAULT 0," +
+                        "visibility INTEGER NOT NULL DEFAULT 0," +
+                        "transparency INTEGER NOT NULL DEFAULT 0," +
+                        "hasAlarm INTEGER NOT NULL DEFAULT 0," +
+                        "hasExtendedProperties INTEGER NOT NULL DEFAULT 0," +
+                        "rrule TEXT," +
+                        "rdate TEXT," +
+                        "exrule TEXT," +
+                        "exdate TEXT," +
+                        "originalEvent TEXT," +
+                        "originalInstanceTime INTEGER," +  // millis since epoch
+                        "lastDate INTEGER" +               // millis since epoch
+                    ");");
+
+        db.execSQL("CREATE INDEX eventsCalendarIdIndex ON Events (calendar_id);");
+
+        db.execSQL("CREATE TABLE EventsRawTimes (" +
+                        "_id INTEGER PRIMARY KEY," +
+                        "event_id INTEGER NOT NULL," +
+                        "dtstart2445 TEXT," +
+                        "dtend2445 TEXT," +
+                        "originalInstanceTime2445 TEXT," +
+                        "lastDate2445 TEXT," +
+                        "UNIQUE (event_id)" +
+                    ");");
+
+        // NOTE: we do not create a trigger to delete an event's instances upon update,
+        // as all rows currently get updated during a merge.
+
+        db.execSQL("CREATE TABLE DeletedEvents (" +
+                        "_sync_id TEXT," +
+                        "_sync_version TEXT," +
+                        "_sync_account TEXT," +
+                        "_sync_mark INTEGER" + // To filter out new rows
+                    ");");
+
+        db.execSQL("CREATE TABLE Instances (" +
+                        "_id INTEGER PRIMARY KEY," +
+                        "event_id INTEGER," +
+                        "begin INTEGER," +         // UTC millis
+                        "end INTEGER," +           // UTC millis
+                        "startDay INTEGER," +      // Julian start day
+                        "endDay INTEGER," +        // Julian end day
+                        "startMinute INTEGER," +   // minutes from midnight
+                        "endMinute INTEGER," +     // minutes from midnight
+                        "UNIQUE (event_id, begin, end)" +
+                    ");");
+
+        db.execSQL("CREATE INDEX instancesStartDayIndex ON Instances (startDay);");
+
+        db.execSQL("CREATE TABLE CalendarMetaData (" +
+                        "_id INTEGER PRIMARY KEY," +
+                        "localTimezone TEXT," +
+                        "minInstance INTEGER," +      // UTC millis
+                        "maxInstance INTEGER," +      // UTC millis
+                        "minBusyBits INTEGER," +      // UTC millis
+                        "maxBusyBits INTEGER" +       // UTC millis
+        ");");
+
+        db.execSQL("CREATE TABLE BusyBits(" +
+                        "day INTEGER PRIMARY KEY," +  // the Julian day
+                        "busyBits INTEGER," +         // 24 bits for 60-minute intervals
+                        "allDayCount INTEGER" +       // number of all-day events
+        ");");
+
+        db.execSQL("CREATE TABLE Attendees (" +
+                        "_id INTEGER PRIMARY KEY," +
+                        "event_id INTEGER," +
+                        "attendeeName TEXT," +
+                        "attendeeEmail TEXT," +
+                        "attendeeStatus INTEGER," +
+                        "attendeeRelationship INTEGER," +
+                        "attendeeType INTEGER" +
+                   ");");
+
+        db.execSQL("CREATE INDEX attendeesEventIdIndex ON Attendees (event_id);");
+
+        db.execSQL("CREATE TABLE Reminders (" +
+                        "_id INTEGER PRIMARY KEY," +
+                        "event_id INTEGER," +
+                        "minutes INTEGER," +
+                        "method INTEGER NOT NULL" +
+                        " DEFAULT 0);");
+
+        db.execSQL("CREATE INDEX remindersEventIdIndex ON Reminders (event_id);");
+
+        // This table stores the Calendar notifications that have gone off.
+        db.execSQL("CREATE TABLE CalendarAlerts (" +
+                        "_id INTEGER PRIMARY KEY," +
+                        "event_id INTEGER," +
+                        "begin INTEGER NOT NULL," +        // UTC millis
+                        "end INTEGER NOT NULL," +          // UTC millis
+                        "alarmTime INTEGER NOT NULL," +    // UTC millis
+                        "state INTEGER NOT NULL," +
+                        "minutes INTEGER," +
+                        "UNIQUE (alarmTime, begin, event_id)" +
+                   ");");
+
+        db.execSQL("CREATE INDEX calendarAlertsEventIdIndex ON CalendarAlerts (event_id);");
+
+        db.execSQL("CREATE TABLE ExtendedProperties (" +
+                        "_id INTEGER PRIMARY KEY," +
+                        "event_id INTEGER," +
+                        "name TEXT," +
+                        "value TEXT" +
+                   ");");
+
+        db.execSQL("CREATE INDEX extendedPropertiesEventIdIndex ON ExtendedProperties (event_id);");
+
+        // Trigger to remove data tied to an event when we delete that event.
+        db.execSQL("CREATE TRIGGER events_cleanup_delete DELETE ON Events " +
+                    "BEGIN " +
+                        "DELETE FROM Instances WHERE event_id = old._id;" +
+                        "DELETE FROM EventsRawTimes WHERE event_id = old._id;" +
+                        "DELETE FROM Attendees WHERE event_id = old._id;" +
+                        "DELETE FROM Reminders WHERE event_id = old._id;" +
+                        "DELETE FROM CalendarAlerts WHERE event_id = old._id;" +
+                        "DELETE FROM ExtendedProperties WHERE event_id = old._id;" +
+                    "END");
+
+        // Triggers to set the _sync_dirty flag when an attendee is changed,
+        // inserted or deleted
+        db.execSQL("CREATE TRIGGER attendees_update UPDATE ON Attendees " +
+                    "BEGIN " +
+                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
+                    "END");
+        db.execSQL("CREATE TRIGGER attendees_insert INSERT ON Attendees " +
+                    "BEGIN " +
+                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=new.event_id;" +
+                    "END");
+        db.execSQL("CREATE TRIGGER attendees_delete DELETE ON Attendees " +
+                    "BEGIN " +
+                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
+                    "END");
+
+        // Triggers to set the _sync_dirty flag when a reminder is changed,
+        // inserted or deleted
+        db.execSQL("CREATE TRIGGER reminders_update UPDATE ON Reminders " +
+                    "BEGIN " +
+                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
+                    "END");
+        db.execSQL("CREATE TRIGGER reminders_insert INSERT ON Reminders " +
+                    "BEGIN " +
+                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=new.event_id;" +
+                    "END");
+        db.execSQL("CREATE TRIGGER reminders_delete DELETE ON Reminders " +
+                    "BEGIN " +
+                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
+                    "END");
+        // Triggers to set the _sync_dirty flag when an extended property is changed,
+        // inserted or deleted
+        db.execSQL("CREATE TRIGGER extended_properties_update UPDATE ON ExtendedProperties " +
+                    "BEGIN " +
+                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
+                    "END");
+        db.execSQL("CREATE TRIGGER extended_properties_insert UPDATE ON ExtendedProperties " +
+                    "BEGIN " +
+                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=new.event_id;" +
+                    "END");
+        db.execSQL("CREATE TRIGGER extended_properties_delete UPDATE ON ExtendedProperties " +
+                    "BEGIN " +
+                        "UPDATE Events SET _sync_dirty=1 WHERE Events._id=old.event_id;" +
+                    "END");
     }
 
     private void createVersion67EventsTable(SQLiteDatabase db) {
@@ -91,6 +312,40 @@ public class CalendarDatabaseHelperTest extends TestCase {
                 "eventTimezone2 TEXT," + //timezone for event with allDay events in local timezone
                 "syncAdapterData TEXT" + //available for use by sync adapters
                 ");");
+    }
+
+    private void addVersion50Events() {
+        // April 5th 1:01:01 AM to April 6th 1:01:01
+        mBadDb.execSQL("INSERT INTO Events (_id,dtstart,dtend,duration," +
+                "eventTimezone,allDay,calendar_id) " +
+                "VALUES (1,1270454471000,1270540872000,'P10S'," +
+                "'America/Los_Angeles',1,1);");
+
+        // April 5th midnight to April 6th midnight, duration cleared
+        mGoodDb.execSQL("INSERT INTO Events (_id,dtstart,dtend,duration," +
+                "eventTimezone,allDay,calendar_id) " +
+                "VALUES (1,1270425600000,1270512000000,null," +
+                "'UTC',1,1);");
+
+        // April 5th 1:01:01 AM to April 6th 1:01:01, recurring weekly (We only check for the
+        // existence of an rrule so it doesn't matter if the day is correct)
+        mBadDb.execSQL("INSERT INTO Events (_id,dtstart,dtend,duration," +
+                "eventTimezone,allDay,rrule,calendar_id) " +
+                "VALUES (2,1270454462000,1270540863000," +
+                "'P10S','America/Los_Angeles',1," +
+                "'WEEKLY:MON',1);");
+
+        // April 5th midnight with 1 day duration, if only dtend was wrong we wouldn't fix it, but
+        // if anything else is wrong we clear dtend to be sure.
+        mGoodDb.execSQL("INSERT INTO Events (" +
+                "_id,dtstart,dtend,duration," +
+                "eventTimezone,allDay,rrule,calendar_id)" +
+                "VALUES (2,1270425600000,null,'P1D'," +
+                "'UTC',1," +
+                "'WEEKLY:MON',1);");
+
+        assertEquals(mBadDb.rawQuery("SELECT _id FROM Events;", null).getCount(), 2);
+        assertEquals(mGoodDb.rawQuery("SELECT _id FROM Events;", null).getCount(), 2);
     }
 
     private void addVersion67Events() {
@@ -144,6 +399,37 @@ public class CalendarDatabaseHelperTest extends TestCase {
                     new String[] {"1"});
             goodCursor = mGoodDb.rawQuery("SELECT _id,dtstart,dtend,duration,dtstart2,dtend2," +
                     "eventTimezone,eventTimezone2,rrule FROM Events WHERE allDay=?",
+                    new String[] {"1"});
+            // Check that we get the correct results back
+            assertTrue(compareCursors(badCursor, goodCursor));
+        } finally {
+            if (badCursor != null) {
+                badCursor.close();
+            }
+            if (goodCursor != null) {
+                goodCursor.close();
+            }
+        }
+    }
+
+    @MediumTest
+    public void testUpgradeToCurrentVersion() {
+        // Create event tables
+        bootstrapDbVersion50(mBadDb);
+        bootstrapDbVersion50(mGoodDb);
+        // Fill in good and bad events
+        addVersion50Events();
+        // Run the upgrade on the bad events
+        CalendarDatabaseHelper cDbHelper = new CalendarDatabaseHelper(new MockContext());
+        cDbHelper.onUpgrade(mBadDb, 50, CalendarDatabaseHelper.DATABASE_VERSION);
+        Cursor badCursor = null;
+        Cursor goodCursor = null;
+        try {
+            badCursor = mBadDb.rawQuery("SELECT _id,dtstart,dtend,duration," +
+                    "eventTimezone,rrule FROM Events WHERE allDay=?",
+                    new String[] {"1"});
+            goodCursor = mGoodDb.rawQuery("SELECT _id,dtstart,dtend,duration," +
+                    "eventTimezone,rrule FROM Events WHERE allDay=?",
                     new String[] {"1"});
             // Check that we get the correct results back
             assertTrue(compareCursors(badCursor, goodCursor));

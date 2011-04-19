@@ -409,9 +409,12 @@ import java.util.TimeZone;
                 Calendar.CalendarAlerts.BEGIN + " INTEGER NOT NULL," +          // UTC millis
                 Calendar.CalendarAlerts.END + " INTEGER NOT NULL," +            // UTC millis
                 Calendar.CalendarAlerts.ALARM_TIME + " INTEGER NOT NULL," +     // UTC millis
-                Calendar.CalendarAlerts.CREATION_TIME + " INTEGER NOT NULL," +  // UTC millis
-                Calendar.CalendarAlerts.RECEIVED_TIME + " INTEGER NOT NULL," +  // UTC millis
-                Calendar.CalendarAlerts.NOTIFY_TIME + " INTEGER NOT NULL," +    // UTC millis
+                // UTC millis
+                Calendar.CalendarAlerts.CREATION_TIME + " INTEGER NOT NULL DEFAULT 0," +
+                // UTC millis
+                Calendar.CalendarAlerts.RECEIVED_TIME + " INTEGER NOT NULL DEFAULT 0," +
+                // UTC millis
+                Calendar.CalendarAlerts.NOTIFY_TIME + " INTEGER NOT NULL DEFAULT 0," +
                 Calendar.CalendarAlerts.STATE + " INTEGER NOT NULL," +
                 Calendar.CalendarAlerts.MINUTES + " INTEGER," +
                 "UNIQUE (" +
@@ -1539,7 +1542,7 @@ import java.util.TimeZone;
         db.execSQL("ALTER TABLE Calendars" +
                 " ADD COLUMN ownerAccount TEXT;");
         db.execSQL("ALTER TABLE Events" +
-                " ADD COLUMN hasAttendeeData INTEGER;");
+                " ADD COLUMN hasAttendeeData INTEGER NOT NULL DEFAULT 0;");
 
         // Clear _sync_dirty to avoid a client-to-server sync that could blow away
         // server attendees.
@@ -1636,11 +1639,11 @@ import java.util.TimeZone;
     private void upgradeToVersion53(SQLiteDatabase db) {
         Log.w(TAG, "Upgrading CalendarAlerts table");
         db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN " +
-                "creationTime INTEGER DEFAULT 0;");
+                "creationTime INTEGER NOT NULL DEFAULT 0;");
         db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN " +
-                "receivedTime INTEGER DEFAULT 0;");
+                "receivedTime INTEGER NOT NULL DEFAULT 0;");
         db.execSQL("ALTER TABLE CalendarAlerts ADD COLUMN " +
-                "notifyTime INTEGER DEFAULT 0;");
+                "notifyTime INTEGER NOT NULL DEFAULT 0;");
     }
 
     private void upgradeToVersion52(SQLiteDatabase db) {

@@ -26,6 +26,8 @@ import android.test.suitebuilder.annotation.MediumTest;
 import android.text.TextUtils;
 import android.util.Log;
 
+import java.util.Arrays;
+
 import junit.framework.TestCase;
 
 public class CalendarDatabaseHelperTest extends TestCase {
@@ -88,7 +90,9 @@ public class CalendarDatabaseHelperTest extends TestCase {
                         "_sync_local_id INTEGER," +
                         "_sync_dirty INTEGER," +
                         "_sync_mark INTEGER," + // To filter out new rows
-                        "calendar_id INTEGER," +
+                        // TODO remove NOT NULL when upgrade rebuilds events to have
+                        // true v50 schema
+                        "calendar_id INTEGER NOT NULL," +
                         "htmlUri TEXT," +
                         "title TEXT," +
                         "eventLocation TEXT," +
@@ -441,6 +445,56 @@ public class CalendarDatabaseHelperTest extends TestCase {
                 goodCursor.close();
             }
         }
+    }
+
+    private static final String SQLITE_MASTER = "sqlite_master";
+
+    private static final String[] PROJECTION = {"tbl_name", "sql"};
+
+    public void testSchemasEqualForAllTables() {
+
+        CalendarDatabaseHelper cDbHelper = new CalendarDatabaseHelper(new MockContext());
+        bootstrapDbVersion50(mBadDb);
+        cDbHelper.onCreate(mGoodDb);
+        cDbHelper.onUpgrade(mBadDb, 50, CalendarDatabaseHelper.DATABASE_VERSION);
+        // Check that for all tables, schema definitions are the same between updated db and new db.
+        Cursor goodCursor = mGoodDb.query(SQLITE_MASTER, PROJECTION, null, null, null, null,
+                "tbl_name,sql" /* orderBy */);
+        Cursor badCursor = mBadDb.query(SQLITE_MASTER, PROJECTION, null, null, null, null,
+                "tbl_name,sql" /* orderBy */);
+
+        while (goodCursor.moveToNext()) {
+            assertTrue("Should have same number of tables", badCursor.moveToNext());
+            assertEquals("Table names different between upgraded schema and freshly-created scheme",
+                    goodCursor.getString(0), badCursor.getString(0));
+
+            String badString = badCursor.getString(1);
+            String goodString = goodCursor.getString(1);
+            if (badString == null && goodString == null) {
+                continue;
+            }
+            // Have to strip out some special characters and collapse spaces to
+            // get reasonable output
+            badString = badString.replaceAll("[()]", "");
+            goodString = goodString.replaceAll("[()]", "");
+            badString = badString.replaceAll(" +", " ");
+            goodString = goodString.replaceAll(" +", " ");
+            // And then split on commas and trim whitespace
+            String[] badSql = badString.split(",");
+            String[] goodSql = goodString.split(",");
+            for (int i = 0; i < badSql.length; i++) {
+                badSql[i] = badSql[i].trim();
+            }
+            for (int i = 0; i < goodSql.length; i++) {
+                goodSql[i] = goodSql[i].trim();
+            }
+            Arrays.sort(badSql);
+            Arrays.sort(goodSql);
+            assertTrue("Table schema different for table " + goodCursor.getString(0) + ": <"
+                    + Arrays.toString(goodSql) + "> -- <" + Arrays.toString(badSql) + ">",
+                    Arrays.equals(goodSql, badSql));
+        }
+        assertFalse("Should have same number of tables", badCursor.moveToNext());
     }
 
     /**

@@ -78,7 +78,7 @@ public class CalendarAlarmManager {
             + "   OR ca." + CalendarAlerts.ALARM_TIME + "<?"
             + "   OR (r." + Reminders.MINUTES + " ISNULL"
             + "       AND ca." + CalendarAlerts.MINUTES + "<>0)"
-            + "   OR e." + Calendars.SELECTED + "=0)";
+            + "   OR e." + Calendars.VISIBLE + "=0)";
 
     /**
      * We search backward in time for event reminders that we may have missed
@@ -331,7 +331,7 @@ public class CalendarAlarmManager {
                 + " ON (" + Views.EVENTS + "." + Events._ID + "=" + Tables.INSTANCES + "."
                 + Instances.EVENT_ID + ")" + " INNER JOIN " + Tables.REMINDERS + " ON ("
                 + Tables.INSTANCES + "." + Instances.EVENT_ID + "=" + Tables.REMINDERS + "."
-                + Reminders.EVENT_ID + ")" + " WHERE " + Calendars.SELECTED + "=1"
+                + Reminders.EVENT_ID + ")" + " WHERE " + Calendars.VISIBLE + "=1"
                 + " AND myAlarmTime>=CAST(? AS INT)" + " AND myAlarmTime<=CAST(? AS INT)" + " AND "
                 + Instances.END + ">=?" + " AND " + Reminders.METHOD + "=" + Reminders.METHOD_ALERT;
 

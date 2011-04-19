@@ -1020,7 +1020,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         m.put(Calendars.DISPLAY_NAME, name);
         m.put(Calendars.COLOR, "0xff123456");
         m.put(Calendars.TIMEZONE, timezone);
-        m.put(Calendars.SELECTED, 1);
+        m.put(Calendars.VISIBLE, 1);
         m.put(Calendars.SYNC1, CALENDAR_URL);
         m.put(Calendars.OWNER_ACCOUNT, account);
         m.put(Calendars._SYNC_ACCOUNT,  account);

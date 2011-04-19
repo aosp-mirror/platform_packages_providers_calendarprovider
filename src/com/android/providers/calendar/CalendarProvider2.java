@@ -2380,7 +2380,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
                 if (result > 0) {
                     // if visibility was toggled, we need to update alarms
-                    if (values.containsKey(Calendars.SELECTED)) {
+                    if (values.containsKey(Calendars.VISIBLE)) {
                         // pass false for removeAlarms since the call to
                         // scheduleNextAlarmLocked will remove any alarms for
                         // non-visible events anyways. removeScheduledAlarmsLocked
@@ -2943,7 +2943,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // Calendar columns
         sEventsProjectionMap.put(Calendars.COLOR, "color");
         sEventsProjectionMap.put(Calendars.ACCESS_LEVEL, "access_level");
-        sEventsProjectionMap.put(Calendars.SELECTED, "selected");
+        sEventsProjectionMap.put(Calendars.VISIBLE, "visible");
         sEventsProjectionMap.put(Calendars.SYNC1, "sync1");
         sEventsProjectionMap.put(Calendars.TIMEZONE, "timezone");
         sEventsProjectionMap.put(Calendars.OWNER_ACCOUNT, "ownerAccount");

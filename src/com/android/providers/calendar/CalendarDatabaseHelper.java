@@ -58,7 +58,7 @@ import java.util.TimeZone;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    static final int DATABASE_VERSION = 204;
+    static final int DATABASE_VERSION = 205;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -456,25 +456,26 @@ import java.util.TimeZone;
                 Calendar.Calendars._SYNC_ID + " TEXT," +
                 Calendar.Calendars._SYNC_VERSION + " TEXT," +
                 Calendar.Calendars._SYNC_TIME + " TEXT," +  // UTC
-                Calendar.Calendars._SYNC_DATA + " INTEGER," +
                 Calendar.Calendars._SYNC_DIRTY + " INTEGER," +
-                Calendar.Calendars._SYNC_MARK + " INTEGER," + // Used to filter out new rows
                 Calendar.Calendars.NAME + " TEXT," +
                 Calendar.Calendars.DISPLAY_NAME + " TEXT," +
                 Calendar.Calendars.COLOR + " INTEGER," +
                 Calendar.Calendars.ACCESS_LEVEL + " INTEGER," +
-                Calendar.Calendars.SELECTED + " INTEGER NOT NULL DEFAULT 1," +
+                Calendar.Calendars.VISIBLE + " INTEGER NOT NULL DEFAULT 1," +
                 Calendar.Calendars.SYNC_EVENTS + " INTEGER NOT NULL DEFAULT 0," +
                 Calendar.Calendars.LOCATION + " TEXT," +
                 Calendar.Calendars.TIMEZONE + " TEXT," +
                 Calendar.Calendars.OWNER_ACCOUNT + " TEXT, " +
-                Calendar.Calendars.ORGANIZER_CAN_RESPOND + " INTEGER NOT NULL DEFAULT 1," +
+                Calendar.Calendars.CAN_ORGANIZER_RESPOND + " INTEGER NOT NULL DEFAULT 1," +
+                Calendar.Calendars.CAN_MODIFY_TIME_ZONE + " INTEGER DEFAULT 1," +
+                Calendar.Calendars.MAX_REMINDERS + " INTEGER DEFAULT 5," +
                 Calendar.Calendars.DELETED + " INTEGER NOT NULL DEFAULT 0," +
                 Calendar.Calendars.SYNC1 + " TEXT," +
                 Calendar.Calendars.SYNC2 + " TEXT," +
                 Calendar.Calendars.SYNC3 + " TEXT," +
                 Calendar.Calendars.SYNC4 + " TEXT," +
-                Calendar.Calendars.SYNC5 + " TEXT" +
+                Calendar.Calendars.SYNC5 + " TEXT," +
+                Calendar.Calendars.SYNC6 + " TEXT" +
                 ");");
 
         // Trigger to remove a calendar's events when we delete the calendar
@@ -513,11 +514,7 @@ import java.util.TimeZone;
                 "sync5 TEXT" +
                 ");");
 
-        // Trigger to remove a calendar's events when we delete the calendar
-        db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON Calendars " +
-                "BEGIN " +
-                "DELETE FROM Events WHERE calendar_id=old._id;" +
-                "END");
+        createCalendarsCleanup200(db);
     }
 
     private void createCalendarsTable200(SQLiteDatabase db) {
@@ -548,7 +545,11 @@ import java.util.TimeZone;
                 "sync3 TEXT" +
                 ");");
 
-        // Trigger to remove a calendar's events when we delete the calendar
+        createCalendarsCleanup200(db);
+    }
+
+    /** Trigger to remove a calendar's events when we delete the calendar */
+    private void createCalendarsCleanup200(SQLiteDatabase db) {
         db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON Calendars " +
                 "BEGIN " +
                 "DELETE FROM Events WHERE calendar_id=old._id;" +
@@ -821,6 +822,11 @@ import java.util.TimeZone;
                 createEventsView = true;
                 oldVersion += 1;
             }
+            if (oldVersion == 204) {
+                upgradeToVersion205(db);
+                createEventsView = true;
+                oldVersion += 1;
+            }
             if (createEventsView) {
                 createEventsView(db);
             }
@@ -861,6 +867,89 @@ import java.util.TimeZone;
             return true;
         }
         return false;
+    }
+
+    @VisibleForTesting
+    void upgradeToVersion205(SQLiteDatabase db) {
+        /*
+         * Changes from version 204 to 205:
+         * - rename+reorder "_sync_mark" to "sync6" (and change type from INTEGER to TEXT)
+         * - rename "selected" to "visible"
+         * - rename "organizerCanRespond" to "canOrganizerRespond"
+         * - add "canModifyTimeZone"
+         * - add "maxReminders"
+         * - remove "_sync_local_id" (a/k/a _SYNC_DATA)
+         */
+
+        // rename old table, create new table with updated layout
+        db.execSQL("ALTER TABLE Calendars RENAME TO Calendars_Backup;");
+        db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
+        createCalendarsTable(db);
+
+        // copy fields from old to new
+        db.execSQL("INSERT INTO Calendars (" +
+                "_id, " +
+                "_sync_account, " +
+                "_sync_account_type, " +
+                "_sync_id, " +
+                "_sync_version, " +
+                "_sync_time, " +
+                "_sync_dirty, " +
+                "name, " +
+                "displayName, " +
+                "color, " +
+                "access_level, " +
+                "visible, " +                   // rename from "selected"
+                "sync_events, " +
+                "location, " +
+                "timezone, " +
+                "ownerAccount, " +
+                "canOrganizerRespond, " +       // rename from "organizerCanRespond"
+                "canModifyTimeZone, " +
+                "maxReminders, " +
+                "deleted, " +
+                "sync1, " +
+                "sync2, " +
+                "sync3, " +
+                "sync4," +
+                "sync5," +
+                "sync6) " +                     // rename/reorder from _sync_mark
+                "SELECT " +
+                "_id, " +
+                "_sync_account, " +
+                "_sync_account_type, " +
+                "_sync_id, " +
+                "_sync_version, " +
+                "_sync_time, " +
+                "_sync_dirty, " +
+                "name, " +
+                "displayName, " +
+                "color, " +
+                "access_level, " +
+                "selected, " +
+                "sync_events, " +
+                "location, " +
+                "timezone, " +
+                "ownerAccount, " +
+                "organizerCanRespond, " +
+                "1, " +
+                "5, " +
+                "deleted, " +
+                "sync1, " +
+                "sync2, " +
+                "sync3, " +
+                "sync4, " +
+                "sync5, " +
+                "_sync_mark " +
+                "FROM Calendars_Backup;"
+        );
+
+        // set these fields appropriately for Exchange events
+        db.execSQL("UPDATE Calendars SET canModifyTimeZone=0, maxReminders=1 " +
+                "WHERE _sync_account_type='com.android.exchange'");
+
+        // drop the old table
+        db.execSQL("DROP TABLE Calendars_Backup;");
     }
 
     @VisibleForTesting
@@ -1704,7 +1793,7 @@ import java.util.TimeZone;
                 + Calendar.Events.ALL_DAY + ","
                 + Calendar.Events.VISIBILITY + ","
                 + Calendar.Calendars.TIMEZONE + ","
-                + Calendar.Calendars.SELECTED + ","
+                + Calendar.Calendars.VISIBLE + ","
                 + Calendar.Calendars.ACCESS_LEVEL + ","
                 + Calendar.Events.TRANSPARENCY + ","
                 + Calendar.Calendars.COLOR + ","

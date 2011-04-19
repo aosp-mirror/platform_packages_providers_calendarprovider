@@ -62,7 +62,6 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
         CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars._ID);
         CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars._SYNC_TIME);
         CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars._SYNC_VERSION);
-        CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars._SYNC_DATA);
         CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars._SYNC_DIRTY);
         CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars._SYNC_MARK);
         INSTANCES_COLUMNS_TO_SKIP.add(Calendar.Instances._ID);
@@ -181,7 +180,7 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
         values.put(Calendar.Calendars.DISPLAY_NAME, name);
 
         values.put(Calendar.Calendars.SYNC_EVENTS, 1);
-        values.put(Calendar.Calendars.SELECTED, 1);
+        values.put(Calendar.Calendars.VISIBLE, 1);
         values.put(Calendar.Calendars.COLOR, -14069085 /* blue */);
         values.put(Calendar.Calendars.ACCESS_LEVEL, Calendar.Calendars.OWNER_ACCESS);
 

@@ -55,25 +55,25 @@ public class CalendarCts extends InstrumentationTestCase {
                 Calendars._SYNC_VERSION,
                 Calendars._SYNC_TIME,
                 Calendars._SYNC_DIRTY,
-                Calendars._SYNC_MARK,
                 Calendars.NAME,
                 Calendars.DISPLAY_NAME,
                 Calendars.COLOR,
                 Calendars.ACCESS_LEVEL,
-                Calendars.SELECTED,
+                Calendars.VISIBLE,
                 Calendars.SYNC_EVENTS,
                 Calendars.LOCATION,
                 Calendars.TIMEZONE,
                 Calendars.OWNER_ACCOUNT,
-                Calendars.ORGANIZER_CAN_RESPOND,
-                // Calendars.CAN_CHANGE_TZ,
-                // Calendars.MAX_REMINDERS,
+                Calendars.CAN_ORGANIZER_RESPOND,
+                Calendars.CAN_MODIFY_TIME_ZONE,
+                Calendars.MAX_REMINDERS,
                 Calendars.DELETED,
                 Calendars.SYNC1,
                 Calendars.SYNC2,
                 Calendars.SYNC3,
                 Calendars.SYNC4,
                 Calendars.SYNC5,
+                Calendars.SYNC6,
                 };
         // @formatter:on
 
@@ -96,7 +96,6 @@ public class CalendarCts extends InstrumentationTestCase {
             values.put(Calendars._SYNC_VERSION, "SYNC_V:" + seedString);
             values.put(Calendars._SYNC_TIME, "SYNC_TIME:" + seedString);
             values.put(Calendars._SYNC_DIRTY, 0);
-            values.put(Calendars._SYNC_MARK, 0);
             values.put(Calendars.OWNER_ACCOUNT, "OWNER_" + account);
 
             values.put(Calendars.NAME, seedString);
@@ -105,16 +104,19 @@ public class CalendarCts extends InstrumentationTestCase {
             values.put(Calendars.ACCESS_LEVEL, (seed % 8) * 100);
 
             values.put(Calendars.COLOR, 0xff000000 + seed);
-            values.put(Calendars.SELECTED, seed % 2);
+            values.put(Calendars.VISIBLE, seed % 2);
             values.put(Calendars.SYNC_EVENTS, seed % 2);
             values.put(Calendars.LOCATION, "LOCATION:" + seedString);
             values.put(Calendars.TIMEZONE, TIME_ZONES[seed % TIME_ZONES.length]);
-            values.put(Calendars.ORGANIZER_CAN_RESPOND, seed % 2);
+            values.put(Calendars.CAN_ORGANIZER_RESPOND, seed % 2);
+            values.put(Calendars.CAN_MODIFY_TIME_ZONE, seed % 2);
+            values.put(Calendars.MAX_REMINDERS, seed);
             values.put(Calendars.SYNC1, "SYNC1:" + seedString);
             values.put(Calendars.SYNC2, "SYNC2:" + seedString);
             values.put(Calendars.SYNC3, "SYNC3:" + seedString);
             values.put(Calendars.SYNC4, "SYNC4:" + seedString);
             values.put(Calendars.SYNC5, "SYNC5:" + seedString);
+            values.put(Calendars.SYNC6, "SYNC6:" + seedString);
 
             return values;
         }
@@ -130,7 +132,7 @@ public class CalendarCts extends InstrumentationTestCase {
 
             values.put(Calendars.DISPLAY_NAME, "DISPLAY_" + seedString);
             values.put(Calendars.COLOR, 0xff000000 + seed);
-            values.put(Calendars.SELECTED, seed % 2);
+            values.put(Calendars.VISIBLE, seed % 2);
             values.put(Calendars.SYNC_EVENTS, seed % 2);
 
             original.putAll(values);

@@ -40,4 +40,21 @@
     <!-- What to show in messaging that refers to this provider, e.g. AccountSyncSettings -->
     <string name="provider_label">Calendar</string>
 
+    <!-- Debug tool - dialog - delete file now [CHAR LIMIT=NONE] -->
+    <string name="debug_tool_delete_button">Delete now</string>
+
+    <!-- Debug tool - dialog - start copying [CHAR LIMIT=NONE] -->
+    <string name="debug_tool_start_button">Start</string>
+    
+    <!-- Debug tool - Main message shown to the user when starting up the debug tool [CHAR LIMIT=NONE] -->
+    <string name="debug_tool_message">You are about to 1) make a copy of your calendar database to the sd card/usb storage which is readable by any app and 2) email it. Remember to delete it as soon as you have successfully copied it off the device or the email is received.</string>
+
+    <!-- Debug tool - email subject [CHAR LIMIT=NONE] -->
+    <string name="debug_tool_email_sender_picker">Select a program to send your file</string>
+
+    <!-- Debug tool - email subject [CHAR LIMIT=NONE] -->
+    <string name="debug_tool_email_subject">Calendar Db attached</string>
+
+    <!-- Debug tool - email body [CHAR LIMIT=NONE] -->
+    <string name="debug_tool_email_body">Attached is my calendar database with all my appointments and personal information. Please handle with care.</string>
 </resources>

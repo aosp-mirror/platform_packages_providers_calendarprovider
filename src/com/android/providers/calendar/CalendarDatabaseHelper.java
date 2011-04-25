@@ -488,7 +488,7 @@ import java.util.TimeZone;
                 "END");
     }
 
-    private void createCalendarsTable201(SQLiteDatabase db) {
+    private void createCalendarsTable202(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE Calendars (" +
                 "_id INTEGER PRIMARY KEY," +
                 "_sync_account TEXT," +
@@ -983,7 +983,7 @@ import java.util.TimeZone;
         db.execSQL("ALTER TABLE Calendars RENAME TO Calendars_Backup;");
 
         db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
-        createCalendarsTable201(db);
+        createCalendarsTable202(db);
 
         // Populate the new Calendars table and put into the "sync5" column the value of the
         // old "hidden" column

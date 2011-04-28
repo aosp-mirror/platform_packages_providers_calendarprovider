@@ -73,6 +73,7 @@ import java.util.regex.Pattern;
  */
 public class CalendarProvider2 extends SQLiteContentProvider implements OnAccountsUpdateListener {
 
+
     protected static final String TAG = "CalendarProvider2";
 
     private static final String TIMEZONE_GMT = "GMT";
@@ -80,6 +81,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     // device
     private static final String ACCOUNT_TYPE_LOCAL = "LOCAL";
 
+    private static final String ACCOUNT_SELECTION_PREFIX = Calendars._SYNC_ACCOUNT + "=? AND "
+            + Calendars._SYNC_ACCOUNT_TYPE + "=?";
 
     protected static final boolean PROFILE = false;
     private static final boolean MULTIPLE_ATTENDEES_PER_EVENT = true;
@@ -1390,10 +1393,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "insertInTransaction: " + uri);
         }
+        final int match = sUriMatcher.match(uri);
+        verifyTransactionAllowed(TRANSACTION_INSERT, uri, values, callerIsSyncAdapter, match,
+                null /* selection */, null /* selection args */);
 
         long id = 0;
 
-        final int match = sUriMatcher.match(uri);
         switch (match) {
               case SYNCSTATE:
                 id = mDbHelper.getSyncState().insert(mDb, values);
@@ -1948,6 +1953,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Log.v(TAG, "deleteInTransaction: " + uri);
         }
         final int match = sUriMatcher.match(uri);
+        verifyTransactionAllowed(TRANSACTION_DELETE, uri, null, callerIsSyncAdapter, match,
+                selection, selectionArgs);
+
         switch (match) {
             case SYNCSTATE:
                 return mDbHelper.getSyncState().delete(mDb, selection, selectionArgs);
@@ -1964,7 +1972,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case EVENTS:
             {
                 int result = 0;
-                selection = appendAccountToSelection(uri, selection);
+                selection = appendSyncAccountToSelection(uri, selection);
 
                 // Query this event to get the ids to delete.
                 Cursor cursor = mDb.query(Tables.EVENTS, ID_ONLY_PROJECTION,
@@ -2316,9 +2324,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "updateInTransaction: " + uri);
         }
+        final int match = sUriMatcher.match(uri);
+        verifyTransactionAllowed(TRANSACTION_UPDATE, uri, values, callerIsSyncAdapter, match,
+                selection, selectionArgs);
 
         int count = 0;
-        final int match = sUriMatcher.match(uri);
 
         // TODO: remove this restriction
         if (!TextUtils.isEmpty(selection) && match != CALENDAR_ALERTS
@@ -2687,9 +2697,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         final String accountType = QueryParameterUtils.getQueryParameter(uri,
                 Calendar.EventsEntity.ACCOUNT_TYPE);
         if (!TextUtils.isEmpty(accountName)) {
-            StringBuilder selectionSb = new StringBuilder(Calendar.Calendars._SYNC_ACCOUNT + "="
+            StringBuilder selectionSb = new StringBuilder(Calendar.Calendars.ACCOUNT_NAME + "="
                     + DatabaseUtils.sqlEscapeString(accountName) + " AND "
-                    + Calendar.Calendars._SYNC_ACCOUNT_TYPE + "="
+                    + Calendar.Calendars.ACCOUNT_TYPE + "="
                     + DatabaseUtils.sqlEscapeString(accountType));
             if (!TextUtils.isEmpty(selection)) {
                 selectionSb.append(" AND (");
@@ -2699,6 +2709,128 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             return selectionSb.toString();
         } else {
             return selection;
+        }
+    }
+
+    private String appendSyncAccountToSelection(Uri uri, String selection) {
+        final String accountName = QueryParameterUtils.getQueryParameter(uri,
+                Calendar.EventsEntity.ACCOUNT_NAME);
+        final String accountType = QueryParameterUtils.getQueryParameter(uri,
+                Calendar.EventsEntity.ACCOUNT_TYPE);
+        if (!TextUtils.isEmpty(accountName)) {
+            StringBuilder selectionSb = new StringBuilder(Calendar.Events._SYNC_ACCOUNT + "="
+                    + DatabaseUtils.sqlEscapeString(accountName) + " AND "
+                    + Calendar.Events._SYNC_ACCOUNT_TYPE + "="
+                    + DatabaseUtils.sqlEscapeString(accountType));
+            if (!TextUtils.isEmpty(selection)) {
+                selectionSb.append(" AND (");
+                selectionSb.append(selection);
+                selectionSb.append(')');
+            }
+            return selectionSb.toString();
+        } else {
+            return selection;
+        }
+    }
+
+    /**
+     * Verifies that the operation is allowed and throws an exception if it
+     * isn't. This defines the limits of a sync adapter call vs an app call.
+     * 
+     * @param type The type of call, {@link #TRANSACTION_QUERY},
+     *            {@link #TRANSACTION_INSERT}, {@link #TRANSACTION_UPDATE}, or
+     *            {@link #TRANSACTION_DELETE}
+     * @param uri
+     * @param values
+     * @param isSyncAdapter
+     */
+    private void verifyTransactionAllowed(int type, Uri uri, ContentValues values,
+            boolean isSyncAdapter, int uriMatch, String selection, String[] selectionArgs) {
+        switch (type) {
+            case TRANSACTION_QUERY:
+                return;
+            case TRANSACTION_INSERT:
+                if (uriMatch == INSTANCES) {
+                    throw new UnsupportedOperationException(
+                            "Inserting into instances not supported");
+                }
+                if (isSyncAdapter) {
+                    // check that account and account type are specified
+                    verifyHasAccount(uri, selection, selectionArgs);
+                } else {
+                    // check that sync only columns aren't included
+                    verifyNoSyncColumns(values, uriMatch);
+                }
+                return;
+            case TRANSACTION_UPDATE:
+                if (uriMatch == INSTANCES) {
+                    throw new UnsupportedOperationException("Updating instances not supported");
+                }
+                if (isSyncAdapter) {
+                    // check that account and account type are specified
+                    verifyHasAccount(uri, selection, selectionArgs);
+                } else {
+                    // check that sync only columns aren't included
+                    verifyNoSyncColumns(values, uriMatch);
+                }
+                return;
+            case TRANSACTION_DELETE:
+                if (uriMatch == INSTANCES) {
+                    throw new UnsupportedOperationException("Deleting instances not supported");
+                }
+                if (isSyncAdapter) {
+                    // check that account and account type are specified
+                    verifyHasAccount(uri, selection, selectionArgs);
+                }
+                return;
+        }
+    }
+
+    private void verifyHasAccount(Uri uri, String selection, String[] selectionArgs) {
+        String accountName = QueryParameterUtils.getQueryParameter(uri, Calendars._SYNC_ACCOUNT);
+        String accountType = QueryParameterUtils.getQueryParameter(uri,
+                Calendars._SYNC_ACCOUNT_TYPE);
+        if (TextUtils.isEmpty(accountName) || TextUtils.isEmpty(accountType)) {
+            // TODO remove this after ACCOUNT_NAME/TYPE get renamed.
+            accountName = QueryParameterUtils.getQueryParameter(uri,
+                    Calendar.SyncState.ACCOUNT_NAME);
+            accountType = QueryParameterUtils.getQueryParameter(uri,
+                    Calendar.SyncState.ACCOUNT_TYPE);
+        }
+        if (TextUtils.isEmpty(accountName) || TextUtils.isEmpty(accountType)) {
+            if (selection != null && selection.startsWith(ACCOUNT_SELECTION_PREFIX)) {
+                accountName = selectionArgs[0];
+                accountType = selectionArgs[1];
+            }
+        }
+        if (TextUtils.isEmpty(accountName) || TextUtils.isEmpty(accountType)) {
+            throw new IllegalArgumentException(
+                    "Sync adapters must specify an account and account type: " + uri);
+        }
+    }
+
+    private void verifyNoSyncColumns(ContentValues values, int uriMatch) {
+        if (values == null) {
+            return;
+        }
+        String[] syncColumns;
+        switch (uriMatch) {
+            case CALENDARS:
+            case CALENDARS_ID:
+            case CALENDAR_ENTITIES:
+            case CALENDAR_ENTITIES_ID:
+                syncColumns = SYNC_WRITABLE_CALENDARS_COLUMNS;
+                break;
+            default:
+                syncColumns = SYNC_WRITABLE_DEFAULT_COLUMNS;
+                break;
+
+        }
+        for (int i = 0; i < syncColumns.length; i++) {
+            if (values.containsKey(syncColumns[i])) {
+                throw new IllegalArgumentException("Only sync adapters may write to "
+                        + syncColumns[i]);
+            }
         }
     }
 
@@ -2821,6 +2953,43 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
         mContext.sendBroadcast(intent, null);
     }
+
+    private static final int TRANSACTION_QUERY = 0;
+    private static final int TRANSACTION_INSERT = 1;
+    private static final int TRANSACTION_UPDATE = 2;
+    private static final int TRANSACTION_DELETE = 3;
+
+    // @formatter:off
+    private static final String[] SYNC_WRITABLE_CALENDARS_COLUMNS = new String[] {
+        Calendars._SYNC_ACCOUNT,
+        Calendars._SYNC_ACCOUNT_TYPE,
+        Calendars._SYNC_ID,
+        Calendars._SYNC_TIME,
+        Calendars._SYNC_VERSION,
+        Calendars._SYNC_DIRTY,
+        Calendars.OWNER_ACCOUNT,
+        Calendars.MAX_REMINDERS,
+        // Calendars.ALLOWED_ALERTS
+        Calendars.CAN_MODIFY_TIME_ZONE,
+        Calendars.CAN_ORGANIZER_RESPOND,
+        Calendars.LOCATION,
+        Calendars.TIMEZONE,
+        Calendars.ACCESS_LEVEL,
+        Calendars.DELETED,
+        Calendars.SYNC1,
+        Calendars.SYNC2,
+        Calendars.SYNC3,
+        Calendars.SYNC4,
+        Calendars.SYNC5,
+        Calendars.SYNC6,
+        Calendars.SYNC_STATE,
+    };
+
+    private static final String[] SYNC_WRITABLE_DEFAULT_COLUMNS = new String[] {
+        Calendar.SyncColumns._SYNC_DIRTY,
+        Calendar.SyncColumns._SYNC_ID
+    };
+    // @formatter:on
 
     private static final int EVENTS = 1;
     private static final int EVENTS_ID = 2;

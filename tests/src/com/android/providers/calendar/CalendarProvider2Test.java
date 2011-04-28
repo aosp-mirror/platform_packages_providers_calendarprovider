@@ -76,6 +76,9 @@ import java.util.TimeZone;
 public class CalendarProvider2Test extends AndroidTestCase {
     static final String TAG = "calendar";
 
+    private static final String DEFAULT_ACCOUNT_TYPE = "com.google";
+    private static final String DEFAULT_ACCOUNT = "joe@joe.com";
+
     private CalendarProvider2ForTesting mProvider;
     private SQLiteDatabase mDb;
     private MetaData mMetaData;
@@ -184,16 +187,20 @@ public class CalendarProvider2Test extends AndroidTestCase {
      */
     private class Delete implements Command {
         String eventName;
+        String account;
+        String accountType;
         int expected;
 
-        public Delete(String eventName, int expected) {
+        public Delete(String eventName, int expected, String account, String accountType) {
             this.eventName = eventName;
             this.expected = expected;
+            this.account = account;
+            this.accountType = accountType;
         }
 
         public void execute() {
             Log.i(TAG, "delete " + eventName);
-            int rows = deleteMatchingEvents(eventName);
+            int rows = deleteMatchingEvents(eventName, account, accountType);
             assertEquals(expected, rows);
         }
     }
@@ -737,13 +744,13 @@ public class CalendarProvider2Test extends AndroidTestCase {
             new Insert("normal1"),
             new Insert("normal2"),
             new QueryNumInstances("2008-05-01T00:00:00", "2008-05-31T00:01:00", 3),
-            new Delete("normal1", 1),
+            new Delete("normal1", 1, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
             new QueryNumEvents(2),
             new QueryNumInstances("2008-05-01T00:00:00", "2008-05-31T00:01:00", 2),
-            new Delete("normal1", 0),
-            new Delete("normal2", 1),
+            new Delete("normal1", 0, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
+            new Delete("normal2", 1, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
             new QueryNumEvents(1),
-            new Delete("normal0", 1),
+            new Delete("normal0", 1, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
             new QueryNumEvents(0),
     };
 
@@ -757,11 +764,11 @@ public class CalendarProvider2Test extends AndroidTestCase {
             new QueryNumInstances("2008-05-01T00:00:00", "2008-05-01T00:01:00", 0),
             new QueryNumInstances("2008-05-02T00:00:00", "2008-05-02T00:01:00", 2),
             new QueryNumInstances("2008-05-03T00:00:00", "2008-05-03T00:01:00", 1),
-            new Delete("allday0", 1),
+            new Delete("allday0", 1, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
             new QueryNumEvents(1),
             new QueryNumInstances("2008-05-02T00:00:00", "2008-05-02T00:01:00", 1),
             new QueryNumInstances("2008-05-03T00:00:00", "2008-05-03T00:01:00", 1),
-            new Delete("allday1", 1),
+            new Delete("allday1", 1, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
             new QueryNumEvents(0),
     };
 
@@ -775,11 +782,11 @@ public class CalendarProvider2Test extends AndroidTestCase {
             new QueryNumInstances("2008-05-01T00:00:00", "2008-05-02T00:01:00", 3),
             new QueryNumInstances("2008-05-01T01:01:00", "2008-05-02T00:01:00", 2),
             new QueryNumInstances("2008-05-01T00:00:00", "2008-05-04T00:01:00", 6),
-            new Delete("daily1", 1),
+            new Delete("daily1", 1, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
             new QueryNumEvents(1),
             new QueryNumInstances("2008-05-01T00:00:00", "2008-05-02T00:01:00", 2),
             new QueryNumInstances("2008-05-01T00:00:00", "2008-05-04T00:01:00", 4),
-            new Delete("daily0", 1),
+            new Delete("daily0", 1, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
             new QueryNumEvents(0),
     };
 
@@ -1011,7 +1018,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
     }
 
     private int insertCal(String name, String timezone) {
-        return insertCal(name, timezone, "joe@joe.com");
+        return insertCal(name, timezone, DEFAULT_ACCOUNT);
     }
 
     private int insertCal(String name, String timezone, String account) {
@@ -1024,12 +1031,19 @@ public class CalendarProvider2Test extends AndroidTestCase {
         m.put(Calendars.SYNC1, CALENDAR_URL);
         m.put(Calendars.OWNER_ACCOUNT, account);
         m.put(Calendars._SYNC_ACCOUNT,  account);
-        m.put(Calendars._SYNC_ACCOUNT_TYPE,  "com.google");
+        m.put(Calendars._SYNC_ACCOUNT_TYPE, DEFAULT_ACCOUNT_TYPE);
         m.put(Calendars.SYNC_EVENTS,  1);
 
-        Uri url = mResolver.insert(mCalendarsUri, m);
+        Uri url = mResolver.insert(
+                addSyncQueryParams(mCalendarsUri, account, DEFAULT_ACCOUNT_TYPE), m);
         String id = url.getLastPathSegment();
         return Integer.parseInt(id);
+    }
+
+    private Uri addSyncQueryParams(Uri uri, String account, String accountType) {
+        return uri.buildUpon().appendQueryParameter(Calendar.CALLER_IS_SYNCADAPTER, "true")
+                .appendQueryParameter(Calendars._SYNC_ACCOUNT, account)
+                .appendQueryParameter(Calendars._SYNC_ACCOUNT_TYPE, accountType).build();
     }
 
     private int deleteMatchingCalendars(String selection, String[] selectionArgs) {
@@ -1091,7 +1105,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
      * @param title the given title to match events on
      * @return the number of rows deleted
      */
-    private int deleteMatchingEvents(String title) {
+    private int deleteMatchingEvents(String title, String account, String accountType) {
         Cursor cursor = mResolver.query(mEventsUri, new String[] { Events._ID },
                 "title=?", new String[] { title }, null);
         int numRows = 0;
@@ -1099,7 +1113,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
             long id = cursor.getLong(0);
             // Do delete as a sync adapter so event is really deleted, not just marked
             // as deleted.
-            Uri uri = updatedUri(ContentUris.withAppendedId(Events.CONTENT_URI, id), true);
+            Uri uri = updatedUri(ContentUris.withAppendedId(Events.CONTENT_URI, id), true, account,
+                    accountType);
             numRows += mResolver.delete(uri, null, null);
         }
         cursor.close();
@@ -1328,7 +1343,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
             assertEquals(instance.mExpectedOccurrences, cursor.getCount());
             cursor.close();
             // Delete as sync_adapter so event is really deleted.
-            int rows = mResolver.delete(updatedUri(url, true),
+            int rows = mResolver.delete(
+                    updatedUri(url, true, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
                     null /* selection */, null /* selection args */);
             assertEquals(1, rows);
         }
@@ -1670,7 +1686,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
         ContentValues attendee = new ContentValues();
         attendee.put(Calendar.Attendees.ATTENDEE_NAME, "Joe");
-        attendee.put(Calendar.Attendees.ATTENDEE_EMAIL, "joe@joe.com");
+        attendee.put(Calendar.Attendees.ATTENDEE_EMAIL, DEFAULT_ACCOUNT);
         attendee.put(Calendar.Attendees.ATTENDEE_STATUS,
                 Calendar.Attendees.ATTENDEE_STATUS_DECLINED);
         attendee.put(Calendar.Attendees.ATTENDEE_TYPE, Calendar.Attendees.TYPE_REQUIRED);
@@ -1836,12 +1852,15 @@ public class CalendarProvider2Test extends AndroidTestCase {
         String calendarIdString = Integer.toString(mCalendarId);
         checkEvents(0, mDb, calendarIdString);
         Uri eventUri = insertEvent(mCalendarId, findEvent("daily0"));
+        // TODO This has a race condition that causes checkEvents to not find
+        // the just added event
+        Thread.sleep(200);
         checkEvents(1, mDb, calendarIdString);
         long eventId = ContentUris.parseId(eventUri);
 
         ContentValues attendee = new ContentValues();
         attendee.put(Calendar.Attendees.ATTENDEE_NAME, "Joe");
-        attendee.put(Calendar.Attendees.ATTENDEE_EMAIL, "joe@joe.com");
+        attendee.put(Calendar.Attendees.ATTENDEE_EMAIL, DEFAULT_ACCOUNT);
         attendee.put(Calendar.Attendees.ATTENDEE_TYPE, Calendar.Attendees.TYPE_REQUIRED);
         attendee.put(Calendar.Attendees.ATTENDEE_RELATIONSHIP,
                 Calendar.Attendees.RELATIONSHIP_ORGANIZER);
@@ -1850,11 +1869,14 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
         Cursor cursor = mResolver.query(Calendar.Attendees.CONTENT_URI, null,
                 "event_id=" + eventId, null, null);
-        assertEquals("Created event is missing - cannot find EventUri = " + eventUri, 1, cursor.getCount());
+        assertEquals("Created event is missing - cannot find EventUri = " + eventUri, 1,
+                cursor.getCount());
         cursor.close();
 
         cursor = mResolver.query(eventUri, null, null, null, null);
-        assertEquals("Created event is missing - cannot find EventUri = " + eventUri, 1, cursor.getCount());
+        // TODO figure out why this test fails. App works fine for this case.
+        assertEquals("Created event is missing - cannot find EventUri = " + eventUri, 1,
+                cursor.getCount());
         int selfColumn = cursor.getColumnIndex(Calendar.Events.SELF_ATTENDEE_STATUS);
         cursor.moveToNext();
         long selfAttendeeStatus = cursor.getInt(selfColumn);
@@ -1950,10 +1972,9 @@ public class CalendarProvider2Test extends AndroidTestCase {
     /**
      * Add CALLER_IS_SYNCADAPTER to URI if this is a sync adapter operation.
      */
-    private Uri updatedUri(Uri uri, boolean syncAdapter) {
+    private Uri updatedUri(Uri uri, boolean syncAdapter, String account, String accountType) {
         if (syncAdapter) {
-            return uri.buildUpon().appendQueryParameter(Calendar.CALLER_IS_SYNCADAPTER, "true")
-                    .build();
+            return addSyncQueryParams(uri, account, accountType);
         } else {
             return uri;
         }
@@ -1983,14 +2004,15 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
         ContentValues attendee = new ContentValues();
         attendee.put(Calendar.Attendees.ATTENDEE_NAME, "Joe");
-        attendee.put(Calendar.Attendees.ATTENDEE_EMAIL, "joe@joe.com");
+        attendee.put(Calendar.Attendees.ATTENDEE_EMAIL, DEFAULT_ACCOUNT);
         attendee.put(Calendar.Attendees.ATTENDEE_TYPE, Calendar.Attendees.TYPE_REQUIRED);
         attendee.put(Calendar.Attendees.ATTENDEE_RELATIONSHIP,
                 Calendar.Attendees.RELATIONSHIP_ORGANIZER);
         attendee.put(Calendar.Attendees.EVENT_ID, eventId);
 
         Uri attendeeUri = mResolver.insert(
-                updatedUri(Calendar.Attendees.CONTENT_URI, syncAdapter),
+                updatedUri(Calendar.Attendees.CONTENT_URI, syncAdapter, DEFAULT_ACCOUNT,
+                        DEFAULT_ACCOUNT_TYPE),
                 attendee);
         testAndClearDirty(eventId, syncAdapter ? 0 : 1);
         testQueryCount(Calendar.Attendees.CONTENT_URI, "event_id=" + eventId, 1);
@@ -2001,7 +2023,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
         reminder.put(Calendar.Attendees.EVENT_ID, eventId);
 
         Uri reminderUri = mResolver.insert(
-                updatedUri(Calendar.Reminders.CONTENT_URI, syncAdapter), reminder);
+                updatedUri(Calendar.Reminders.CONTENT_URI, syncAdapter, DEFAULT_ACCOUNT,
+                        DEFAULT_ACCOUNT_TYPE), reminder);
         testAndClearDirty(eventId, syncAdapter ? 0 : 1);
         testQueryCount(Calendar.Reminders.CONTENT_URI, "event_id=" + eventId, 1);
 
@@ -2019,7 +2042,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
         alert.put(Calendar.CalendarAlerts.EVENT_ID, eventId);
 
         Uri alertUri = mResolver.insert(
-                updatedUri(Calendar.CalendarAlerts.CONTENT_URI, syncAdapter), alert);
+                updatedUri(Calendar.CalendarAlerts.CONTENT_URI, syncAdapter, DEFAULT_ACCOUNT,
+                        DEFAULT_ACCOUNT_TYPE), alert);
         // Alerts don't dirty the event
         testAndClearDirty(eventId, 0);
         testQueryCount(Calendar.CalendarAlerts.CONTENT_URI, "event_id=" + eventId, 1);
@@ -2030,7 +2054,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
         extended.put(Calendar.ExtendedProperties.EVENT_ID, eventId);
 
         Uri extendedUri = mResolver.insert(
-                updatedUri(Calendar.ExtendedProperties.CONTENT_URI, syncAdapter), extended);
+                updatedUri(Calendar.ExtendedProperties.CONTENT_URI, syncAdapter, DEFAULT_ACCOUNT,
+                        DEFAULT_ACCOUNT_TYPE), extended);
         testAndClearDirty(eventId, syncAdapter ? 0 : 1);
         testQueryCount(Calendar.ExtendedProperties.CONTENT_URI, "event_id=" + eventId, 2);
 
@@ -2041,7 +2066,9 @@ public class CalendarProvider2Test extends AndroidTestCase {
         // Need to include EVENT_ID with attendee update.  Is that desired?
         attendee.put(Calendar.Attendees.EVENT_ID, eventId);
 
-        assertEquals("update", 1, mResolver.update(updatedUri(attendeeUri, syncAdapter), attendee,
+        assertEquals("update", 1, mResolver.update(
+                updatedUri(attendeeUri, syncAdapter, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
+                attendee,
                 null /* where */, null /* selectionArgs */));
         testAndClearDirty(eventId, syncAdapter ? 0 : 1);
 
@@ -2050,7 +2077,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
         alert = new ContentValues();
         alert.put(Calendar.CalendarAlerts.STATE, Calendar.CalendarAlerts.DISMISSED);
 
-        assertEquals("update", 1, mResolver.update(updatedUri(alertUri, syncAdapter), alert,
+        assertEquals("update", 1, mResolver.update(
+                updatedUri(alertUri, syncAdapter, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE), alert,
                 null /* where */, null /* selectionArgs */));
         // Alerts don't dirty the event
         testAndClearDirty(eventId, 0);
@@ -2059,7 +2087,9 @@ public class CalendarProvider2Test extends AndroidTestCase {
         extended = new ContentValues();
         extended.put(Calendar.ExtendedProperties.VALUE, "baz");
 
-        assertEquals("update", 1, mResolver.update(updatedUri(extendedUri, syncAdapter), extended,
+        assertEquals("update", 1, mResolver.update(
+                updatedUri(extendedUri, syncAdapter, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
+                extended,
                 null /* where */, null /* selectionArgs */));
         testAndClearDirty(eventId, syncAdapter ? 0 : 1);
         testQueryCount(Calendar.ExtendedProperties.CONTENT_URI, "event_id=" + eventId, 2);
@@ -2067,25 +2097,28 @@ public class CalendarProvider2Test extends AndroidTestCase {
         // Now test deletes
 
         assertEquals("delete", 1, mResolver.delete(
-                updatedUri(attendeeUri, syncAdapter),
+                updatedUri(attendeeUri, syncAdapter, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
                 null, null /* selectionArgs */));
         testAndClearDirty(eventId, syncAdapter ? 0 : 1);
         testQueryCount(Calendar.Attendees.CONTENT_URI, "event_id=" + eventId, 0);
 
-        assertEquals("delete", 1, mResolver.delete(updatedUri(reminderUri, syncAdapter),
+        assertEquals("delete", 1, mResolver.delete(
+                updatedUri(reminderUri, syncAdapter, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
                 null /* where */, null /* selectionArgs */));
 
         testAndClearDirty(eventId, syncAdapter ? 0 : 1);
         testQueryCount(Calendar.Reminders.CONTENT_URI, "event_id=" + eventId, 0);
 
-        assertEquals("delete", 1, mResolver.delete(updatedUri(alertUri, syncAdapter),
+        assertEquals("delete", 1, mResolver.delete(
+                updatedUri(alertUri, syncAdapter, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
                 null /* where */, null /* selectionArgs */));
 
         // Alerts don't dirty the event
         testAndClearDirty(eventId, 0);
         testQueryCount(Calendar.CalendarAlerts.CONTENT_URI, "event_id=" + eventId, 0);
 
-        assertEquals("delete", 1, mResolver.delete(updatedUri(extendedUri, syncAdapter),
+        assertEquals("delete", 1, mResolver.delete(
+                updatedUri(extendedUri, syncAdapter, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
                 null /* where */, null /* selectionArgs */));
 
         testAndClearDirty(eventId, syncAdapter ? 0 : 1);
@@ -2126,8 +2159,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
         testQueryCount(Calendar.Events.CONTENT_URI, null, 2);
         Uri eventsWithAccount = Calendar.Events.CONTENT_URI.buildUpon()
-                .appendQueryParameter(Calendar.EventsEntity.ACCOUNT_NAME, "joe@joe.com")
-                .appendQueryParameter(Calendar.EventsEntity.ACCOUNT_TYPE, "com.google")
+                .appendQueryParameter(Calendar.EventsEntity.ACCOUNT_NAME, DEFAULT_ACCOUNT)
+                .appendQueryParameter(Calendar.EventsEntity.ACCOUNT_TYPE, DEFAULT_ACCOUNT_TYPE)
                 .build();
         // Only one event for that account
         testQueryCount(eventsWithAccount, null, 1);
@@ -2137,12 +2170,14 @@ public class CalendarProvider2Test extends AndroidTestCase {
         long eventId = ContentUris.parseId(eventUri1);
         // Wrong account, should not be deleted
         assertEquals("delete", 0, mResolver.delete(
-                updatedUri(eventsWithAccount, true /* syncAdapter */),
+                updatedUri(eventsWithAccount, true /* syncAdapter */, DEFAULT_ACCOUNT,
+                        DEFAULT_ACCOUNT_TYPE),
                 "_id=" + eventId, null /* selectionArgs */));
         testQueryCount(Calendar.Events.CONTENT_URI, null, 2);
         // Right account, should be deleted
         assertEquals("delete", 1, mResolver.delete(
-                updatedUri(Calendar.Events.CONTENT_URI, true /* syncAdapter */),
+                updatedUri(Calendar.Events.CONTENT_URI, true /* syncAdapter */, DEFAULT_ACCOUNT,
+                        DEFAULT_ACCOUNT_TYPE),
                 "_id=" + eventId, null /* selectionArgs */));
         testQueryCount(Calendar.Events.CONTENT_URI, null, 1);
     }

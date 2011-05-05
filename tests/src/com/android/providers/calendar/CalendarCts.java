@@ -49,20 +49,20 @@ public class CalendarCts extends InstrumentationTestCase {
         // @formatter:off
         public static final String[] CALENDARS_SYNC_PROJECTION = new String[] {
                 Calendars._ID,
-                Calendars._SYNC_ACCOUNT,
-                Calendars._SYNC_ACCOUNT_TYPE,
+                Calendars.ACCOUNT_NAME,
+                Calendars.ACCOUNT_TYPE,
                 Calendars._SYNC_ID,
                 Calendars._SYNC_VERSION,
                 Calendars._SYNC_TIME,
-                Calendars._SYNC_DIRTY,
+                Calendars.DIRTY,
                 Calendars.NAME,
                 Calendars.DISPLAY_NAME,
-                Calendars.COLOR,
+                Calendars.CALENDAR_COLOR,
                 Calendars.ACCESS_LEVEL,
                 Calendars.VISIBLE,
                 Calendars.SYNC_EVENTS,
-                Calendars.LOCATION,
-                Calendars.TIMEZONE,
+                Calendars.CALENDAR_LOCATION,
+                Calendars.CALENDAR_TIMEZONE,
                 Calendars.OWNER_ACCOUNT,
                 Calendars.CAN_ORGANIZER_RESPOND,
                 Calendars.CAN_MODIFY_TIME_ZONE,
@@ -89,13 +89,13 @@ public class CalendarCts extends InstrumentationTestCase {
                 String account, int seed) {
             String seedString = Long.toString(seed);
             ContentValues values = new ContentValues();
-            values.put(Calendars._SYNC_ACCOUNT_TYPE, CTS_TEST_TYPE);
+            values.put(Calendars.ACCOUNT_TYPE, CTS_TEST_TYPE);
 
-            values.put(Calendars._SYNC_ACCOUNT, account);
+            values.put(Calendars.ACCOUNT_NAME, account);
             values.put(Calendars._SYNC_ID, "SYNC_ID:" + seedString);
             values.put(Calendars._SYNC_VERSION, "SYNC_V:" + seedString);
             values.put(Calendars._SYNC_TIME, "SYNC_TIME:" + seedString);
-            values.put(Calendars._SYNC_DIRTY, 0);
+            values.put(Calendars.DIRTY, 0);
             values.put(Calendars.OWNER_ACCOUNT, "OWNER_" + account);
 
             values.put(Calendars.NAME, seedString);
@@ -103,11 +103,11 @@ public class CalendarCts extends InstrumentationTestCase {
 
             values.put(Calendars.ACCESS_LEVEL, (seed % 8) * 100);
 
-            values.put(Calendars.COLOR, 0xff000000 + seed);
+            values.put(Calendars.CALENDAR_COLOR, 0xff000000 + seed);
             values.put(Calendars.VISIBLE, seed % 2);
             values.put(Calendars.SYNC_EVENTS, seed % 2);
-            values.put(Calendars.LOCATION, "LOCATION:" + seedString);
-            values.put(Calendars.TIMEZONE, TIME_ZONES[seed % TIME_ZONES.length]);
+            values.put(Calendars.CALENDAR_LOCATION, "LOCATION:" + seedString);
+            values.put(Calendars.CALENDAR_TIMEZONE, TIME_ZONES[seed % TIME_ZONES.length]);
             values.put(Calendars.CAN_ORGANIZER_RESPOND, seed % 2);
             values.put(Calendars.CAN_MODIFY_TIME_ZONE, seed % 2);
             values.put(Calendars.MAX_REMINDERS, seed);
@@ -131,12 +131,12 @@ public class CalendarCts extends InstrumentationTestCase {
             String seedString = Long.toString(seed);
 
             values.put(Calendars.DISPLAY_NAME, "DISPLAY_" + seedString);
-            values.put(Calendars.COLOR, 0xff000000 + seed);
+            values.put(Calendars.CALENDAR_COLOR, 0xff000000 + seed);
             values.put(Calendars.VISIBLE, seed % 2);
             values.put(Calendars.SYNC_EVENTS, seed % 2);
 
             original.putAll(values);
-            original.put(Calendars._SYNC_DIRTY, 1);
+            original.put(Calendars.DIRTY, 1);
 
             return values;
         }
@@ -147,15 +147,15 @@ public class CalendarCts extends InstrumentationTestCase {
         }
 
         public static int deleteCalendarByAccount(ContentResolver resolver, String account) {
-            return resolver.delete(Calendars.CONTENT_URI, Calendars._SYNC_ACCOUNT + "=?",
+            return resolver.delete(Calendars.CONTENT_URI, Calendars.ACCOUNT_NAME + "=?",
                     new String[] { account });
         }
 
         public static Cursor getCalendarsByAccount(ContentResolver resolver, String account) {
-            String selection = Calendars._SYNC_ACCOUNT_TYPE + "=?";
+            String selection = Calendars.ACCOUNT_TYPE + "=?";
             String[] selectionArgs;
             if (account != null) {
-                selection += " AND " + Calendars._SYNC_ACCOUNT + "=?";
+                selection += " AND " + Calendars.ACCOUNT_NAME + "=?";
                 selectionArgs = new String[2];
                 selectionArgs[1] = account;
             } else {
@@ -172,8 +172,8 @@ public class CalendarCts extends InstrumentationTestCase {
     private static class EventHelper {
         public static final String[] EVENTS_PROJECTION = new String[] {
             Events._ID,
-            Events._SYNC_ACCOUNT,
-            Events._SYNC_ACCOUNT_TYPE,
+            Events.ACCOUNT_NAME,
+            Events.ACCOUNT_TYPE,
             Events.OWNER_ACCOUNT,
             // Events.ORGANIZER_CAN_RESPOND, from Calendars
             // Events.CAN_CHANGE_TZ, from Calendars
@@ -193,20 +193,19 @@ public class CalendarCts extends InstrumentationTestCase {
             Events.DTSTART,
             Events.DTEND,
             Events.EVENT_TIMEZONE,
-            // Events.EVENT_TIMEZONE2,
+            Events.EVENT_END_TIMEZONE,
             Events.DURATION,
             Events.ALL_DAY,
-            Events.VISIBILITY,
-            Events.TRANSPARENCY,
+            Events.ACCESS_LEVEL,
+            Events.AVAILABILITY,
             Events.HAS_ALARM,
-            // Events.ALARM_MINUTES
             Events.HAS_EXTENDED_PROPERTIES,
             Events.RRULE,
             Events.RDATE,
             Events.EXRULE,
             Events.EXDATE,
             // Events.ORIGINAL_ID
-            Events.ORIGINAL_EVENT, // rename ORIGINAL_SYNC_ID
+            Events.ORIGINAL_SYNC_ID, // rename ORIGINAL_SYNC_ID
             Events.ORIGINAL_INSTANCE_TIME,
             Events.ORIGINAL_ALL_DAY,
             Events.LAST_DATE,
@@ -219,8 +218,8 @@ public class CalendarCts extends InstrumentationTestCase {
             Events._SYNC_ID,
             Events._SYNC_VERSION,
             Events._SYNC_TIME,
-            Events._SYNC_DIRTY,
-            // Events._SYNC_MARK,
+            Events.DIRTY,
+            Events._SYNC_MARK,
             Events._SYNC_DATA, // Events.SYNC_DATA1
             // Events.SYNC_DATA2
             // Events.SYNC_DATA3
@@ -249,8 +248,8 @@ public class CalendarCts extends InstrumentationTestCase {
             // TIME_ZONES.length]);
             values.put(Events.ALL_DAY, 0); // must be 0 or dtstart/dtend will
                                            // get adjusted
-            values.put(Events.VISIBILITY, seed % 4);
-            values.put(Events.TRANSPARENCY, seed % 2);
+            values.put(Events.ACCESS_LEVEL, seed % 4);
+            values.put(Events.AVAILABILITY, seed % 2);
             values.put(Events.HAS_ALARM, seed % 2);
             values.put(Events.HAS_EXTENDED_PROPERTIES, seed % 2);
             values.put(Events.HAS_ATTENDEE_DATA, seed % 2);
@@ -264,7 +263,7 @@ public class CalendarCts extends InstrumentationTestCase {
                 values.put(Events._SYNC_TIME, "SYNC_TIME:" + seedString);
                 values.put(Events.HTML_URI, "HTML:" + seedString);
                 values.put(Events.COMMENTS_URI, "COMMENTS:" + seedString);
-                values.put(Events._SYNC_DIRTY, 0);
+                values.put(Events.DIRTY, 0);
                 values.put(Events._SYNC_MARK, 0);
             }
             // values.put(Events.SYNC1, "SYNC1:" + seedString);
@@ -299,8 +298,8 @@ public class CalendarCts extends InstrumentationTestCase {
             values.put(Events.EVENT_TIMEZONE, TIME_ZONES[seed % TIME_ZONES.length]);
             // values.put(Events.EVENT_TIMEZONE2, TIME_ZONES[(seed +1) %
             // TIME_ZONES.length]);
-            values.put(Events.VISIBILITY, seed % 4);
-            values.put(Events.TRANSPARENCY, seed % 2);
+            values.put(Events.ACCESS_LEVEL, seed % 4);
+            values.put(Events.AVAILABILITY, seed % 2);
             values.put(Events.HAS_ALARM, seed % 2);
             values.put(Events.HAS_EXTENDED_PROPERTIES, seed % 2);
             values.put(Events.HAS_ATTENDEE_DATA, seed % 2);
@@ -313,7 +312,7 @@ public class CalendarCts extends InstrumentationTestCase {
                 values.put(Events._SYNC_TIME, "SYNC_TIME:" + seedString);
             }
             original.putAll(values);
-            original.put(Events._SYNC_DIRTY, asSyncAdapter ? 0 : 1);
+            original.put(Events.DIRTY, asSyncAdapter ? 0 : 1);
             return values;
         }
 
@@ -321,15 +320,15 @@ public class CalendarCts extends InstrumentationTestCase {
                 boolean asSyncAdapter) {
             values.put(Events.SELF_ATTENDEE_STATUS, Events.STATUS_TENTATIVE);
             values.put(Events.DELETED, 0);
-            values.put(Events._SYNC_DIRTY, asSyncAdapter ? 0 : 1);
+            values.put(Events.DIRTY, asSyncAdapter ? 0 : 1);
             values.put(Events.OWNER_ACCOUNT, "OWNER_" + account);
-            values.put(Events._SYNC_ACCOUNT_TYPE, CTS_TEST_TYPE);
-            values.put(Events._SYNC_ACCOUNT, account);
+            values.put(Events.ACCOUNT_TYPE, CTS_TEST_TYPE);
+            values.put(Events.ACCOUNT_NAME, account);
         }
 
         public static int deleteEvent(ContentResolver resolver, Uri uri, ContentValues values) {
             values.put(Events.DELETED, 1);
-            values.put(Events._SYNC_DIRTY, 1);
+            values.put(Events.DIRTY, 1);
             return resolver.delete(uri, null, null);
         }
 
@@ -340,10 +339,10 @@ public class CalendarCts extends InstrumentationTestCase {
         }
 
         public static Cursor getEventsByAccount(ContentResolver resolver, String account) {
-            String selection = Calendars._SYNC_ACCOUNT_TYPE + "=?";
+            String selection = Calendars.ACCOUNT_TYPE + "=?";
             String[] selectionArgs;
             if (account != null) {
-                selection += " AND " + Calendars._SYNC_ACCOUNT + "=?";
+                selection += " AND " + Calendars.ACCOUNT_NAME + "=?";
                 selectionArgs = new String[2];
                 selectionArgs[1] = account;
             } else {

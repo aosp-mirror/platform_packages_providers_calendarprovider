@@ -92,7 +92,7 @@ public class CalendarInstancesHelper {
             Tables.EVENTS + "." + Events._ID + "=" + Tables.INSTANCES + "." + Instances.EVENT_ID +
             ")" +
             " WHERE " + Tables.EVENTS + "." + Events._SYNC_ID + "=?" + " OR " +
-                    Tables.EVENTS + "." + Events.ORIGINAL_EVENT + "=?)";
+                    Tables.EVENTS + "." + Events.ORIGINAL_SYNC_ID + "=?)";
 
     private static final String[] EXPAND_COLUMNS = new String[] {
             Events._ID,
@@ -107,7 +107,7 @@ public class CalendarInstancesHelper {
             Events.EXDATE,
             Events.DURATION,
             Events.ALL_DAY,
-            Events.ORIGINAL_EVENT,
+            Events.ORIGINAL_SYNC_ID,
             Events.ORIGINAL_INSTANCE_TIME,
             Events.CALENDAR_ID,
             Events.DELETED
@@ -153,7 +153,7 @@ public class CalendarInstancesHelper {
         int allDayColumn = entries.getColumnIndex(Events.ALL_DAY);
         int idColumn = entries.getColumnIndex(Events._ID);
         int syncIdColumn = entries.getColumnIndex(Events._SYNC_ID);
-        int originalEventColumn = entries.getColumnIndex(Events.ORIGINAL_EVENT);
+        int originalEventColumn = entries.getColumnIndex(Events.ORIGINAL_SYNC_ID);
         int originalInstanceTimeColumn = entries.getColumnIndex(Events.ORIGINAL_INSTANCE_TIME);
         int calendarIdColumn = entries.getColumnIndex(Events.CALENDAR_ID);
         int deletedColumn = entries.getColumnIndex(Events.DELETED);
@@ -612,7 +612,7 @@ public class CalendarInstancesHelper {
 
         String rrule = values.getAsString(Events.RRULE);
         String rdate = values.getAsString(Events.RDATE);
-        String originalEvent = values.getAsString(Events.ORIGINAL_EVENT);
+        String originalEvent = values.getAsString(Events.ORIGINAL_SYNC_ID);
         if (CalendarProvider2.isRecurrenceEvent(rrule, rdate, originalEvent)) {
             // The recurrence or exception needs to be (re-)expanded if:
             // a) Exception or recurrence that falls inside window
@@ -683,7 +683,7 @@ public class CalendarInstancesHelper {
             SQLiteDatabase db) {
         MetaData.Fields fields = mMetaData.getFieldsLocked();
         String instancesTimezone = mCalendarCache.readTimezoneInstances();
-        String originalEvent = values.getAsString(Events.ORIGINAL_EVENT);
+        String originalEvent = values.getAsString(Events.ORIGINAL_SYNC_ID);
         String recurrenceSyncId;
         if (originalEvent != null) {
             recurrenceSyncId = originalEvent;
@@ -752,7 +752,7 @@ public class CalendarInstancesHelper {
                 String.valueOf(rowId)
             };
         } else {
-            String where = Events._SYNC_ID + "=? OR " + Events.ORIGINAL_EVENT + "=?";
+            String where = Events._SYNC_ID + "=? OR " + Events.ORIGINAL_SYNC_ID + "=?";
             qb.appendWhere(where);
             selectionArgs = new String[] {
                     recurrenceSyncId, recurrenceSyncId

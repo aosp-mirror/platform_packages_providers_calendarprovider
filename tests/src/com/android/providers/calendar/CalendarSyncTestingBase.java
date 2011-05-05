@@ -56,13 +56,13 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
         EVENT_COLUMNS_TO_SKIP.add(Calendar.Events._SYNC_TIME);
         EVENT_COLUMNS_TO_SKIP.add(Calendar.Events._SYNC_VERSION);
         EVENT_COLUMNS_TO_SKIP.add(Calendar.Events._SYNC_DATA);
-        EVENT_COLUMNS_TO_SKIP.add(Calendar.Events._SYNC_DIRTY);
+        EVENT_COLUMNS_TO_SKIP.add(Calendar.Events.DIRTY);
         EVENT_COLUMNS_TO_SKIP.add(Calendar.Events._SYNC_MARK);
         ATTENDEES_COLUMNS_TO_SKIP.add(Calendar.Attendees._ID);
         CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars._ID);
         CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars._SYNC_TIME);
         CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars._SYNC_VERSION);
-        CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars._SYNC_DIRTY);
+        CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars.DIRTY);
         CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars._SYNC_MARK);
         INSTANCES_COLUMNS_TO_SKIP.add(Calendar.Instances._ID);
     }
@@ -174,18 +174,18 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
             throws Exception {
         ContentValues values = new ContentValues();
 
-        values.put(Calendar.Calendars._SYNC_ACCOUNT, getAccount());
+        values.put(Calendar.Calendars.ACCOUNT_NAME, getAccount());
         values.put(Calendar.Calendars.SYNC1, calendarUrl);
         values.put(Calendar.Calendars.NAME, name);
         values.put(Calendar.Calendars.DISPLAY_NAME, name);
 
         values.put(Calendar.Calendars.SYNC_EVENTS, 1);
         values.put(Calendar.Calendars.VISIBLE, 1);
-        values.put(Calendar.Calendars.COLOR, -14069085 /* blue */);
+        values.put(Calendar.Calendars.CALENDAR_COLOR, -14069085 /* blue */);
         values.put(Calendar.Calendars.ACCESS_LEVEL, Calendar.Calendars.OWNER_ACCESS);
 
-        values.put(Calendar.Calendars.COLOR, "0xff123456");
-        values.put(Calendar.Calendars.TIMEZONE, timezone);
+        values.put(Calendar.Calendars.CALENDAR_COLOR, "0xff123456");
+        values.put(Calendar.Calendars.CALENDAR_TIMEZONE, timezone);
         mResolver.insert(Calendar.Calendars.CONTENT_URI, values);
         syncCalendar();
     }

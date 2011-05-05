@@ -1025,13 +1025,13 @@ public class CalendarProvider2Test extends AndroidTestCase {
         ContentValues m = new ContentValues();
         m.put(Calendars.NAME, name);
         m.put(Calendars.DISPLAY_NAME, name);
-        m.put(Calendars.COLOR, "0xff123456");
-        m.put(Calendars.TIMEZONE, timezone);
+        m.put(Calendars.CALENDAR_COLOR, "0xff123456");
+        m.put(Calendars.CALENDAR_TIMEZONE, timezone);
         m.put(Calendars.VISIBLE, 1);
         m.put(Calendars.SYNC1, CALENDAR_URL);
         m.put(Calendars.OWNER_ACCOUNT, account);
-        m.put(Calendars._SYNC_ACCOUNT,  account);
-        m.put(Calendars._SYNC_ACCOUNT_TYPE, DEFAULT_ACCOUNT_TYPE);
+        m.put(Calendars.ACCOUNT_NAME,  account);
+        m.put(Calendars.ACCOUNT_TYPE, DEFAULT_ACCOUNT_TYPE);
         m.put(Calendars.SYNC_EVENTS,  1);
 
         Uri url = mResolver.insert(
@@ -1042,8 +1042,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
     private Uri addSyncQueryParams(Uri uri, String account, String accountType) {
         return uri.buildUpon().appendQueryParameter(Calendar.CALLER_IS_SYNCADAPTER, "true")
-                .appendQueryParameter(Calendars._SYNC_ACCOUNT, account)
-                .appendQueryParameter(Calendars._SYNC_ACCOUNT_TYPE, accountType).build();
+                .appendQueryParameter(Calendars.ACCOUNT_NAME, account)
+                .appendQueryParameter(Calendars.ACCOUNT_TYPE, accountType).build();
     }
 
     private int deleteMatchingCalendars(String selection, String[] selectionArgs) {
@@ -1083,7 +1083,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             EventInfo recur = findEvent(event.mOriginalTitle);
             assertNotNull(recur);
             String syncId = String.format("%d", recur.mSyncId);
-            m.put(Events.ORIGINAL_EVENT, syncId);
+            m.put(Events.ORIGINAL_SYNC_ID, syncId);
             m.put(Events.ORIGINAL_ALL_DAY, recur.mAllDay ? 1 : 0);
             m.put(Events.ORIGINAL_INSTANCE_TIME, event.mOriginalInstance);
         }
@@ -1135,7 +1135,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 Events.ALL_DAY,
                 Events.RRULE,
                 Events.EVENT_TIMEZONE,
-                Events.ORIGINAL_EVENT,
+                Events.ORIGINAL_SYNC_ID,
         };
         Cursor cursor = mResolver.query(mEventsUri, projection,
                 "title=?", new String[] { title }, null);
@@ -1177,8 +1177,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 if (!values.containsKey(Events.EVENT_TIMEZONE) && timezone != null) {
                     values.put(Events.EVENT_TIMEZONE, timezone);
                 }
-                if (!values.containsKey(Events.ORIGINAL_EVENT) && originalEvent != null) {
-                    values.put(Events.ORIGINAL_EVENT, originalEvent);
+                if (!values.containsKey(Events.ORIGINAL_SYNC_ID) && originalEvent != null) {
+                    values.put(Events.ORIGINAL_SYNC_ID, originalEvent);
                 }
             }
 
@@ -1505,7 +1505,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 Instances.TITLE,                 // 0
                 Instances.EVENT_LOCATION,        // 1
                 Instances.ALL_DAY,               // 2
-                Instances.COLOR,                 // 3
+                Instances.CALENDAR_COLOR,                 // 3
                 Instances.EVENT_TIMEZONE,        // 4
                 Instances.EVENT_ID,              // 5
                 Instances.BEGIN,                 // 6
@@ -1790,7 +1790,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 Calendar.CalendarAlerts.BEGIN,            // 4
                 Calendar.CalendarAlerts.END,              // 5
                 Calendar.CalendarAlerts.EVENT_ID,         // 6
-                Calendar.CalendarAlerts.COLOR,            // 7
+                Calendar.CalendarAlerts.CALENDAR_COLOR,            // 7
                 Calendar.CalendarAlerts.RRULE,            // 8
                 Calendar.CalendarAlerts.HAS_ALARM,        // 9
                 Calendar.CalendarAlerts.STATE,            // 10
@@ -1926,7 +1926,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         try {
             assertEquals("Event count", 1, cursor.getCount());
             cursor.moveToNext();
-            int dirty = cursor.getInt(cursor.getColumnIndex(Calendar.Events._SYNC_DIRTY));
+            int dirty = cursor.getInt(cursor.getColumnIndex(Calendar.Events.DIRTY));
             assertEquals("dirty flag", wanted, dirty);
             if (dirty == 1) {
                 // Have to access database directly since provider will set dirty again.
@@ -2304,7 +2304,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 Instances.TITLE,                 // 0
                 Instances.EVENT_LOCATION,        // 1
                 Instances.ALL_DAY,               // 2
-                Instances.COLOR,                 // 3
+                Instances.CALENDAR_COLOR,                 // 3
                 Instances.EVENT_TIMEZONE,        // 4
                 Instances.EVENT_ID,              // 5
                 Instances.BEGIN,                 // 6

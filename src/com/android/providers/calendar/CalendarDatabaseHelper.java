@@ -58,7 +58,10 @@ import java.util.TimeZone;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    static final int DATABASE_VERSION = 205;
+    // Versions under 100 cover through Froyo, 1xx version are for Gingerbread,
+    // 2xx for Honeycomb, and 3xx for ICS. For future versions bump this to the
+    // next hundred at each major release.
+    static final int DATABASE_VERSION = 300;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -83,19 +86,6 @@ import java.util.TimeZone;
 
     // Copied from SyncStateContentProviderHelper.  Don't really want to make them public there.
     private static final String SYNC_STATE_META_VERSION_COLUMN = "version";
-
-    private static final String AFTER_EVENT_INSERT_SQL =
-            "UPDATE " + Tables.EVENTS +
-            " SET " + Calendar.Events._SYNC_ACCOUNT + "=" +
-            " (SELECT " + Calendar.Calendars._SYNC_ACCOUNT + " FROM " + Tables.CALENDARS +
-            "   WHERE " + Tables.CALENDARS + "." + Calendar.Calendars._ID +
-                        "=new." + Calendar.Events.CALENDAR_ID + ")," +
-            Calendar.SyncColumns._SYNC_ACCOUNT_TYPE + "=" +
-            " (SELECT " + Calendar.Calendars._SYNC_ACCOUNT_TYPE + " FROM " + Tables.CALENDARS +
-            "   WHERE " + Tables.CALENDARS + "." + Calendar.Calendars._ID +
-                        "=new." + Calendar.Events.CALENDAR_ID + ") " +
-            "WHERE " + Tables.EVENTS + "." + Calendar.Events._ID +
-                    "=new." + Calendar.Events._ID + ";";
 
     // This needs to be done when all the tables are already created
     private static final String EVENTS_CLEANUP_TRIGGER_SQL =
@@ -267,81 +257,7 @@ import java.util.TimeZone;
 
         createCalendarsTable(db);
 
-        // TODO: do we need both dtend and duration?
-        db.execSQL("CREATE TABLE " + Tables.EVENTS + " (" +
-                Calendar.Events._ID + " INTEGER PRIMARY KEY," +
-                Calendar.Events._SYNC_ACCOUNT + " TEXT," +
-                Calendar.Events._SYNC_ACCOUNT_TYPE + " TEXT," +
-                Calendar.Events._SYNC_ID + " TEXT," +
-                Calendar.Events._SYNC_VERSION + " TEXT," +
-                // sync time in UTC
-                Calendar.Events._SYNC_TIME + " TEXT," +
-                Calendar.Events._SYNC_DATA + " INTEGER," +
-                Calendar.Events._SYNC_DIRTY + " INTEGER," +
-                // sync mark to filter out new rows
-                Calendar.Events._SYNC_MARK + " INTEGER," +
-                Calendar.Events.CALENDAR_ID + " INTEGER NOT NULL," +
-                Calendar.Events.HTML_URI + " TEXT," +
-                Calendar.Events.TITLE + " TEXT," +
-                Calendar.Events.EVENT_LOCATION + " TEXT," +
-                Calendar.Events.DESCRIPTION + " TEXT," +
-                Calendar.Events.STATUS + " INTEGER," +
-                Calendar.Events.SELF_ATTENDEE_STATUS + " INTEGER NOT NULL DEFAULT 0," +
-                Calendar.Events.COMMENTS_URI + " TEXT," +
-                // dtstart in millis since epoch
-                Calendar.Events.DTSTART + " INTEGER," +
-                // dtend in millis since epoch
-                Calendar.Events.DTEND + " INTEGER," +
-                // timezone for event
-                Calendar.Events.EVENT_TIMEZONE + " TEXT," +
-                Calendar.Events.DURATION + " TEXT," +
-                Calendar.Events.ALL_DAY + " INTEGER NOT NULL DEFAULT 0," +
-                Calendar.Events.VISIBILITY + " INTEGER NOT NULL DEFAULT 0," +
-                Calendar.Events.TRANSPARENCY + " INTEGER NOT NULL DEFAULT 0," +
-                Calendar.Events.HAS_ALARM + " INTEGER NOT NULL DEFAULT 0," +
-                Calendar.Events.HAS_EXTENDED_PROPERTIES + " INTEGER NOT NULL DEFAULT 0," +
-                Calendar.Events.RRULE + " TEXT," +
-                Calendar.Events.RDATE + " TEXT," +
-                Calendar.Events.EXRULE + " TEXT," +
-                Calendar.Events.EXDATE + " TEXT," +
-                // originalEvent is the _sync_id of recurring event
-                Calendar.Events.ORIGINAL_EVENT + " TEXT," +
-                // originalInstanceTime is in millis since epoch
-                Calendar.Events.ORIGINAL_INSTANCE_TIME + " INTEGER," +
-                Calendar.Events.ORIGINAL_ALL_DAY + " INTEGER," +
-                // lastDate is in millis since epoch
-                Calendar.Events.LAST_DATE + " INTEGER," +
-                Calendar.Events.HAS_ATTENDEE_DATA + " INTEGER NOT NULL DEFAULT 0," +
-                Calendar.Events.GUESTS_CAN_MODIFY + " INTEGER NOT NULL DEFAULT 0," +
-                Calendar.Events.GUESTS_CAN_INVITE_OTHERS + " INTEGER NOT NULL DEFAULT 1," +
-                Calendar.Events.GUESTS_CAN_SEE_GUESTS + " INTEGER NOT NULL DEFAULT 1," +
-                Calendar.Events.ORGANIZER + " STRING," +
-                Calendar.Events.DELETED + " INTEGER NOT NULL DEFAULT 0," +
-                // dstart2 is in millis since epoch, allDay events are in local timezone
-                Calendar.Events.DTSTART2 + " INTEGER," +
-                // dtend2 is in millis since epoch, allDay events are in local timezone
-                Calendar.Events.DTEND2 + " INTEGER," +
-                // timezone for event with allDay events are in local timezone
-                Calendar.Events.EVENT_TIMEZONE2 + " TEXT," +
-                // syncAdapterData is available for use by sync adapters
-                Calendar.Events.SYNC_ADAPTER_DATA + " TEXT" +
-                ");");
-
-        // Trigger to set event's sync_account
-        db.execSQL("CREATE TRIGGER events_insert AFTER INSERT ON " + Tables.EVENTS + " " +
-                "BEGIN " +
-                AFTER_EVENT_INSERT_SQL +
-                "END");
-
-        db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON " + Tables.EVENTS + " (" +
-                Calendar.Events._SYNC_ACCOUNT_TYPE + ", " +
-                Calendar.Events._SYNC_ACCOUNT + ", " +
-                Calendar.Events._SYNC_ID +
-                ");");
-
-        db.execSQL("CREATE INDEX eventsCalendarIdIndex ON " + Tables.EVENTS + " (" +
-                Calendar.Events.CALENDAR_ID +
-                ");");
+        createEventsTable(db);
 
         db.execSQL("CREATE TABLE " + Tables.EVENTS_RAW_TIMES + " (" +
                 Calendar.EventsRawTimes._ID + " INTEGER PRIMARY KEY," +
@@ -451,27 +367,86 @@ import java.util.TimeZone;
                 ContactsContract.AUTHORITY, new Bundle());
     }
 
+    private void createEventsTable(SQLiteDatabase db) {
+        // TODO: do we need both dtend and duration?
+        db.execSQL("CREATE TABLE " + Tables.EVENTS + " (" +
+                Calendar.Events._ID + " INTEGER PRIMARY KEY," +
+                Calendar.Events._SYNC_ID + " TEXT," +
+                Calendar.Events._SYNC_VERSION + " TEXT," +
+                // sync time in UTC
+                Calendar.Events._SYNC_TIME + " TEXT,"  +
+                Calendar.Events._SYNC_DATA + " INTEGER," +
+                Calendar.Events.DIRTY + " INTEGER," +
+                // sync mark to filter out new rows
+                Calendar.Events._SYNC_MARK + " INTEGER," +
+                Calendar.Events.CALENDAR_ID + " INTEGER NOT NULL," +
+                Calendar.Events.HTML_URI + " TEXT," +
+                Calendar.Events.TITLE + " TEXT," +
+                Calendar.Events.EVENT_LOCATION + " TEXT," +
+                Calendar.Events.DESCRIPTION + " TEXT," +
+                Calendar.Events.STATUS + " INTEGER," +
+                Calendar.Events.SELF_ATTENDEE_STATUS + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Events.COMMENTS_URI + " TEXT," +
+                // dtstart in millis since epoch
+                Calendar.Events.DTSTART + " INTEGER," +
+                // dtend in millis since epoch
+                Calendar.Events.DTEND + " INTEGER," +
+                // timezone for event
+                Calendar.Events.EVENT_TIMEZONE + " TEXT," +
+                Calendar.Events.DURATION + " TEXT," +
+                Calendar.Events.ALL_DAY + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Events.ACCESS_LEVEL + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Events.AVAILABILITY + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Events.HAS_ALARM + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Events.HAS_EXTENDED_PROPERTIES + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Events.RRULE + " TEXT," +
+                Calendar.Events.RDATE + " TEXT," +
+                Calendar.Events.EXRULE + " TEXT," +
+                Calendar.Events.EXDATE + " TEXT," +
+                // originalEvent is the _sync_id of recurring event
+                Calendar.Events.ORIGINAL_SYNC_ID + " TEXT," +
+                // originalInstanceTime is in millis since epoch
+                Calendar.Events.ORIGINAL_INSTANCE_TIME + " INTEGER," +
+                Calendar.Events.ORIGINAL_ALL_DAY + " INTEGER," +
+                // lastDate is in millis since epoch
+                Calendar.Events.LAST_DATE + " INTEGER," +
+                Calendar.Events.HAS_ATTENDEE_DATA + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Events.GUESTS_CAN_MODIFY + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Events.GUESTS_CAN_INVITE_OTHERS + " INTEGER NOT NULL DEFAULT 1," +
+                Calendar.Events.GUESTS_CAN_SEE_GUESTS + " INTEGER NOT NULL DEFAULT 1," +
+                Calendar.Events.ORGANIZER + " STRING," +
+                Calendar.Events.DELETED + " INTEGER NOT NULL DEFAULT 0," +
+                // timezone for event with allDay events are in local timezone
+                Calendar.Events.EVENT_END_TIMEZONE + " TEXT," +
+                // syncAdapterData is available for use by sync adapters
+                Calendar.Events.SYNC_DATA1 + " TEXT" + ");");
+
+        db.execSQL("CREATE INDEX eventsCalendarIdIndex ON " + Tables.EVENTS + " ("
+                + Calendar.Events.CALENDAR_ID + ");");
+    }
+
     private void createCalendarsTable(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE " + Tables.CALENDARS + " (" +
                 Calendar.Calendars._ID + " INTEGER PRIMARY KEY," +
-                Calendar.Calendars._SYNC_ACCOUNT + " TEXT," +
-                Calendar.Calendars._SYNC_ACCOUNT_TYPE + " TEXT," +
+                Calendar.Calendars.ACCOUNT_NAME + " TEXT," +
+                Calendar.Calendars.ACCOUNT_TYPE + " TEXT," +
                 Calendar.Calendars._SYNC_ID + " TEXT," +
                 Calendar.Calendars._SYNC_VERSION + " TEXT," +
                 Calendar.Calendars._SYNC_TIME + " TEXT," +  // UTC
-                Calendar.Calendars._SYNC_DIRTY + " INTEGER," +
+                Calendar.Calendars.DIRTY + " INTEGER," +
                 Calendar.Calendars.NAME + " TEXT," +
                 Calendar.Calendars.DISPLAY_NAME + " TEXT," +
-                Calendar.Calendars.COLOR + " INTEGER," +
+                Calendar.Calendars.CALENDAR_COLOR + " INTEGER," +
                 Calendar.Calendars.ACCESS_LEVEL + " INTEGER," +
                 Calendar.Calendars.VISIBLE + " INTEGER NOT NULL DEFAULT 1," +
                 Calendar.Calendars.SYNC_EVENTS + " INTEGER NOT NULL DEFAULT 0," +
-                Calendar.Calendars.LOCATION + " TEXT," +
-                Calendar.Calendars.TIMEZONE + " TEXT," +
+                Calendar.Calendars.CALENDAR_LOCATION + " TEXT," +
+                Calendar.Calendars.CALENDAR_TIMEZONE + " TEXT," +
                 Calendar.Calendars.OWNER_ACCOUNT + " TEXT, " +
                 Calendar.Calendars.CAN_ORGANIZER_RESPOND + " INTEGER NOT NULL DEFAULT 1," +
                 Calendar.Calendars.CAN_MODIFY_TIME_ZONE + " INTEGER DEFAULT 1," +
                 Calendar.Calendars.MAX_REMINDERS + " INTEGER DEFAULT 5," +
+                Calendar.Calendars.ALLOWED_REMINDERS + " TEXT DEFAULT '0,1,2,3'," +
                 Calendar.Calendars.DELETED + " INTEGER NOT NULL DEFAULT 0," +
                 Calendar.Calendars.SYNC1 + " TEXT," +
                 Calendar.Calendars.SYNC2 + " TEXT," +
@@ -486,6 +461,39 @@ import java.util.TimeZone;
                 "BEGIN " +
                 CALENDAR_CLEANUP_TRIGGER_SQL +
                 "END");
+    }
+
+    private void createCalendarsTable205(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE Calendars (" +
+                "_id INTEGER PRIMARY KEY," +
+                "_sync_account TEXT," +
+                "_sync_account_type TEXT," +
+                "_sync_id TEXT," +
+                "_sync_version TEXT," +
+                "_sync_time TEXT," +  // UTC
+                "_sync_dirty INTEGER," +
+                "name TEXT," +
+                "displayName TEXT," +
+                "color INTEGER," +
+                "access_level INTEGER," +
+                "visible INTEGER NOT NULL DEFAULT 1," +
+                "sync_events INTEGER NOT NULL DEFAULT 0," +
+                "location TEXT," +
+                "timezone TEXT," +
+                "ownerAccount TEXT, " +
+                "canOrganizerRespond INTEGER NOT NULL DEFAULT 1," +
+                "canModifyTimeZone INTEGER DEFAULT 1, " +
+                "maxReminders INTEGER DEFAULT 5," +
+                "deleted INTEGER NOT NULL DEFAULT 0," +
+                "sync1 TEXT," +
+                "sync2 TEXT," +
+                "sync3 TEXT," +
+                "sync4 TEXT," +
+                "sync5 TEXT," +
+                "sync6 TEXT" +
+                ");");
+
+        createCalendarsCleanup200(db);
     }
 
     private void createCalendarsTable202(SQLiteDatabase db) {
@@ -826,9 +834,16 @@ import java.util.TimeZone;
                 oldVersion += 1;
             }
             if (oldVersion == 204) {
+                // This is an ICS update, all following use 300+ versions.
                 upgradeToVersion205(db);
                 createEventsView = true;
                 oldVersion += 1;
+            }
+            if (oldVersion == 205) {
+                // Move ICS updates to 300 range
+                upgradeToVersion300(db);
+                createEventsView = true;
+                oldVersion = 300;
             }
             if (createEventsView) {
                 createEventsView(db);
@@ -846,6 +861,13 @@ import java.util.TimeZone;
             bootstrapDB(db);
             return; // this was lossy
         }
+
+        /**
+         * db versions < 100 correspond to Froyo and earlier. Gingerbread bumped
+         * the db versioning to 100. Honeycomb bumped it to 200. ICS will begin
+         * in 300. At each major release we should jump to the next
+         * centiversion.
+         */
     }
 
     /**
@@ -873,6 +895,201 @@ import java.util.TimeZone;
     }
 
     @VisibleForTesting
+    void upgradeToVersion300(SQLiteDatabase db) {
+
+        /*
+         * Changes from version 205 to 300:
+         * - rename _sync_account to account_name in Calendars table
+         * - remove _sync_account from Events table
+         * - rename _sync_account_type to account_type in Calendars table
+         * - remove _sync_account_type from Events table
+         * - rename _sync_dirty to dirty in Calendars/Events table
+         * - rename color to calendar_color in Calendars table
+         * - rename location to calendar_location in Calendars table
+         * - rename timezone to calendar_timezone in Calendars table
+         * - add allowedReminders in Calendars table
+         * - rename visibility to accessLevel in Events table
+         * - rename transparency to availability in Events table
+         * - rename originalEvent to original_sync_id in Events table
+         * - remove dtstart2 and dtend2 from Events table
+         * - rename syncAdapterData to sync_data1 in Events table
+         */
+
+        // rename old table, create new table with updated layout
+        db.execSQL("ALTER TABLE Calendars RENAME TO Calendars_Backup;");
+        db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
+        createCalendarsTable(db);
+
+        // copy fields from old to new
+        db.execSQL("INSERT INTO Calendars (" +
+                "_id, " +
+                "account_name, " +          // rename from _sync_account
+                "account_type, " +          // rename from _sync_account_type
+                "_sync_id, " +
+                "_sync_version, " +
+                "_sync_time, " +
+                "dirty, " +                 // rename from _sync_dirty
+                "name, " +
+                "displayName, " +
+                "calendar_color, " +        // rename from color
+                "access_level, " +
+                "visible, " +
+                "sync_events, " +
+                "calendar_location, " +     // rename from location
+                "calendar_timezone, " +     // rename from timezone
+                "ownerAccount, " +
+                "canOrganizerRespond, " +
+                "canModifyTimeZone, " +
+                "maxReminders, " +
+                "allowedReminders," +
+                "deleted, " +
+                "sync1, " +
+                "sync2, " +
+                "sync3, " +
+                "sync4," +
+                "sync5," +
+                "sync6) " +
+
+                "SELECT " +
+                "_id, " +
+                "_sync_account, " +
+                "_sync_account_type, " +
+                "_sync_id, " +
+                "_sync_version, " +
+                "_sync_time, " +
+                "_sync_dirty, " +
+                "name, " +
+                "displayName, " +
+                "color, " +
+                "access_level, " +
+                "visible, " +
+                "sync_events, " +
+                "location, " +
+                "timezone, " +
+                "ownerAccount, " +
+                "canOrganizerRespond, " +
+                "canModifyTimeZone, " +
+                "maxReminders, " +
+                "'0,1,2,3'," +
+                "deleted, " +
+                "sync1, " +
+                "sync2, " +
+                "sync3, " +
+                "sync4, " +
+                "sync5, " +
+                "sync6 " +
+                "FROM Calendars_Backup;"
+        );
+
+        // drop the old table
+        db.execSQL("DROP TABLE Calendars_Backup;");
+
+        db.execSQL("ALTER TABLE Events RENAME TO Events_Backup;");
+        db.execSQL("DROP TRIGGER IF EXISTS events_insert");
+        db.execSQL("DROP TRIGGER IF EXISTS events_cleanup_delete");
+        db.execSQL("DROP INDEX IF EXISTS eventSyncAccountAndIdIndex");
+        db.execSQL("DROP INDEX IF EXISTS eventsCalendarIdIndex");
+        createEventsTable(db);
+
+        // copy fields from old to new
+        db.execSQL("INSERT INTO Events (" +
+                "_id, " +
+                "_sync_id, " +
+                "_sync_version, " +
+                "_sync_time, " +
+                "_sync_local_id, " +
+                "dirty, " +                 // renamed from _sync_dirty
+                "_sync_mark, " +
+                "calendar_id, " +
+                "htmlUri, " +
+                "title, " +
+                "eventLocation, " +
+                "description, " +
+                "eventStatus, " +
+                "selfAttendeeStatus, " +
+                "commentsUri, " +
+                "dtstart, " +
+                "dtend, " +
+                "eventTimezone, " +
+                "eventEndTimezone, " +      // renamed from eventTimezone2
+                "duration, " +
+                "allDay, " +
+                "accessLevel, " +           // renamed from visibility
+                "availability, " +          // renamed from transparency
+                "hasAlarm, " +
+                "hasExtendedProperties, " +
+                "rrule, " +
+                "rdate, " +
+                "exrule, " +
+                "exdate, " +
+                "original_sync_id, " +      // renamed from originalEvent
+                "originalInstanceTime, " +
+                "originalAllDay, " +
+                "lastDate, " +
+                "hasAttendeeData, " +
+                "guestsCanModify, " +
+                "guestsCanInviteOthers, " +
+                "guestsCanSeeGuests, " +
+                "organizer, " +
+                "deleted, " +
+                "sync_data1) " +             // renamed from syncAdapterData
+
+                "SELECT " +
+                "_id, " +
+                "_sync_id, " +
+                "_sync_version, " +
+                "_sync_time, " +
+                "_sync_local_id, " +
+                "_sync_dirty, " +
+                "_sync_mark, " +
+                "calendar_id, " +
+                "htmlUri, " +
+                "title, " +
+                "eventLocation, " +
+                "description, " +
+                "eventStatus, " +
+                "selfAttendeeStatus, " +
+                "commentsUri, " +
+                "dtstart, " +
+                "dtend, " +
+                "eventTimezone, " +
+                "eventTimezone2, " +
+                "duration, " +
+                "allDay, " +
+                "visibility, " +
+                "transparency, " +
+                "hasAlarm, " +
+                "hasExtendedProperties, " +
+                "rrule, " +
+                "rdate, " +
+                "exrule, " +
+                "exdate, " +
+                "originalEvent, " +
+                "originalInstanceTime, " +
+                "originalAllDay, " +
+                "lastDate, " +
+                "hasAttendeeData, " +
+                "guestsCanModify, " +
+                "guestsCanInviteOthers, " +
+                "guestsCanSeeGuests, " +
+                "organizer, " +
+                "deleted, " +
+                "syncAdapterData " +
+
+                "FROM Events_Backup;"
+        );
+
+        db.execSQL("DROP TABLE Events_Backup;");
+
+        // Trigger to remove data tied to an event when we delete that event.
+        db.execSQL("CREATE TRIGGER events_cleanup_delete DELETE ON " + Tables.EVENTS + " " +
+                "BEGIN " +
+                EVENTS_CLEANUP_TRIGGER_SQL +
+                "END");
+
+    };
+
+    @VisibleForTesting
     void upgradeToVersion205(SQLiteDatabase db) {
         /*
          * Changes from version 204 to 205:
@@ -887,7 +1104,7 @@ import java.util.TimeZone;
         // rename old table, create new table with updated layout
         db.execSQL("ALTER TABLE Calendars RENAME TO Calendars_Backup;");
         db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
-        createCalendarsTable(db);
+        createCalendarsTable205(db);
 
         // copy fields from old to new
         db.execSQL("INSERT INTO Calendars (" +
@@ -1793,20 +2010,21 @@ import java.util.TimeZone;
                 + Calendar.Events.DTEND + ","
                 + Calendar.Events.DURATION + ","
                 + Calendar.Events.EVENT_TIMEZONE + ","
+                + Calendar.Events.EVENT_END_TIMEZONE + ","
                 + Calendar.Events.ALL_DAY + ","
-                + Calendar.Events.VISIBILITY + ","
-                + Calendar.Calendars.TIMEZONE + ","
+                + Calendar.Events.ACCESS_LEVEL + ","
+                + Calendar.Calendars.CALENDAR_TIMEZONE + ","
                 + Calendar.Calendars.VISIBLE + ","
                 + Calendar.Calendars.ACCESS_LEVEL + ","
-                + Calendar.Events.TRANSPARENCY + ","
-                + Calendar.Calendars.COLOR + ","
+                + Calendar.Events.AVAILABILITY + ","
+                + Calendar.Calendars.CALENDAR_COLOR + ","
                 + Calendar.Events.HAS_ALARM + ","
                 + Calendar.Events.HAS_EXTENDED_PROPERTIES + ","
                 + Calendar.Events.RRULE + ","
                 + Calendar.Events.RDATE + ","
                 + Calendar.Events.EXRULE + ","
                 + Calendar.Events.EXDATE + ","
-                + Calendar.Events.ORIGINAL_EVENT + ","
+                + Calendar.Events.ORIGINAL_SYNC_ID + ","
                 + Calendar.Events.ORIGINAL_INSTANCE_TIME + ","
                 + Calendar.Events.ORIGINAL_ALL_DAY + ","
                 + Calendar.Events.LAST_DATE + ","
@@ -1822,12 +2040,12 @@ import java.util.TimeZone;
                 + " AS " + Calendar.Events._SYNC_ID + ","
                 + Tables.EVENTS + "." + Calendar.Events._SYNC_VERSION
                 + " AS " + Calendar.Events._SYNC_VERSION + ","
-                + Tables.EVENTS + "." + Calendar.Events._SYNC_DIRTY
-                + " AS " + Calendar.Events._SYNC_DIRTY + ","
-                + Tables.EVENTS + "." + Calendar.Events._SYNC_ACCOUNT
-                + " AS " + Calendar.Events._SYNC_ACCOUNT + ","
-                + Tables.EVENTS + "." + Calendar.Events._SYNC_ACCOUNT_TYPE
-                + " AS " + Calendar.Events._SYNC_ACCOUNT_TYPE + ","
+                + Tables.EVENTS + "." + Calendar.Events.DIRTY
+                + " AS " + Calendar.Events.DIRTY + ","
+                + Tables.CALENDARS + "." + Calendar.Calendars.ACCOUNT_NAME
+                + " AS " + Calendar.Events.ACCOUNT_NAME + ","
+                + Tables.CALENDARS + "." + Calendar.Calendars.ACCOUNT_TYPE
+                + " AS " + Calendar.Events.ACCOUNT_TYPE + ","
                 + Tables.EVENTS + "." + Calendar.Events._SYNC_TIME
                 + " AS " + Calendar.Events._SYNC_TIME + ","
                 + Tables.EVENTS + "." + Calendar.Events._SYNC_DATA
@@ -1837,7 +2055,7 @@ import java.util.TimeZone;
                 + Calendar.Calendars.SYNC1 + ","
                 + Calendar.Calendars.OWNER_ACCOUNT + ","
                 + Calendar.Calendars.SYNC_EVENTS  + ","
-                + Calendar.Events.SYNC_ADAPTER_DATA
+                + Calendar.Events.SYNC_DATA1
                 + " FROM " + Tables.EVENTS + " JOIN " + Tables.CALENDARS
                 + " ON (" + Tables.EVENTS + "." + Calendar.Events.CALENDAR_ID
                 + "=" + Tables.CALENDARS + "." + Calendar.Calendars._ID

@@ -106,7 +106,7 @@ public class CalendarDebug extends ListActivity {
 
                         // Compute number of dirty events in the calendar
                         String dirtyWhere = Calendar.EventsColumns.CALENDAR_ID + "=" + id
-                                + " AND " + Calendar.Events._SYNC_DIRTY + "=1";
+                                + " AND " + Calendar.Events.DIRTY + "=1";
                         Cursor dirtyCursor = Calendar.Events.query(mContentResolver,
                                 EVENTS_PROJECTION, dirtyWhere, null);
                         try {

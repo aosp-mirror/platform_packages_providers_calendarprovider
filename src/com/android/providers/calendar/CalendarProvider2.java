@@ -81,8 +81,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     // device
     private static final String ACCOUNT_TYPE_LOCAL = "LOCAL";
 
-    private static final String ACCOUNT_SELECTION_PREFIX = Calendars._SYNC_ACCOUNT + "=? AND "
-            + Calendars._SYNC_ACCOUNT_TYPE + "=?";
+    private static final String ACCOUNT_SELECTION_PREFIX = Calendars.ACCOUNT_NAME + "=? AND "
+            + Calendars.ACCOUNT_TYPE + "=?";
 
     protected static final boolean PROFILE = false;
     private static final boolean MULTIPLE_ATTENDEES_PER_EVENT = true;
@@ -94,7 +94,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Events._SYNC_ID,
             Events.RRULE,
             Events.RDATE,
-            Events.ORIGINAL_EVENT,
+            Events.ORIGINAL_SYNC_ID,
     };
     private static final int EVENTS_SYNC_ID_INDEX = 0;
     private static final int EVENTS_RRULE_INDEX = 1;
@@ -156,12 +156,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private static final String SQL_UPDATE_EVENT_SET_DIRTY = "UPDATE " +
             Tables.EVENTS +
-            " SET " + Events._SYNC_DIRTY + "=1" +
+            " SET " + Events.DIRTY + "=1" +
             " WHERE " + Events._ID + "=?";
 
     protected static final String SQL_WHERE_ID = BaseColumns._ID + "=?";
     private static final String SQL_WHERE_EVENT_ID = "event_id=?";
-    private static final String SQL_WHERE_ORIGINAL_EVENT = Events.ORIGINAL_EVENT + "=?";
+    private static final String SQL_WHERE_ORIGINAL_EVENT = Events.ORIGINAL_SYNC_ID + "=?";
     private static final String SQL_WHERE_ATTENDEES_ID =
             Tables.ATTENDEES + "." + Attendees._ID + "=? AND " +
             Tables.EVENTS + "." + Events._ID + "=" + Tables.ATTENDEES + "." + Attendees.EVENT_ID;
@@ -184,8 +184,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Tables.EXTENDED_PROPERTIES + "." + Calendar.ExtendedProperties._ID + "=?";
 
     private static final String SQL_DELETE_FROM_CALENDARS = "DELETE FROM " + Tables.CALENDARS +
-                " WHERE " + Calendar.SyncColumns._SYNC_ACCOUNT + "=? AND " +
-                    Calendar.SyncColumns._SYNC_ACCOUNT_TYPE + "=?";
+                " WHERE " + Calendar.SyncColumns.ACCOUNT_NAME + "=? AND " +
+                    Calendar.SyncColumns.ACCOUNT_TYPE + "=?";
 
     private static final String SQL_SELECT_COUNT_FOR_SYNC_ID =
             "SELECT COUNT(*) FROM " + Tables.EVENTS + " WHERE " + Events._SYNC_ID + "=?";
@@ -1405,7 +1405,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 break;
             case EVENTS:
                 if (!callerIsSyncAdapter) {
-                    values.put(Events._SYNC_DIRTY, 1);
+                    values.put(Events.DIRTY, 1);
                 }
                 if (!values.containsKey(Events.DTSTART)) {
                     throw new RuntimeException("DTSTART field missing from event");
@@ -1491,9 +1491,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case CALENDARS:
                 Integer syncEvents = values.getAsInteger(Calendars.SYNC_EVENTS);
                 if (syncEvents != null && syncEvents == 1) {
-                    String accountName = values.getAsString(Calendars._SYNC_ACCOUNT);
+                    String accountName = values.getAsString(Calendars.ACCOUNT_NAME);
                     String accountType = values.getAsString(
-                            Calendars._SYNC_ACCOUNT_TYPE);
+                            Calendars.ACCOUNT_TYPE);
                     final Account account = new Account(accountName, accountType);
                     String eventsUrl = values.getAsString(Calendars.SYNC1);
                     mDbHelper.scheduleSync(account, false /* two-way sync */, eventsUrl);
@@ -1583,7 +1583,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         boolean hasDuration = !TextUtils.isEmpty(values.getAsString(Events.DURATION));
         boolean hasRrule = !TextUtils.isEmpty(values.getAsString(Events.RRULE));
         boolean hasRdate = !TextUtils.isEmpty(values.getAsString(Events.RDATE));
-        boolean hasOriginalEvent = !TextUtils.isEmpty(values.getAsString(Events.ORIGINAL_EVENT));
+        boolean hasOriginalEvent = !TextUtils.isEmpty(values.getAsString(Events.ORIGINAL_SYNC_ID));
         boolean hasOriginalInstanceTime = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME) != null;
         if (hasRrule || hasRdate) {
             // Recurrence:
@@ -1599,7 +1599,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     Log.e(TAG, "Invalid values for recurrence: " + values);
                 }
                 values.remove(Events.DTEND);
-                values.remove(Events.ORIGINAL_EVENT);
+                values.remove(Events.ORIGINAL_SYNC_ID);
                 values.remove(Events.ORIGINAL_INSTANCE_TIME);
             }
         } else if (hasOriginalEvent || hasOriginalInstanceTime) {
@@ -1975,7 +1975,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 selection = appendSyncAccountToSelection(uri, selection);
 
                 // Query this event to get the ids to delete.
-                Cursor cursor = mDb.query(Tables.EVENTS, ID_ONLY_PROJECTION,
+                Cursor cursor = mDb.query(Views.EVENTS, ID_ONLY_PROJECTION,
                         selection, selectionArgs, null /* groupBy */,
                         null /* having */, null /* sortOrder */);
                 try {
@@ -2144,7 +2144,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 } else {
                     ContentValues values = new ContentValues();
                     values.put(Events.DELETED, 1);
-                    values.put(Events._SYNC_DIRTY, 1);
+                    values.put(Events.DIRTY, 1);
                     mDb.update(Tables.EVENTS, values, SQL_WHERE_ID, selectionArgs);
 
                     // Delete associated data; attendees, however, are deleted with the actual event
@@ -2181,7 +2181,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // so we don't need to worry about deleting data we don't have permission to read.
         Cursor c = query(uri, ID_PROJECTION, selection, selectionArgs, null);
         ContentValues values = new ContentValues();
-        values.put(Events._SYNC_DIRTY, "1");
+        values.put(Events.DIRTY, "1");
         int count = 0;
         try {
             while(c.moveToNext()) {
@@ -2212,7 +2212,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // so we don't need to worry about deleting data we don't have permission to read.
         Cursor c = query(uri, ID_PROJECTION, selection, selectionArgs, null);
         ContentValues dirtyValues = new ContentValues();
-        dirtyValues.put(Events._SYNC_DIRTY, "1");
+        dirtyValues.put(Events.DIRTY, "1");
         int count = 0;
         try {
             while(c.moveToNext()) {
@@ -2291,7 +2291,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Cursor cursor = null;
             try {
                 cursor = getCursorForEventIdAndProjection(eventId,
-                        new String[] { Events.RRULE, Events.RDATE, Events.ORIGINAL_EVENT });
+                        new String[] { Events.RRULE, Events.RDATE, Events.ORIGINAL_SYNC_ID });
                 if (!cursor.moveToFirst()) {
                     if (Log.isLoggable(TAG, Log.WARN)) {
                         Log.w(TAG, "Cannot find Event with id: " + eventId);
@@ -2378,7 +2378,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     }
                 }
                 if (!callerIsSyncAdapter) {
-                    values.put(Calendars._SYNC_DIRTY, 1);
+                    values.put(Calendars.DIRTY, 1);
                 }
                 Integer syncEvents = values.getAsInteger(Calendars.SYNC_EVENTS);
                 if (syncEvents != null) {
@@ -2431,7 +2431,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     throw new IllegalArgumentException("Unknown URL " + uri);
                 }
                 if (!callerIsSyncAdapter) {
-                    values.put(Events._SYNC_DIRTY, 1);
+                    values.put(Events.DIRTY, 1);
                 }
                 // Disallow updating the attendee status in the Events
                 // table.  In the future, we could support this but we
@@ -2682,9 +2682,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         final String accountType = QueryParameterUtils.getQueryParameter(uri,
                 Calendar.EventsEntity.ACCOUNT_TYPE);
         if (!TextUtils.isEmpty(accountName)) {
-            qb.appendWhere(Calendar.Calendars._SYNC_ACCOUNT + "="
+            qb.appendWhere(Calendar.Calendars.ACCOUNT_NAME + "="
                     + DatabaseUtils.sqlEscapeString(accountName) + " AND "
-                    + Calendar.Calendars._SYNC_ACCOUNT_TYPE + "="
+                    + Calendar.Calendars.ACCOUNT_TYPE + "="
                     + DatabaseUtils.sqlEscapeString(accountType));
         } else {
             qb.appendWhere("1"); // I.e. always true
@@ -2718,9 +2718,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         final String accountType = QueryParameterUtils.getQueryParameter(uri,
                 Calendar.EventsEntity.ACCOUNT_TYPE);
         if (!TextUtils.isEmpty(accountName)) {
-            StringBuilder selectionSb = new StringBuilder(Calendar.Events._SYNC_ACCOUNT + "="
+            StringBuilder selectionSb = new StringBuilder(Calendar.Events.ACCOUNT_NAME + "="
                     + DatabaseUtils.sqlEscapeString(accountName) + " AND "
-                    + Calendar.Events._SYNC_ACCOUNT_TYPE + "="
+                    + Calendar.Events.ACCOUNT_TYPE + "="
                     + DatabaseUtils.sqlEscapeString(accountType));
             if (!TextUtils.isEmpty(selection)) {
                 selectionSb.append(" AND (");
@@ -2736,7 +2736,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     /**
      * Verifies that the operation is allowed and throws an exception if it
      * isn't. This defines the limits of a sync adapter call vs an app call.
-     * 
+     *
      * @param type The type of call, {@link #TRANSACTION_QUERY},
      *            {@link #TRANSACTION_INSERT}, {@link #TRANSACTION_UPDATE}, or
      *            {@link #TRANSACTION_DELETE}
@@ -2754,6 +2754,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     throw new UnsupportedOperationException(
                             "Inserting into instances not supported");
                 }
+                // Check there are no columns restricted to the provider
+                verifyColumns(values, uriMatch);
                 if (isSyncAdapter) {
                     // check that account and account type are specified
                     verifyHasAccount(uri, selection, selectionArgs);
@@ -2766,6 +2768,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 if (uriMatch == INSTANCES) {
                     throw new UnsupportedOperationException("Updating instances not supported");
                 }
+                // Check there are no columns restricted to the provider
+                verifyColumns(values, uriMatch);
                 if (isSyncAdapter) {
                     // check that account and account type are specified
                     verifyHasAccount(uri, selection, selectionArgs);
@@ -2787,16 +2791,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     private void verifyHasAccount(Uri uri, String selection, String[] selectionArgs) {
-        String accountName = QueryParameterUtils.getQueryParameter(uri, Calendars._SYNC_ACCOUNT);
+        String accountName = QueryParameterUtils.getQueryParameter(uri, Calendars.ACCOUNT_NAME);
         String accountType = QueryParameterUtils.getQueryParameter(uri,
-                Calendars._SYNC_ACCOUNT_TYPE);
-        if (TextUtils.isEmpty(accountName) || TextUtils.isEmpty(accountType)) {
-            // TODO remove this after ACCOUNT_NAME/TYPE get renamed.
-            accountName = QueryParameterUtils.getQueryParameter(uri,
-                    Calendar.SyncState.ACCOUNT_NAME);
-            accountType = QueryParameterUtils.getQueryParameter(uri,
-                    Calendar.SyncState.ACCOUNT_TYPE);
-        }
+                Calendars.ACCOUNT_TYPE);
         if (TextUtils.isEmpty(accountName) || TextUtils.isEmpty(accountType)) {
             if (selection != null && selection.startsWith(ACCOUNT_SELECTION_PREFIX)) {
                 accountName = selectionArgs[0];
@@ -2809,8 +2806,32 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     }
 
+    private void verifyColumns(ContentValues values, int uriMatch) {
+        if (values == null || values.size() == 0) {
+            return;
+        }
+        String[] columns;
+        switch (uriMatch) {
+            case EVENTS:
+            case EVENTS_ID:
+            case EVENT_ENTITIES:
+            case EVENT_ENTITIES_ID:
+                columns = Events.PROVIDER_WRITABLE_COLUMNS;
+                break;
+            default:
+                columns = PROVIDER_WRITABLE_DEFAULT_COLUMNS;
+                break;
+        }
+
+        for (int i = 0; i < columns.length; i++) {
+            if (values.containsKey(columns[i])) {
+                throw new IllegalArgumentException("Only the provider may write to " + columns[i]);
+            }
+        }
+    }
+
     private void verifyNoSyncColumns(ContentValues values, int uriMatch) {
-        if (values == null) {
+        if (values == null || values.size() == 0) {
             return;
         }
         String[] syncColumns;
@@ -2819,7 +2840,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case CALENDARS_ID:
             case CALENDAR_ENTITIES:
             case CALENDAR_ENTITIES_ID:
-                syncColumns = SYNC_WRITABLE_CALENDARS_COLUMNS;
+                syncColumns = Calendars.SYNC_WRITABLE_COLUMNS;
+                break;
+            case EVENTS:
+            case EVENTS_ID:
+            case EVENT_ENTITIES:
+            case EVENT_ENTITIES_ID:
+                syncColumns = Events.SYNC_WRITABLE_COLUMNS;
                 break;
             default:
                 syncColumns = SYNC_WRITABLE_DEFAULT_COLUMNS;
@@ -2838,7 +2865,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // get the account, url, and current selected state
         // for this calendar.
         Cursor cursor = query(ContentUris.withAppendedId(Calendars.CONTENT_URI, id),
-                new String[] {Calendars._SYNC_ACCOUNT, Calendars._SYNC_ACCOUNT_TYPE,
+                new String[] {Calendars.ACCOUNT_NAME, Calendars.ACCOUNT_TYPE,
                         Calendars.SYNC1, Calendars.SYNC_EVENTS},
                 null /* selection */,
                 null /* selectionArgs */,
@@ -2960,34 +2987,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final int TRANSACTION_DELETE = 3;
 
     // @formatter:off
-    private static final String[] SYNC_WRITABLE_CALENDARS_COLUMNS = new String[] {
-        Calendars._SYNC_ACCOUNT,
-        Calendars._SYNC_ACCOUNT_TYPE,
-        Calendars._SYNC_ID,
-        Calendars._SYNC_TIME,
-        Calendars._SYNC_VERSION,
-        Calendars._SYNC_DIRTY,
-        Calendars.OWNER_ACCOUNT,
-        Calendars.MAX_REMINDERS,
-        // Calendars.ALLOWED_ALERTS
-        Calendars.CAN_MODIFY_TIME_ZONE,
-        Calendars.CAN_ORGANIZER_RESPOND,
-        Calendars.LOCATION,
-        Calendars.TIMEZONE,
-        Calendars.ACCESS_LEVEL,
-        Calendars.DELETED,
-        Calendars.SYNC1,
-        Calendars.SYNC2,
-        Calendars.SYNC3,
-        Calendars.SYNC4,
-        Calendars.SYNC5,
-        Calendars.SYNC6,
-        Calendars.SYNC_STATE,
-    };
-
     private static final String[] SYNC_WRITABLE_DEFAULT_COLUMNS = new String[] {
-        Calendar.SyncColumns._SYNC_DIRTY,
+        Calendar.SyncColumns.DIRTY,
         Calendar.SyncColumns._SYNC_ID
+    };
+    private static final String[] PROVIDER_WRITABLE_DEFAULT_COLUMNS = new String[] {
     };
     // @formatter:on
 
@@ -3073,49 +3077,50 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         sEventsProjectionMap = new HashMap<String, String>();
         // Events columns
-        sEventsProjectionMap.put(Events.HTML_URI, "htmlUri");
-        sEventsProjectionMap.put(Events.TITLE, "title");
-        sEventsProjectionMap.put(Events.EVENT_LOCATION, "eventLocation");
-        sEventsProjectionMap.put(Events.DESCRIPTION, "description");
-        sEventsProjectionMap.put(Events.STATUS, "eventStatus");
-        sEventsProjectionMap.put(Events.SELF_ATTENDEE_STATUS, "selfAttendeeStatus");
-        sEventsProjectionMap.put(Events.COMMENTS_URI, "commentsUri");
-        sEventsProjectionMap.put(Events.DTSTART, "dtstart");
-        sEventsProjectionMap.put(Events.DTEND, "dtend");
-        sEventsProjectionMap.put(Events.EVENT_TIMEZONE, "eventTimezone");
-        sEventsProjectionMap.put(Events.DURATION, "duration");
-        sEventsProjectionMap.put(Events.ALL_DAY, "allDay");
-        sEventsProjectionMap.put(Events.VISIBILITY, "visibility");
-        sEventsProjectionMap.put(Events.TRANSPARENCY, "transparency");
-        sEventsProjectionMap.put(Events.HAS_ALARM, "hasAlarm");
-        sEventsProjectionMap.put(Events.HAS_EXTENDED_PROPERTIES, "hasExtendedProperties");
-        sEventsProjectionMap.put(Events.RRULE, "rrule");
-        sEventsProjectionMap.put(Events.RDATE, "rdate");
-        sEventsProjectionMap.put(Events.EXRULE, "exrule");
-        sEventsProjectionMap.put(Events.EXDATE, "exdate");
-        sEventsProjectionMap.put(Events.ORIGINAL_EVENT, "originalEvent");
-        sEventsProjectionMap.put(Events.ORIGINAL_INSTANCE_TIME, "originalInstanceTime");
-        sEventsProjectionMap.put(Events.ORIGINAL_ALL_DAY, "originalAllDay");
-        sEventsProjectionMap.put(Events.LAST_DATE, "lastDate");
-        sEventsProjectionMap.put(Events.HAS_ATTENDEE_DATA, "hasAttendeeData");
-        sEventsProjectionMap.put(Events.CALENDAR_ID, "calendar_id");
-        sEventsProjectionMap.put(Events.GUESTS_CAN_INVITE_OTHERS, "guestsCanInviteOthers");
-        sEventsProjectionMap.put(Events.GUESTS_CAN_MODIFY, "guestsCanModify");
-        sEventsProjectionMap.put(Events.GUESTS_CAN_SEE_GUESTS, "guestsCanSeeGuests");
-        sEventsProjectionMap.put(Events.ORGANIZER, "organizer");
-        sEventsProjectionMap.put(Events.DELETED, "deleted");
+        sEventsProjectionMap.put(Events.HTML_URI, Events.HTML_URI);
+        sEventsProjectionMap.put(Events.TITLE, Events.TITLE);
+        sEventsProjectionMap.put(Events.EVENT_LOCATION, Events.EVENT_LOCATION);
+        sEventsProjectionMap.put(Events.DESCRIPTION, Events.DESCRIPTION);
+        sEventsProjectionMap.put(Events.STATUS, Events.STATUS);
+        sEventsProjectionMap.put(Events.SELF_ATTENDEE_STATUS, Events.SELF_ATTENDEE_STATUS);
+        sEventsProjectionMap.put(Events.COMMENTS_URI, Events.COMMENTS_URI);
+        sEventsProjectionMap.put(Events.DTSTART, Events.DTSTART);
+        sEventsProjectionMap.put(Events.DTEND, Events.DTEND);
+        sEventsProjectionMap.put(Events.EVENT_TIMEZONE, Events.EVENT_TIMEZONE);
+        sEventsProjectionMap.put(Events.EVENT_END_TIMEZONE, Events.EVENT_END_TIMEZONE);
+        sEventsProjectionMap.put(Events.DURATION, Events.DURATION);
+        sEventsProjectionMap.put(Events.ALL_DAY, Events.ALL_DAY);
+        sEventsProjectionMap.put(Events.ACCESS_LEVEL, Events.ACCESS_LEVEL);
+        sEventsProjectionMap.put(Events.AVAILABILITY, Events.AVAILABILITY);
+        sEventsProjectionMap.put(Events.HAS_ALARM, Events.HAS_ALARM);
+        sEventsProjectionMap.put(Events.HAS_EXTENDED_PROPERTIES, Events.HAS_EXTENDED_PROPERTIES);
+        sEventsProjectionMap.put(Events.RRULE, Events.RRULE);
+        sEventsProjectionMap.put(Events.RDATE, Events.RDATE);
+        sEventsProjectionMap.put(Events.EXRULE, Events.EXRULE);
+        sEventsProjectionMap.put(Events.EXDATE, Events.EXDATE);
+        sEventsProjectionMap.put(Events.ORIGINAL_SYNC_ID, Events.ORIGINAL_SYNC_ID);
+        sEventsProjectionMap.put(Events.ORIGINAL_INSTANCE_TIME, Events.ORIGINAL_INSTANCE_TIME);
+        sEventsProjectionMap.put(Events.ORIGINAL_ALL_DAY, Events.ORIGINAL_ALL_DAY);
+        sEventsProjectionMap.put(Events.LAST_DATE, Events.LAST_DATE);
+        sEventsProjectionMap.put(Events.HAS_ATTENDEE_DATA, Events.HAS_ATTENDEE_DATA);
+        sEventsProjectionMap.put(Events.CALENDAR_ID, Events.CALENDAR_ID);
+        sEventsProjectionMap.put(Events.GUESTS_CAN_INVITE_OTHERS, Events.GUESTS_CAN_INVITE_OTHERS);
+        sEventsProjectionMap.put(Events.GUESTS_CAN_MODIFY, Events.GUESTS_CAN_MODIFY);
+        sEventsProjectionMap.put(Events.GUESTS_CAN_SEE_GUESTS, Events.GUESTS_CAN_SEE_GUESTS);
+        sEventsProjectionMap.put(Events.ORGANIZER, Events.ORGANIZER);
+        sEventsProjectionMap.put(Events.DELETED, Events.DELETED);
 
         // Put the shared items into the Attendees, Reminders projection map
         sAttendeesProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
         sRemindersProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
 
         // Calendar columns
-        sEventsProjectionMap.put(Calendars.COLOR, "color");
-        sEventsProjectionMap.put(Calendars.ACCESS_LEVEL, "access_level");
-        sEventsProjectionMap.put(Calendars.VISIBLE, "visible");
-        sEventsProjectionMap.put(Calendars.SYNC1, "sync1");
-        sEventsProjectionMap.put(Calendars.TIMEZONE, "timezone");
-        sEventsProjectionMap.put(Calendars.OWNER_ACCOUNT, "ownerAccount");
+        sEventsProjectionMap.put(Calendars.CALENDAR_COLOR, Calendars.CALENDAR_COLOR);
+        sEventsProjectionMap.put(Calendars.ACCESS_LEVEL, Calendars.ACCESS_LEVEL);
+        sEventsProjectionMap.put(Calendars.VISIBLE, Calendars.VISIBLE);
+        sEventsProjectionMap.put(Calendars.SYNC1, Calendars.SYNC1);
+        sEventsProjectionMap.put(Calendars.CALENDAR_TIMEZONE, Calendars.CALENDAR_TIMEZONE);
+        sEventsProjectionMap.put(Calendars.OWNER_ACCOUNT, Calendars.OWNER_ACCOUNT);
 
         // Put the shared items into the Instances projection map
         // The Instances and CalendarAlerts are joined with Calendars, so the projections include
@@ -3123,55 +3128,60 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sInstancesProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
         sCalendarAlertsProjectionMap = new HashMap<String, String>(sEventsProjectionMap);
 
-        sEventsProjectionMap.put(Events._ID, "_id");
-        sEventsProjectionMap.put(Events._SYNC_ID, "_sync_id");
-        sEventsProjectionMap.put(Events._SYNC_VERSION, "_sync_version");
-        sEventsProjectionMap.put(Events._SYNC_TIME, "_sync_time");
-        sEventsProjectionMap.put(Events._SYNC_DATA, "_sync_local_id");
-        sEventsProjectionMap.put(Events._SYNC_DIRTY, "_sync_dirty");
-        sEventsProjectionMap.put(Events._SYNC_ACCOUNT, "_sync_account");
-        sEventsProjectionMap.put(Events._SYNC_ACCOUNT_TYPE,
-                "_sync_account_type");
+        sEventsProjectionMap.put(Events._ID, Events._ID);
+        sEventsProjectionMap.put(Events._SYNC_ID, Events._SYNC_ID);
+        sEventsProjectionMap.put(Events._SYNC_VERSION, Events._SYNC_VERSION);
+        sEventsProjectionMap.put(Events._SYNC_TIME, Events._SYNC_TIME);
+        sEventsProjectionMap.put(Events._SYNC_DATA, Events._SYNC_DATA);
+        sEventsProjectionMap.put(Events._SYNC_MARK, Events._SYNC_MARK);
+        sEventsProjectionMap.put(Events.DIRTY, Events.DIRTY);
+        sEventsProjectionMap.put(Events.ACCOUNT_NAME, Events.ACCOUNT_NAME);
+        sEventsProjectionMap.put(Events.ACCOUNT_TYPE, Events.ACCOUNT_TYPE);
 
         sEventEntitiesProjectionMap = new HashMap<String, String>();
-        sEventEntitiesProjectionMap.put(Events.HTML_URI, "htmlUri");
-        sEventEntitiesProjectionMap.put(Events.TITLE, "title");
-        sEventEntitiesProjectionMap.put(Events.DESCRIPTION, "description");
-        sEventEntitiesProjectionMap.put(Events.EVENT_LOCATION, "eventLocation");
-        sEventEntitiesProjectionMap.put(Events.STATUS, "eventStatus");
-        sEventEntitiesProjectionMap.put(Events.SELF_ATTENDEE_STATUS, "selfAttendeeStatus");
-        sEventEntitiesProjectionMap.put(Events.COMMENTS_URI, "commentsUri");
-        sEventEntitiesProjectionMap.put(Events.DTSTART, "dtstart");
-        sEventEntitiesProjectionMap.put(Events.DTEND, "dtend");
-        sEventEntitiesProjectionMap.put(Events.DURATION, "duration");
-        sEventEntitiesProjectionMap.put(Events.EVENT_TIMEZONE, "eventTimezone");
-        sEventEntitiesProjectionMap.put(Events.ALL_DAY, "allDay");
-        sEventEntitiesProjectionMap.put(Events.VISIBILITY, "visibility");
-        sEventEntitiesProjectionMap.put(Events.TRANSPARENCY, "transparency");
-        sEventEntitiesProjectionMap.put(Events.HAS_ALARM, "hasAlarm");
-        sEventEntitiesProjectionMap.put(Events.HAS_EXTENDED_PROPERTIES, "hasExtendedProperties");
-        sEventEntitiesProjectionMap.put(Events.RRULE, "rrule");
-        sEventEntitiesProjectionMap.put(Events.RDATE, "rdate");
-        sEventEntitiesProjectionMap.put(Events.EXRULE, "exrule");
-        sEventEntitiesProjectionMap.put(Events.EXDATE, "exdate");
-        sEventEntitiesProjectionMap.put(Events.ORIGINAL_EVENT, "originalEvent");
-        sEventEntitiesProjectionMap.put(Events.ORIGINAL_INSTANCE_TIME, "originalInstanceTime");
-        sEventEntitiesProjectionMap.put(Events.ORIGINAL_ALL_DAY, "originalAllDay");
-        sEventEntitiesProjectionMap.put(Events.LAST_DATE, "lastDate");
-        sEventEntitiesProjectionMap.put(Events.HAS_ATTENDEE_DATA, "hasAttendeeData");
-        sEventEntitiesProjectionMap.put(Events.CALENDAR_ID, "calendar_id");
-        sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_INVITE_OTHERS, "guestsCanInviteOthers");
-        sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_MODIFY, "guestsCanModify");
-        sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_SEE_GUESTS, "guestsCanSeeGuests");
-        sEventEntitiesProjectionMap.put(Events.ORGANIZER, "organizer");
-        sEventEntitiesProjectionMap.put(Events.DELETED, "deleted");
+        sEventEntitiesProjectionMap.put(Events.HTML_URI, Events.HTML_URI);
+        sEventEntitiesProjectionMap.put(Events.TITLE, Events.TITLE);
+        sEventEntitiesProjectionMap.put(Events.EVENT_LOCATION, Events.EVENT_LOCATION);
+        sEventEntitiesProjectionMap.put(Events.DESCRIPTION, Events.DESCRIPTION);
+        sEventEntitiesProjectionMap.put(Events.STATUS, Events.STATUS);
+        sEventEntitiesProjectionMap.put(Events.SELF_ATTENDEE_STATUS, Events.SELF_ATTENDEE_STATUS);
+        sEventEntitiesProjectionMap.put(Events.COMMENTS_URI, Events.COMMENTS_URI);
+        sEventEntitiesProjectionMap.put(Events.DTSTART, Events.DTSTART);
+        sEventEntitiesProjectionMap.put(Events.DTEND, Events.DTEND);
+        sEventEntitiesProjectionMap.put(Events.EVENT_TIMEZONE, Events.EVENT_TIMEZONE);
+        sEventEntitiesProjectionMap.put(Events.EVENT_END_TIMEZONE, Events.EVENT_END_TIMEZONE);
+        sEventEntitiesProjectionMap.put(Events.DURATION, Events.DURATION);
+        sEventEntitiesProjectionMap.put(Events.ALL_DAY, Events.ALL_DAY);
+        sEventEntitiesProjectionMap.put(Events.ACCESS_LEVEL, Events.ACCESS_LEVEL);
+        sEventEntitiesProjectionMap.put(Events.AVAILABILITY, Events.AVAILABILITY);
+        sEventEntitiesProjectionMap.put(Events.HAS_ALARM, Events.HAS_ALARM);
+        sEventEntitiesProjectionMap.put(Events.HAS_EXTENDED_PROPERTIES,
+                Events.HAS_EXTENDED_PROPERTIES);
+        sEventEntitiesProjectionMap.put(Events.RRULE, Events.RRULE);
+        sEventEntitiesProjectionMap.put(Events.RDATE, Events.RDATE);
+        sEventEntitiesProjectionMap.put(Events.EXRULE, Events.EXRULE);
+        sEventEntitiesProjectionMap.put(Events.EXDATE, Events.EXDATE);
+        sEventEntitiesProjectionMap.put(Events.ORIGINAL_SYNC_ID, Events.ORIGINAL_SYNC_ID);
+        sEventEntitiesProjectionMap.put(Events.ORIGINAL_INSTANCE_TIME,
+                Events.ORIGINAL_INSTANCE_TIME);
+        sEventEntitiesProjectionMap.put(Events.ORIGINAL_ALL_DAY, Events.ORIGINAL_ALL_DAY);
+        sEventEntitiesProjectionMap.put(Events.LAST_DATE, Events.LAST_DATE);
+        sEventEntitiesProjectionMap.put(Events.HAS_ATTENDEE_DATA, Events.HAS_ATTENDEE_DATA);
+        sEventEntitiesProjectionMap.put(Events.CALENDAR_ID, Events.CALENDAR_ID);
+        sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_INVITE_OTHERS,
+                Events.GUESTS_CAN_INVITE_OTHERS);
+        sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_MODIFY, Events.GUESTS_CAN_MODIFY);
+        sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_SEE_GUESTS, Events.GUESTS_CAN_SEE_GUESTS);
+        sEventEntitiesProjectionMap.put(Events.ORGANIZER, Events.ORGANIZER);
+        sEventEntitiesProjectionMap.put(Events.DELETED, Events.DELETED);
         sEventEntitiesProjectionMap.put(Events._ID, Events._ID);
         sEventEntitiesProjectionMap.put(Events._SYNC_ID, Events._SYNC_ID);
         sEventEntitiesProjectionMap.put(Events._SYNC_DATA, Events._SYNC_DATA);
         sEventEntitiesProjectionMap.put(Events._SYNC_VERSION, Events._SYNC_VERSION);
-        sEventEntitiesProjectionMap.put(Events._SYNC_DIRTY, Events._SYNC_DIRTY);
+        sEventEntitiesProjectionMap.put(Events._SYNC_MARK, Events._SYNC_MARK);
+        sEventEntitiesProjectionMap.put(Events.DIRTY, Events.DIRTY);
         sEventEntitiesProjectionMap.put(Calendars.SYNC1, Calendars.SYNC1);
-        sEventEntitiesProjectionMap.put(Events.SYNC_ADAPTER_DATA, Events.SYNC_ADAPTER_DATA);
+        sEventEntitiesProjectionMap.put(Events.SYNC_DATA1, Events.SYNC_DATA1);
 
         // Instances columns
         sInstancesProjectionMap.put(Events.DELETED, "Events.deleted as deleted");
@@ -3245,9 +3255,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // Find all the accounts the calendar DB knows about, mark the ones that aren't
                 // in the valid set for deletion.
                 Cursor c = mDb.rawQuery("SELECT DISTINCT " +
-                                            Calendar.SyncColumns._SYNC_ACCOUNT +
+                                            Calendar.SyncColumns.ACCOUNT_NAME +
                                             "," +
-                                            Calendar.SyncColumns._SYNC_ACCOUNT_TYPE +
+                                            Calendar.SyncColumns.ACCOUNT_TYPE +
                                         " FROM " + table, null);
                 while (c.moveToNext()) {
                     // ACCOUNT_TYPE_LOCAL is to store calendars not associated

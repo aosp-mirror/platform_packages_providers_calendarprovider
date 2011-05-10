@@ -28,6 +28,6 @@
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Magsimula"</string>
     <string name="debug_tool_message" msgid="4414152820946316089">"Ikaw ay 1) gagawa ng kopya ng iyong database ng kalendaryo sa sd card/usb storage na nababasa ng anumang app at 2) magpapadala ng email nito. Tandaang tanggalin ito sa oras na matagumpay mo itong nakopya mula sa device o natanggap ang email."</string>
     <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Pumili ng program upang ipadala ang iyong file"</string>
-    <string name="debug_tool_email_subject" msgid="2403590332256471194">"Naka-attach ang Calendar db"</string>
+    <string name="debug_tool_email_subject" msgid="2403590332256471194">"Naka-attach ang Calendar Db"</string>
     <string name="debug_tool_email_body" msgid="740309162644398319">"Naka-attach ang aking database ng kalendaryo kasama ang lahat ng aking mga appointment at personal na impormasyon. Mangyaring pangasiwaan nang may pag-iingat."</string>
 </resources>

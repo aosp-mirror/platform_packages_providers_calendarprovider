@@ -26,8 +26,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Kalendārs"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Dzēst tagad"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Sākt"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Jūs gatavojaties 1) SD kartē/USB atmiņā izveidot kalendāra datu bāzes kopiju, kuru var nolasīt jebkura lietotne, un 2) nosūtīt to pa e-pastu. Tiklīdz būsiet veiksmīgi pārkopējis to no ierīces vai būsiet saņēmis e-pasta ziņojumu, dzēsiet kopiju."</string>
+    <string name="debug_tool_message" msgid="4414152820946316089">"Jūs gatavojaties 1) SD kartē/USB atmiņā izveidot kalendāra datu bāzes kopiju, kuru var nolasīt jebkura lietotne, un 2) nosūtīt to pa e-pastu. Tiklīdz būsiet veiksmīgi pārkopējis to no ierīces vai būsiet saņēmis e-pasta ziņojumu, neaizmirstiet izdzēst kopiju."</string>
     <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Atlasiet programmu, lai nosūtītu failu"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Kalendāra datu bāze ir pievienota"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"Pielikumā ir pievienota mana kalendāra datu bāze ar tikšanos un personas informāciju. Lūdzu, rīkojieties ar to uzmanīgi."</string>
+    <string name="debug_tool_email_body" msgid="740309162644398319">"Pielikumā ir mana kalendāra datu bāze ar visiem tikšanās ierakstiem un personīgo informāciju. Lūdzu, rīkojieties ar to uzmanīgi."</string>
 </resources>

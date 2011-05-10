@@ -26,7 +26,7 @@
     <string name="provider_label" msgid="2306513350843464739">"Kalendár"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Odstrániť"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Spustiť"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Chystáte sa 1) vytvoriť kópiu databázy kalendára na SD kartu (ukladací priestor USB), ktorá bude čitateľná pre všetky aplikácie a 2) odoslať ju e-mailom. Nezabudnite ju odstrániť hneď, ako ju skopírujete zo zariadenia a odošlete e-mail."</string>
+    <string name="debug_tool_message" msgid="4414152820946316089">"Chystáte sa 1) vytvoriť kópiu databázy kalendára na SD kartu (ukladací priestor USB), ktorá bude čitateľná pre všetky aplikácie a 2) odoslať ju e-mailom. Nezabudnite ju odstrániť hneď, ako ju skopírujete zo zariadenia alebo po prijatí e-mailu."</string>
     <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Vyberte program na odoslanie súboru"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Pripojený ladiaci nástroj Kalendára"</string>
     <string name="debug_tool_email_body" msgid="740309162644398319">"V prílohe je moja databáza kalendára so všetkými stretnutiami a osobnými informáciami. Zaobchádzajte s ňou opatrne."</string>

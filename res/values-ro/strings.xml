@@ -26,8 +26,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Calendar"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Ştergeţi acum"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Începeţi"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Sunteţi pe cale 1) să faceţi o copie a bazei de date a calendarului dvs. pe cardul SD/dispozitivul USB de stocare, care poate fi citită de orice aplicaţie şi 2) să expediaţi această copie prin e-mail. Amintiţi-vă să ştergeţi baza de date după ce aţi copiat-o pe respectivul dispozitiv sau aţi primit e-mailul."</string>
+    <string name="debug_tool_message" msgid="4414152820946316089">"Sunteţi pe cale 1) să faceţi o copie a bazei de date a calendarului dvs. pe cardul SD/dispozitivul USB de stocare, care poate fi citită de orice aplicaţie şi 2) să expediaţi această copie prin e-mail. Amintiţi-vă să ştergeţi baza de date după ce aţi copiat-o de pe respectivul dispozitiv sau aţi primit e-mailul."</string>
     <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Selectaţi un program pentru a trimite fişierul"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Baza de date a calendarului a fost ataşată"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"Găsiţi ataşată baza mea de date a calendarului, cu toate întâlnirile şi informaţiile mele personale. Vă rog să o gestionaţi cu atenţie."</string>
+    <string name="debug_tool_email_body" msgid="740309162644398319">"Găsiţi ataşată baza de date a calendarului meu, cu toate întâlnirile şi informaţiile mele personale. Vă rog să o gestionaţi cu atenţie."</string>
 </resources>

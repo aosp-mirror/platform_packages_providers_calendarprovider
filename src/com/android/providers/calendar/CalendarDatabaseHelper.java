@@ -32,6 +32,7 @@ import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Bundle;
 import android.provider.Calendar;
+import android.provider.Calendar.Events;
 import android.provider.ContactsContract;
 import android.provider.SyncStateContract;
 import android.text.TextUtils;
@@ -61,7 +62,7 @@ import java.util.TimeZone;
     // Versions under 100 cover through Froyo, 1xx version are for Gingerbread,
     // 2xx for Honeycomb, and 3xx for ICS. For future versions bump this to the
     // next hundred at each major release.
-    static final int DATABASE_VERSION = 300;
+    static final int DATABASE_VERSION = 301;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -107,6 +108,21 @@ import java.util.TimeZone;
             "DELETE FROM " + Tables.EXTENDED_PROPERTIES +
                 " WHERE " + Calendar.ExtendedProperties.EVENT_ID + "=" +
                     "old." + Calendar.Events._ID + ";";
+
+    // This ensures any exceptions based on an event get their original_sync_id
+    // column set when an the _sync_id is set.
+    private static final String EVENTS_ORIGINAL_SYNC_TRIGGER_SQL =
+            "UPDATE " + Tables.EVENTS +
+                " SET " + Events.ORIGINAL_SYNC_ID + "=new." + Events._SYNC_ID +
+                " WHERE " + Events.ORIGINAL_ID + "=old." + Events._ID + ";";
+
+    private static final String SYNC_ID_UPDATE_TRIGGER_NAME = "original_sync_update";
+    private static final String CREATE_SYNC_ID_UPDATE_TRIGGER =
+            "CREATE TRIGGER " + SYNC_ID_UPDATE_TRIGGER_NAME + " UPDATE OF " + Events._SYNC_ID +
+            " ON " + Tables.EVENTS +
+            " BEGIN " +
+                EVENTS_ORIGINAL_SYNC_TRIGGER_SQL +
+            " END";
 
     private static final String CALENDAR_CLEANUP_TRIGGER_SQL = "DELETE FROM " + Tables.EVENTS +
             " WHERE " + Calendar.Events.CALENDAR_ID + "=" +
@@ -363,12 +379,75 @@ import java.util.TimeZone;
                 EVENTS_CLEANUP_TRIGGER_SQL +
                 "END");
 
+        // Trigger to update exceptions when an original event updates its
+        // _sync_id
+        db.execSQL(CREATE_SYNC_ID_UPDATE_TRIGGER);
+
         ContentResolver.requestSync(null /* all accounts */,
                 ContactsContract.AUTHORITY, new Bundle());
     }
 
     private void createEventsTable(SQLiteDatabase db) {
         // TODO: do we need both dtend and duration?
+        db.execSQL("CREATE TABLE " + Tables.EVENTS + " (" +
+                Calendar.Events._ID + " INTEGER PRIMARY KEY," +
+                Calendar.Events._SYNC_ID + " TEXT," +
+                Calendar.Events._SYNC_VERSION + " TEXT," +
+                // sync time in UTC
+                Calendar.Events._SYNC_TIME + " TEXT,"  +
+                Calendar.Events._SYNC_DATA + " INTEGER," +
+                Calendar.Events.DIRTY + " INTEGER," +
+                // sync mark to filter out new rows
+                Calendar.Events._SYNC_MARK + " INTEGER," +
+                Calendar.Events.CALENDAR_ID + " INTEGER NOT NULL," +
+                Calendar.Events.HTML_URI + " TEXT," +
+                Calendar.Events.TITLE + " TEXT," +
+                Calendar.Events.EVENT_LOCATION + " TEXT," +
+                Calendar.Events.DESCRIPTION + " TEXT," +
+                Calendar.Events.STATUS + " INTEGER," +
+                Calendar.Events.SELF_ATTENDEE_STATUS + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Events.COMMENTS_URI + " TEXT," +
+                // dtstart in millis since epoch
+                Calendar.Events.DTSTART + " INTEGER," +
+                // dtend in millis since epoch
+                Calendar.Events.DTEND + " INTEGER," +
+                // timezone for event
+                Calendar.Events.EVENT_TIMEZONE + " TEXT," +
+                Calendar.Events.DURATION + " TEXT," +
+                Calendar.Events.ALL_DAY + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Events.ACCESS_LEVEL + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Events.AVAILABILITY + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Events.HAS_ALARM + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Events.HAS_EXTENDED_PROPERTIES + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Events.RRULE + " TEXT," +
+                Calendar.Events.RDATE + " TEXT," +
+                Calendar.Events.EXRULE + " TEXT," +
+                Calendar.Events.EXDATE + " TEXT," +
+                Calendar.Events.ORIGINAL_ID + " INTEGER," +
+                // ORIGINAL_SYNC_ID is the _sync_id of recurring event
+                Calendar.Events.ORIGINAL_SYNC_ID + " TEXT," +
+                // originalInstanceTime is in millis since epoch
+                Calendar.Events.ORIGINAL_INSTANCE_TIME + " INTEGER," +
+                Calendar.Events.ORIGINAL_ALL_DAY + " INTEGER," +
+                // lastDate is in millis since epoch
+                Calendar.Events.LAST_DATE + " INTEGER," +
+                Calendar.Events.HAS_ATTENDEE_DATA + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Events.GUESTS_CAN_MODIFY + " INTEGER NOT NULL DEFAULT 0," +
+                Calendar.Events.GUESTS_CAN_INVITE_OTHERS + " INTEGER NOT NULL DEFAULT 1," +
+                Calendar.Events.GUESTS_CAN_SEE_GUESTS + " INTEGER NOT NULL DEFAULT 1," +
+                Calendar.Events.ORGANIZER + " STRING," +
+                Calendar.Events.DELETED + " INTEGER NOT NULL DEFAULT 0," +
+                // timezone for event with allDay events are in local timezone
+                Calendar.Events.EVENT_END_TIMEZONE + " TEXT," +
+                // SYNC_DATA1 is available for use by sync adapters
+                Calendar.Events.SYNC_DATA1 + " TEXT" + ");");
+
+        db.execSQL("CREATE INDEX eventsCalendarIdIndex ON " + Tables.EVENTS + " ("
+                + Calendar.Events.CALENDAR_ID + ");");
+    }
+
+    // TODO Remove this method after merging all ICS upgrades
+    private void createEventsTable300(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE " + Tables.EVENTS + " (" +
                 Calendar.Events._ID + " INTEGER PRIMARY KEY," +
                 Calendar.Events._SYNC_ID + " TEXT," +
@@ -845,6 +924,11 @@ import java.util.TimeZone;
                 createEventsView = true;
                 oldVersion = 300;
             }
+            if (oldVersion == 300) {
+                upgradeToVersion301(db);
+                createEventsView = true;
+                oldVersion++;
+            }
             if (createEventsView) {
                 createEventsView(db);
             }
@@ -895,6 +979,28 @@ import java.util.TimeZone;
     }
 
     @VisibleForTesting
+    void upgradeToVersion301(SQLiteDatabase db) {
+        /*
+         * Changes from version 300 to 301
+         * - Added original_id column to Events table
+         * - Added triggers to keep original_id and original_sync_id in sync
+         */
+
+        db.execSQL("DROP TRIGGER IF EXISTS " + SYNC_ID_UPDATE_TRIGGER_NAME + ";");
+
+        db.execSQL("ALTER TABLE Events ADD COLUMN original_id INTEGER;");
+
+        // Fill in the original_id for all events that have an original_sync_id
+        db.execSQL("UPDATE Events set original_id=" +
+                "(SELECT Events2._id FROM Events AS Events2 " +
+                        "WHERE Events2._sync_id=Events.original_sync_id) " +
+                "WHERE Events.original_sync_id NOT NULL");
+        // Trigger to update exceptions when an original event updates its
+        // _sync_id
+        db.execSQL(CREATE_SYNC_ID_UPDATE_TRIGGER);
+    }
+
+    @VisibleForTesting
     void upgradeToVersion300(SQLiteDatabase db) {
 
         /*
@@ -917,7 +1023,7 @@ import java.util.TimeZone;
 
         // rename old table, create new table with updated layout
         db.execSQL("ALTER TABLE Calendars RENAME TO Calendars_Backup;");
-        db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
+        db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup;");
         createCalendarsTable(db);
 
         // copy fields from old to new
@@ -989,7 +1095,7 @@ import java.util.TimeZone;
         db.execSQL("DROP TRIGGER IF EXISTS events_cleanup_delete");
         db.execSQL("DROP INDEX IF EXISTS eventSyncAccountAndIdIndex");
         db.execSQL("DROP INDEX IF EXISTS eventsCalendarIdIndex");
-        createEventsTable(db);
+        createEventsTable300(db);
 
         // copy fields from old to new
         db.execSQL("INSERT INTO Events (" +
@@ -2025,6 +2131,7 @@ import java.util.TimeZone;
                 + Calendar.Events.EXRULE + ","
                 + Calendar.Events.EXDATE + ","
                 + Calendar.Events.ORIGINAL_SYNC_ID + ","
+                + Calendar.Events.ORIGINAL_ID + ","
                 + Calendar.Events.ORIGINAL_INSTANCE_TIME + ","
                 + Calendar.Events.ORIGINAL_ALL_DAY + ","
                 + Calendar.Events.LAST_DATE + ","

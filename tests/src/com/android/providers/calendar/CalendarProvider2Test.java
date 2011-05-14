@@ -1913,11 +1913,11 @@ public class CalendarProvider2Test extends AndroidTestCase {
         cursor.close();
     }
 
-
     /**
-     * Test the event's _sync_dirty status and clear it.
+     * Test the event's dirty status and clear it.
+     * 
      * @param eventId event to fetch.
-     * @param wanted the wanted _sync_dirty status
+     * @param wanted the wanted dirty status
      */
     private void testAndClearDirty(long eventId, int wanted) {
         Cursor cursor = mResolver.query(
@@ -1930,7 +1930,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             assertEquals("dirty flag", wanted, dirty);
             if (dirty == 1) {
                 // Have to access database directly since provider will set dirty again.
-                mDb.execSQL("UPDATE Events SET _sync_dirty=0 WHERE _id=" + eventId);
+                mDb.execSQL("UPDATE Events SET " + Events.DIRTY + "=0 WHERE _id=" + eventId);
             }
         } finally {
             cursor.close();

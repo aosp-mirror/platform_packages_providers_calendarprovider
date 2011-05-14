@@ -1431,6 +1431,21 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         updatedValues.put(Events.ORGANIZER, owner);
                     }
                 }
+                if (updatedValues.containsKey(Events.ORIGINAL_SYNC_ID)
+                        && !updatedValues.containsKey(Events.ORIGINAL_ID)) {
+                    long originalId = getOriginalId(updatedValues
+                            .getAsString(Events.ORIGINAL_SYNC_ID));
+                    if (originalId != -1) {
+                        updatedValues.put(Events.ORIGINAL_ID, originalId);
+                    }
+                } else if (!updatedValues.containsKey(Events.ORIGINAL_SYNC_ID)
+                        && updatedValues.containsKey(Events.ORIGINAL_ID)) {
+                    String originalSyncId = getOriginalSyncId(updatedValues
+                            .getAsLong(Events.ORIGINAL_ID));
+                    if (!TextUtils.isEmpty(originalSyncId)) {
+                        updatedValues.put(Events.ORIGINAL_SYNC_ID, originalSyncId);
+                    }
+                }
                 if (fixAllDayTime(uri, updatedValues)) {
                     if (Log.isLoggable(TAG, Log.WARN)) {
                         Log.w(TAG, "insertInTransaction: " +
@@ -1484,6 +1499,20 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                                 }
                             }
                         }
+                    }
+                    // If this was a recurring event with a _sync_id update any
+                    // exceptions that may have been added prior to the original
+                    // event
+                    if (values.containsKey(Events._SYNC_ID) && values.containsKey(Events.RRULE)
+                            && !TextUtils.isEmpty(values.getAsString(Events.RRULE))) {
+                        String syncId = values.getAsString(Events._SYNC_ID);
+                        if (TextUtils.isEmpty(syncId)) {
+                            break;
+                        }
+                        ContentValues originalValues = new ContentValues();
+                        originalValues.put(Events.ORIGINAL_ID, id);
+                        mDb.update(Tables.EVENTS, originalValues, Events.ORIGINAL_SYNC_ID + "=?",
+                                new String[] {syncId});
                     }
                     sendUpdateNotification(id, callerIsSyncAdapter);
                 }
@@ -1637,6 +1666,48 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private void setEventDirty(int eventId) {
         mDb.execSQL(SQL_UPDATE_EVENT_SET_DIRTY, new Integer[] {eventId});
+    }
+
+    private long getOriginalId(String originalSyncId) {
+        if (TextUtils.isEmpty(originalSyncId)) {
+            return -1;
+        }
+        // Get the original id for this event
+        long originalId = -1;
+        Cursor c = null;
+        try {
+            c = query(Events.CONTENT_URI, ID_ONLY_PROJECTION,
+                    Events._SYNC_ID + "=?", new String[] {originalSyncId}, null);
+            if (c != null && c.moveToFirst()) {
+                originalId = c.getLong(0);
+            }
+        } finally {
+            if (c != null) {
+                c.close();
+            }
+        }
+        return originalId;
+    }
+
+    private String getOriginalSyncId(long originalId) {
+        if (originalId == -1) {
+            return null;
+        }
+        // Get the original id for this event
+        String originalSyncId = null;
+        Cursor c = null;
+        try {
+            c = query(Events.CONTENT_URI, new String[] {Events._SYNC_ID},
+                    Events._ID + "=?", new String[] {Long.toString(originalId)}, null);
+            if (c != null && c.moveToFirst()) {
+                originalSyncId = c.getString(0);
+            }
+        } finally {
+            if (c != null) {
+                c.close();
+            }
+        }
+        return originalSyncId;
     }
 
     /**
@@ -3099,6 +3170,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Events.EXRULE, Events.EXRULE);
         sEventsProjectionMap.put(Events.EXDATE, Events.EXDATE);
         sEventsProjectionMap.put(Events.ORIGINAL_SYNC_ID, Events.ORIGINAL_SYNC_ID);
+        sEventsProjectionMap.put(Events.ORIGINAL_ID, Events.ORIGINAL_ID);
         sEventsProjectionMap.put(Events.ORIGINAL_INSTANCE_TIME, Events.ORIGINAL_INSTANCE_TIME);
         sEventsProjectionMap.put(Events.ORIGINAL_ALL_DAY, Events.ORIGINAL_ALL_DAY);
         sEventsProjectionMap.put(Events.LAST_DATE, Events.LAST_DATE);
@@ -3162,6 +3234,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventEntitiesProjectionMap.put(Events.EXRULE, Events.EXRULE);
         sEventEntitiesProjectionMap.put(Events.EXDATE, Events.EXDATE);
         sEventEntitiesProjectionMap.put(Events.ORIGINAL_SYNC_ID, Events.ORIGINAL_SYNC_ID);
+        sEventEntitiesProjectionMap.put(Events.ORIGINAL_ID, Events.ORIGINAL_ID);
         sEventEntitiesProjectionMap.put(Events.ORIGINAL_INSTANCE_TIME,
                 Events.ORIGINAL_INSTANCE_TIME);
         sEventEntitiesProjectionMap.put(Events.ORIGINAL_ALL_DAY, Events.ORIGINAL_ALL_DAY);

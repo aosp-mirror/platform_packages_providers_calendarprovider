@@ -29,5 +29,5 @@
     <string name="debug_tool_message" msgid="4414152820946316089">"Vous êtes sur le point de 1) copier la base de données de votre agenda sur la carte SD ou la mémoire de stockage USB, la rendant ainsi lisible par n\'importe quelle application, et 2) l\'envoyer par e-mail. N\'oubliez pas de la supprimer une fois son transfert depuis l\'appareil terminé ou dès réception de l\'e-mail."</string>
     <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Sélectionnez un programme pour envoyer votre fichier"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Base de données Agenda ci-jointe"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"Veuillez trouver ci-joint la base de données de mon agenda contenant tous mes rendez-vous et informations personnelles. Merci de la manipuler avec précaution."</string>
+    <string name="debug_tool_email_body" msgid="740309162644398319">"Veuillez trouver ci-joint la base de données de mon agenda contenant tous mes rendez-vous et informations personnelles. Merci de l\'utiliser avec précaution."</string>
 </resources>

@@ -65,6 +65,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.TimeZone;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -306,6 +307,61 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private static final long SYNC_UPDATE_BROADCAST_TIMEOUT_MILLIS =
         30 * DateUtils.SECOND_IN_MILLIS;
+
+    /** Set of columns allowed to be altered when creating an exception to a recurring event. */
+    private static final HashSet<String> ALLOWED_IN_EXCEPTION = new HashSet<String>();
+    static {
+        // _id, _sync_account, _sync_account_type, dirty, _sync_mark, calendar_id
+        ALLOWED_IN_EXCEPTION.add(Events._SYNC_ID);
+        ALLOWED_IN_EXCEPTION.add(Events.SYNC_DATA1);
+        ALLOWED_IN_EXCEPTION.add(Events.SYNC_DATA7);
+        ALLOWED_IN_EXCEPTION.add(Events.HTML_URI);
+        ALLOWED_IN_EXCEPTION.add(Events.TITLE);
+        ALLOWED_IN_EXCEPTION.add(Events.EVENT_LOCATION);
+        ALLOWED_IN_EXCEPTION.add(Events.DESCRIPTION);
+        ALLOWED_IN_EXCEPTION.add(Events.STATUS);
+        // selfAttendeeStatus
+        ALLOWED_IN_EXCEPTION.add(Events.COMMENTS_URI);
+        ALLOWED_IN_EXCEPTION.add(Events.DTSTART);
+        ALLOWED_IN_EXCEPTION.add(Events.DTEND);
+        ALLOWED_IN_EXCEPTION.add(Events.EVENT_TIMEZONE);
+        ALLOWED_IN_EXCEPTION.add(Events.EVENT_END_TIMEZONE);
+        ALLOWED_IN_EXCEPTION.add(Events.DURATION);
+        ALLOWED_IN_EXCEPTION.add(Events.ALL_DAY);
+        ALLOWED_IN_EXCEPTION.add(Events.ACCESS_LEVEL);
+        ALLOWED_IN_EXCEPTION.add(Events.AVAILABILITY);
+        ALLOWED_IN_EXCEPTION.add(Events.HAS_ALARM);
+        ALLOWED_IN_EXCEPTION.add(Events.HAS_EXTENDED_PROPERTIES);
+        ALLOWED_IN_EXCEPTION.add(Events.RRULE);
+        ALLOWED_IN_EXCEPTION.add(Events.RDATE);
+        ALLOWED_IN_EXCEPTION.add(Events.EXRULE);
+        ALLOWED_IN_EXCEPTION.add(Events.EXDATE);
+        ALLOWED_IN_EXCEPTION.add(Events.ORIGINAL_SYNC_ID);
+        ALLOWED_IN_EXCEPTION.add(Events.ORIGINAL_INSTANCE_TIME);
+        // originalAllDay, lastDate
+        ALLOWED_IN_EXCEPTION.add(Events.HAS_ATTENDEE_DATA);
+        ALLOWED_IN_EXCEPTION.add(Events.GUESTS_CAN_MODIFY);
+        ALLOWED_IN_EXCEPTION.add(Events.GUESTS_CAN_INVITE_OTHERS);
+        ALLOWED_IN_EXCEPTION.add(Events.GUESTS_CAN_SEE_GUESTS);
+        ALLOWED_IN_EXCEPTION.add(Events.ORGANIZER);
+        // deleted, original_id, alerts
+    }
+
+    /** Don't clone these from the base event into the exception event. */
+    private static final String[] DONT_CLONE_INTO_EXCEPTION = {
+        Events._SYNC_ID,
+        Events.SYNC_DATA1,
+        Events._SYNC_DATA,      // will be SYNC_DATA2 (a/k/a _sync_local_id)
+        Events.HTML_URI,        // will be SYNC_DATA3
+        Events._SYNC_VERSION,   // will be SYNC_DATA4
+        Events._SYNC_TIME,      // will be SYNC_DATA5
+        Events.COMMENTS_URI,    // will be SYNC_DATA6
+        Events.SYNC_DATA7,
+        Events._SYNC_MARK,      // will be SYNC_DATA8
+    };
+
+    /** set to 'true' to enable debug logging for recurrence exception code */
+    private static final boolean DEBUG_EXCEPTION = false;
 
     private Context mContext;
     private ContentResolver mContentResolver;
@@ -1438,6 +1494,322 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         return neededCorrection;
     }
 
+
+    /**
+     * Determines whether the strings in the set name columns that may be overridden
+     * when creating a recurring event exception.
+     * <p>
+     * This uses a white list because it screens out unknown columns and is a bit safer to
+     * maintain than a black list.
+     */
+    private void checkAllowedInException(Set<String> keys) {
+        for (String str : keys) {
+            if (!ALLOWED_IN_EXCEPTION.contains(str.intern())) {
+                throw new IllegalArgumentException("Exceptions can't overwrite " + str);
+            }
+        }
+    }
+
+    /**
+     * Prepares an update to a recurrent event so it will stop just before a new series
+     * begins.  This is useful when modifying "this and all future events".
+     *
+     * The "until" time is specified in the rrule in UTC.  If the original event was an "all day"
+     * event, we also need to convert the dtstart to UTC.
+     *
+     * @param values Event description; must include EVENT_TIMEZONE and DTSTART.
+     * @param endTimeMillis The time before which the event must end (i.e. the start time of the
+     *        exception event instance).
+     * @return Values to apply to the existing event.
+     */
+    private static ContentValues setRecurrenceEnd(ContentValues values, long endTimeMillis) {
+        boolean allDay = values.getAsBoolean(Events.ALL_DAY);
+        String oldRrule = values.getAsString(Events.RRULE);
+
+        EventRecurrence eventRecurrence = new EventRecurrence();
+        eventRecurrence.parse(oldRrule);
+
+        Time untilTime = new Time();
+        Time dtstart = new Time();
+
+        // The "until" time must be in UTC time in order for Google calendar
+        // to display it properly. For all-day events, the "until" time string
+        // must include just the date field, and not the time field. The
+        // repeating events repeat up to and including the "until" time.
+        untilTime.timezone = Time.TIMEZONE_UTC;
+        dtstart.timezone = values.getAsString(Events.EVENT_TIMEZONE);
+        dtstart.set(values.getAsLong(Events.DTSTART));
+
+        // Subtract one second from the exception begin time to get the "until" time.
+        untilTime.set(endTimeMillis - 1000); // subtract one second (1000 millis)
+        if (allDay) {
+            untilTime.hour = untilTime.minute = untilTime.second = 0;
+            untilTime.allDay = true;
+            untilTime.normalize(false);
+
+            dtstart.hour = dtstart.minute = dtstart.second = 0;
+            dtstart.allDay = true;
+            dtstart.timezone = Time.TIMEZONE_UTC;
+        }
+        eventRecurrence.until = untilTime.format2445();
+
+        ContentValues updateValues = new ContentValues();
+        updateValues.put(Events.RRULE, eventRecurrence.toString());
+        updateValues.put(Events.DTSTART, dtstart.normalize(true));
+        return updateValues;
+    }
+
+    /**
+     * Handles insertion of an exception to a recurring event.
+     * <p>
+     * There are two modes, selected based on the presence of "rrule" in modValues:
+     * <ol>
+     * <li> Create a single instance exception ("modify current event only").
+     * <li> Cap the original event, and create a new recurring event ("modify this and all
+     * future events").
+     * </ol>
+     * This may be used for "modify all instances of the event" by simply selecting the
+     * very first instance as the exception target.  In that case, the ID of the "new"
+     * exception event will be the same as the originalEventId.
+     *
+     * @param originalEventId The _id of the event to be modified
+     * @param modValues Event columns to update
+     * @return the ID of the new "exception" event, or -1 on failure
+     */
+    private long handleInsertException(long originalEventId, ContentValues modValues) {
+        if (DEBUG_EXCEPTION) {
+            Log.i(TAG, "RE: values: " + modValues.toString());
+        }
+
+        // Make sure they have specified an instance via originalInstanceTime.
+        Long originalInstanceTime = modValues.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
+        if (originalInstanceTime == null) {
+            throw new IllegalArgumentException("Exceptions must specify " +
+                    Events.ORIGINAL_INSTANCE_TIME);
+        }
+
+        // Check for attempts to override values that shouldn't be touched.
+        checkAllowedInException(modValues.keySet());
+
+        // Wrap all database accesses in a transaction.
+        mDb.beginTransaction();
+        Cursor cursor = null;
+        try {
+            // TODO: verify that there's an instance corresponding to the specified time
+            //       (does this matter? it's weird, but not fatal?)
+
+            // Grab the full set of columns for this event.
+            cursor = mDb.query(Tables.EVENTS, null /* columns */,
+                    SQL_WHERE_ID, new String[] { String.valueOf(originalEventId) },
+                    null /* groupBy */, null /* having */, null /* sortOrder */);
+            if (cursor.getCount() != 1) {
+                Log.e(TAG, "Original event ID " + originalEventId + " lookup failed (count is " +
+                        cursor.getCount() + ")");
+                return -1;
+            }
+            //DatabaseUtils.dumpCursor(cursor);
+
+            /*
+             * Verify that the original event is in fact a recurring event by checking for the
+             * presence of an RRULE.  If it's there, we assume that the event is otherwise
+             * properly constructed (e.g. no DTEND).
+             */
+            cursor.moveToFirst();
+            int rruleCol = cursor.getColumnIndex(Events.RRULE);
+            if (TextUtils.isEmpty(cursor.getString(rruleCol))) {
+                Log.e(TAG, "Original event has no rrule");
+                return -1;
+            }
+            if (DEBUG_EXCEPTION) {
+                Log.d(TAG, "RE: old RRULE is " + cursor.getString(rruleCol));
+            }
+
+            // Verify that the original event is not itself a (single-instance) exception.
+            int originalIdCol = cursor.getColumnIndex(Events.ORIGINAL_ID);
+            if (!TextUtils.isEmpty(cursor.getString(originalIdCol))) {
+                Log.e(TAG, "Original event is an exception");
+                return -1;
+            }
+
+            boolean createSingleException = TextUtils.isEmpty(modValues.getAsString(Events.RRULE));
+
+            // TODO: check for the presence of an existing exception on this event+instance?
+            //       The caller should be modifying that, not creating another exception.
+            //       (Alternatively, we could do that for them.)
+
+            // Create a new ContentValues for the new event.  Start with the original event,
+            // and drop in the new caller-supplied values.  This will set originalInstanceTime.
+            ContentValues values = new ContentValues();
+            DatabaseUtils.cursorRowToContentValues(cursor, values);
+
+            boolean createNewEvent = true;
+            if (createSingleException) {
+                /*
+                 * Save a copy of a few fields that will migrate to new places.
+                 */
+                String _id = values.getAsString(Events._ID);
+                String _sync_id = values.getAsString(Events._SYNC_ID);
+                boolean allDay = values.getAsBoolean(Events.ALL_DAY);
+
+                /*
+                 * Wipe out some fields that we don't want to clone into the exception event.
+                 */
+                for (String str : DONT_CLONE_INTO_EXCEPTION) {
+                    values.remove(str);
+                }
+
+                /*
+                 * Merge the new values on top of the existing values.  Note this sets
+                 * originalInstanceTime.
+                 */
+                values.putAll(modValues);
+
+                /*
+                 * Copy some fields to their "original" counterparts:
+                 *   _id --> original_id
+                 *   _sync_id --> original_sync_id
+                 *   allDay --> originalAllDay
+                 *
+                 * If this event hasn't been sync'ed with the server yet, the _sync_id field will
+                 * be null.  We will need to fill original_sync_id in later.  (May not be able to
+                 * do it right when our own _sync_id field gets populated, because the order of
+                 * events from the server may not be what we want -- could update the exception
+                 * before updating the original event.)
+                 *
+                 * _id is removed later (right before we write the event).
+                 */
+                values.put(Events.ORIGINAL_ID, _id);
+                values.put(Events.ORIGINAL_SYNC_ID, _sync_id);
+                values.put(Events.ORIGINAL_ALL_DAY, allDay);
+
+                // Mark the exception event status as "tentative", unless the caller has some
+                // other value in mind (like STATUS_CANCELED).
+                if (!values.containsKey(Events.STATUS)) {
+                    values.put(Events.STATUS, Events.STATUS_TENTATIVE);
+                }
+
+                // We're converting from recurring to non-recurring.  Clear out RRULE and replace
+                // DURATION with DTEND.
+                values.put(Events.RRULE, (String) null);
+
+                Duration duration = new Duration();
+                String durationStr = values.getAsString(Events.DURATION);
+                try {
+                    duration.parse(durationStr);
+                } catch (Exception ex) {
+                    // NullPointerException if the original event had no duration.
+                    // DateException if the duration was malformed.
+                    Log.w(TAG, "Bad duration in recurring event: " + durationStr, ex);
+                    return -1;
+                }
+
+                long start = values.getAsLong(Events.DTSTART);
+                values.put(Events.DTEND, start + duration.getMillis());
+                if (DEBUG_EXCEPTION) {
+                    Log.d(TAG, "RE: DTSTART=" + start + ", duration=" + durationStr +
+                            ", generated DTEND=" + values.getAsLong(Events.DTEND));
+                }
+            } else {
+                /*
+                 * We're going to "split" the recurring event, making the old one stop before
+                 * this instance, and creating a new recurring event that starts here.
+                 *
+                 * No need to fill out the "original" fields -- the new event is not tied to
+                 * the previous event in any way.
+                 *
+                 * If this is the first event in the series, we can just update the existing
+                 * event with the values.
+                 */
+                boolean canceling = (values.getAsInteger(Events.STATUS) == Events.STATUS_CANCELED);
+
+                if (originalInstanceTime.equals(values.getAsLong(Events.DTSTART))) {
+                    /*
+                     * Update fields in the existing event.  Rather than use the merged data
+                     * from the cursor, we just do the update with the new value set after
+                     * removing the ORIGINAL_INSTANCE_TIME entry.
+                     */
+                    if (canceling) {
+                        // TODO: should we just call deleteEventInternal?
+                        Log.d(TAG, "Note: canceling entire event via exception call");
+                    }
+                    if (DEBUG_EXCEPTION) {
+                        Log.d(TAG, "RE: updating full event");
+                    }
+                    modValues.remove(Events.ORIGINAL_INSTANCE_TIME);
+                    mDb.update(Tables.EVENTS, modValues, SQL_WHERE_ID,
+                            new String[] { Long.toString(originalEventId) });
+                    createNewEvent = false; // skip event creation and related-table cloning
+                } else {
+                    if (DEBUG_EXCEPTION) {
+                        Log.d(TAG, "RE: splitting event");
+                    }
+
+                    /*
+                     * Cap the original event so it ends just before the target instance.
+                     */
+                    ContentValues splitValues = setRecurrenceEnd(values, originalInstanceTime);
+                    mDb.update(Tables.EVENTS, splitValues, SQL_WHERE_ID,
+                            new String[] { Long.toString(originalEventId) });
+
+                    /*
+                     * Create the new event.  We remove originalInstanceTime, because we're now
+                     * creating a new event rather than an exception.
+                     *
+                     * We're always cloning a non-exception event (we tested to make sure the
+                     * event doesn't specify original_id, and we don't allow original_id in the
+                     * modValues), so we shouldn't end up creating a new event that looks like
+                     * an exception.
+                     */
+                    values.putAll(modValues);
+                    values.remove(Events.ORIGINAL_INSTANCE_TIME);
+                }
+           }
+
+            long newEventId;
+            if (createNewEvent) {
+                values.remove(Events._ID);      // don't try to set this explicitly
+                validateEventData(values);
+
+                newEventId = mDb.insert(Tables.EVENTS, null, values);
+                if (newEventId < 0) {
+                    Log.w(TAG, "Unable to add exception to recurring event");
+                    Log.w(TAG, "Values: " + values);
+                    return -1;
+                }
+                if (DEBUG_EXCEPTION) {
+                    Log.d(TAG, "RE: new ID is " + newEventId);
+                }
+
+                /*
+                 * Some of the other tables (Attendees, Reminders, ExtendedProperties) reference
+                 * the Event ID.  We need to copy the entries from the old event, filling in the new
+                 * event ID, so that  somebody doing a SELECT on those tables will find matching
+                 * entries.
+                 */
+                CalendarDatabaseHelper.copyEventRelatedTables(mDb, newEventId, originalEventId);
+            } else {
+                newEventId = originalEventId;
+            }
+
+            /*
+             * The database keeps track of the range of dates for which the Instances table has
+             * been populated.  To ensure that the Instances are re-generated, we zero out
+             * these values.
+             * (TODO: this causes re-eval of instances for all events; is there a
+             * way to invalidate instances for a single event?)
+             */
+            mMetaData.clearInstanceRange();
+
+            mDb.setTransactionSuccessful();
+            return newEventId;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            mDb.endTransaction();
+        }
+    }
+
     @Override
     protected Uri insertInTransaction(Uri uri, ContentValues values, boolean callerIsSyncAdapter) {
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
@@ -1450,7 +1822,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         long id = 0;
 
         switch (match) {
-              case SYNCSTATE:
+            case SYNCSTATE:
                 id = mDbHelper.getSyncState().insert(mDb, values);
                 break;
             case EVENTS:
@@ -1566,6 +1938,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     }
                     sendUpdateNotification(id, callerIsSyncAdapter);
                 }
+                break;
+            case EXCEPTION_ID:
+                long originalEventId = ContentUris.parseId(uri);
+                id = handleInsertException(originalEventId, values);
                 break;
             case CALENDARS:
                 Integer syncEvents = values.getAsInteger(Calendars.SYNC_EVENTS);
@@ -2127,6 +2503,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 return deleteEventInternal(id, callerIsSyncAdapter, false /* isBatch */);
             }
+            case EXCEPTION_ID2:
+            {
+                // This will throw NumberFormatException on missing or malformed input.
+                List<String> segments = uri.getPathSegments();
+                long eventId = Long.parseLong(segments.get(1));
+                long excepId = Long.parseLong(segments.get(2));
+                // TODO: verify that this is an exception instance (has an ORIGINAL_ID field
+                //       that matches the supplied eventId)
+                return deleteEventInternal(excepId, callerIsSyncAdapter, false /* isBatch */);
+            }
             case ATTENDEES:
             {
                 if (callerIsSyncAdapter) {
@@ -2263,9 +2649,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
                 // we clean the Events and Attendees table if the caller is CalendarSyncAdapter
                 // or if the event is local (no syncId)
+                //
+                // The EVENTS_CLEANUP_TRIGGER_SQL trigger will remove all associated data
+                // (Attendees, Instances, Reminders, etc).
                 if (callerIsSyncAdapter || emptySyncId) {
                     mDb.delete(Tables.EVENTS, SQL_WHERE_ID, selectionArgs);
                 } else {
+                    // Event is on the server, so we "soft delete", i.e. mark as deleted so that
+                    // the sync adapter has a chance to tell the server about the deletion.  After
+                    // the server sees the change, the sync adapter will do the "hard delete"
+                    // (above).
                     ContentValues values = new ContentValues();
                     values.put(Events.DELETED, 1);
                     values.put(Events.DIRTY, 1);
@@ -3174,6 +3567,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final int INSTANCES_SEARCH = 26;
     private static final int INSTANCES_SEARCH_BY_DAY = 27;
     private static final int PROVIDER_PROPERTIES = 28;
+    private static final int EXCEPTION_ID = 29;
+    private static final int EXCEPTION_ID2 = 30;
 
     private static final UriMatcher sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
     private static final HashMap<String, String> sInstancesProjectionMap;
@@ -3219,6 +3614,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sUriMatcher.addURI(Calendar.AUTHORITY, "time/#", TIME);
         sUriMatcher.addURI(Calendar.AUTHORITY, "time", TIME);
         sUriMatcher.addURI(Calendar.AUTHORITY, "properties", PROVIDER_PROPERTIES);
+        sUriMatcher.addURI(Calendar.AUTHORITY, "exception/#", EXCEPTION_ID);
+        sUriMatcher.addURI(Calendar.AUTHORITY, "exception/#/#", EXCEPTION_ID2);
 
         /** Contains just BaseColumns._COUNT */
         sCountProjectionMap = new HashMap<String, String>();

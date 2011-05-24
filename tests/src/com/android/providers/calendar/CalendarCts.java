@@ -19,15 +19,18 @@ package com.android.providers.calendar;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
-import android.content.IContentProvider;
 import android.database.Cursor;
 import android.net.Uri;
 import android.provider.Calendar;
+import android.provider.Calendar.Attendees;
 import android.provider.Calendar.Calendars;
 import android.provider.Calendar.Events;
+import android.provider.Calendar.Instances;
+import android.provider.Calendar.Reminders;
 import android.test.InstrumentationTestCase;
 import android.test.suitebuilder.annotation.*;
 import android.text.format.DateUtils;
+import android.text.format.Time;
 import android.util.Log;
 
 public class CalendarCts extends InstrumentationTestCase {
@@ -77,6 +80,8 @@ public class CalendarCts extends InstrumentationTestCase {
                 };
         // @formatter:on
 
+        private CalendarHelper() {}     // do not instantiate this class
+
         /**
          * Creates a new set of values for creating a single calendar with every
          * field.
@@ -105,7 +110,7 @@ public class CalendarCts extends InstrumentationTestCase {
 
             values.put(Calendars.CALENDAR_COLOR, 0xff000000 + seed);
             values.put(Calendars.VISIBLE, seed % 2);
-            values.put(Calendars.SYNC_EVENTS, seed % 2);
+            values.put(Calendars.SYNC_EVENTS, 1);   // must be 1 for recurrence expansion
             values.put(Calendars.CALENDAR_LOCATION, "LOCATION:" + seedString);
             values.put(Calendars.CALENDAR_TIMEZONE, TIME_ZONES[seed % TIME_ZONES.length]);
             values.put(Calendars.CAN_ORGANIZER_RESPOND, seed % 2);
@@ -205,7 +210,7 @@ public class CalendarCts extends InstrumentationTestCase {
             Events.EXRULE,
             Events.EXDATE,
             // Events.ORIGINAL_ID
-            Events.ORIGINAL_SYNC_ID, // rename ORIGINAL_SYNC_ID
+            Events.ORIGINAL_SYNC_ID,
             Events.ORIGINAL_INSTANCE_TIME,
             Events.ORIGINAL_ALL_DAY,
             Events.LAST_DATE,
@@ -227,6 +232,12 @@ public class CalendarCts extends InstrumentationTestCase {
         };
         // @formatter:on
 
+        private EventHelper() {}    // do not instantiate this class
+
+        /**
+         * Constructs a set of name/value pairs that can be used to create a Calendar event.
+         * Various fields are generated from the seed value.
+         */
         public static ContentValues getNewEventValues(
                 String account, int seed, long calendarId, boolean asSyncAdapter) {
             String seedString = Long.toString(seed);
@@ -283,6 +294,51 @@ public class CalendarCts extends InstrumentationTestCase {
             return values;
         }
 
+        /**
+         * Constructs a set of name/value pairs that can be used to create a recurring
+         * Calendar event.
+         *
+         * A duration of "P1D" is treated as an all-day event.
+         *
+         * @param startWhen Starting date/time in RFC 3339 format
+         * @param duration Event duration, in RFC 2445 duration format
+         * @param rrule Recurrence rule
+         * @return name/value pairs to use when creating event
+         */
+        public static ContentValues getNewRecurringEventValues(String account, int seed,
+                long calendarId, boolean asSyncAdapter, String startWhen, String duration,
+                String rrule) {
+
+            // Set up some general stuff.
+            ContentValues values = getNewEventValues(account, seed, calendarId, asSyncAdapter);
+
+            // Replace the DTSTART field.
+            String timeZone = values.getAsString(Events.EVENT_TIMEZONE);
+            Time time = new Time(timeZone);
+            time.parse3339(startWhen);
+            values.put(Events.DTSTART, time.toMillis(false));
+
+            // Add in the recurrence-specific fields, and drop DTEND.
+            values.put(Events.RRULE, rrule);
+            values.put(Events.DURATION, duration);
+            values.remove(Events.DTEND);
+
+            return values;
+        }
+
+        /**
+         * Constructs the basic name/value pairs required for an exception to a recurring event.
+         *
+         * @param instanceStartMillis The start time of the instance
+         * @return name/value pairs to use when creating event
+         */
+        public static ContentValues getNewExceptionValues(long instanceStartMillis) {
+            ContentValues values = new ContentValues();
+            values.put(Events.ORIGINAL_INSTANCE_TIME, instanceStartMillis);
+
+            return values;
+        }
+
         public static ContentValues getUpdateEventValuesWithOriginal(ContentValues original,
                 int seed, boolean asSyncAdapter) {
             String seedString = Long.toString(seed);
@@ -324,6 +380,21 @@ public class CalendarCts extends InstrumentationTestCase {
             values.put(Events.OWNER_ACCOUNT, "OWNER_" + account);
             values.put(Events.ACCOUNT_TYPE, CTS_TEST_TYPE);
             values.put(Events.ACCOUNT_NAME, account);
+        }
+
+        /**
+         * Generates a RFC2445-format duration string.
+         */
+        private static String generateDurationString(long durationMillis, boolean isAllDay) {
+            long durationSeconds = durationMillis / 1000;
+
+            // The server may react differently to an all-day event specified as "P1D" than
+            // it will to "PT86400S"; see b/1594638.
+            if (isAllDay && (durationSeconds % 86400) == 0) {
+                return "P" + durationSeconds / 86400 + "D";
+            } else {
+                return "PT" + durationSeconds + "S";
+            }
         }
 
         public static int deleteEvent(ContentResolver resolver, Uri uri, ContentValues values) {
@@ -369,7 +440,7 @@ public class CalendarCts extends InstrumentationTestCase {
     protected void setUp() throws Exception {
         super.setUp();
         mContentResolver = getInstrumentation().getTargetContext().getContentResolver();
-        IContentProvider provider = mContentResolver.acquireProvider(Calendar.AUTHORITY);
+        // IContentProvider provider = mContentResolver.acquireProvider(Calendar.AUTHORITY);
         // mBuilder = new ContactsContract_TestDataBuilder(provider);
     }
 
@@ -488,19 +559,18 @@ public class CalendarCts extends InstrumentationTestCase {
         removeAndVerifyCalendar(account, calendarId);
     }
 
-    // TODO test modifying an event as sync adater
+    // TODO test modifying an event as sync adapter
 
+    /**
+     * Tests the content provider's enforcement of restrictions on who is allowed to modify
+     * specific columns in a Calendar.
+     * <p>
+     * This attempts to create a new row in the Calendar table, specifying one restricted
+     * column at a time.
+     */
     @MediumTest
     public void testSyncOnlyInsertEnforcement() {
-        String account = "so1_account";
-        int seed = 0;
-
-        // Clean up just in case
-        CalendarHelper.deleteCalendarByAccount(mContentResolver, account);
-
-        // Create calendar and event
-        long calendarId = createAndVerifyCalendar(account, seed++, null);
-        CalendarHelper.deleteCalendarById(mContentResolver, calendarId);
+        // These operations should not succeed, so there should be nothing to clean up after.
         ContentValues vals = new ContentValues();
         for (int i = 0; i < Calendars.SYNC_WRITABLE_COLUMNS.length; i++) {
             boolean threw = false;
@@ -514,6 +584,369 @@ public class CalendarCts extends InstrumentationTestCase {
             assertTrue("Only sync adapter should be allowed to insert "
                     + Calendars.SYNC_WRITABLE_COLUMNS[i], threw);
         }
+    }
+
+    /**
+     * Tests creation of a recurring event.
+     * <p>
+     * This (and the other recurrence tests) uses dates well in the past to reduce the likelihood
+     * of encountering non-test recurring events.  (Ideally we would select events associated
+     * with a specific calendar.)  With dates well in the past, it's also important to have a
+     * fixed maximum count or end date; otherwise, ifthe metadata min/max instance values are
+     * large enough, the recurrence recalculation processor could get triggered on an insert or
+     * update and bump up against the 2000-instance limit.
+     *
+     * TODO: need some allDay tests
+     */
+    @MediumTest
+    public void testRecurrence() {
+        String account = "re_account";
+        int seed = 0;
+
+        // Clean up just in case
+        CalendarHelper.deleteCalendarByAccount(mContentResolver, account);
+
+        // Create calendar
+        long calendarId = createAndVerifyCalendar(account, seed++, null);
+
+        // Create recurring event
+        ContentValues eventValues = EventHelper.getNewRecurringEventValues(account, seed++,
+                calendarId, true, "2003-08-05T09:00:00", "PT1H",
+                "FREQ=WEEKLY;INTERVAL=2;COUNT=4;BYDAY=TU,SU;WKST=SU");
+        long eventId = createAndVerifyEvent(account, seed, calendarId, eventValues);
+        //Log.d(TAG, "+++ basic recurrence eventId is " + eventId);
+
+        // Check to see if we have the expected number of instances
+        String timeZone = eventValues.getAsString(Events.EVENT_TIMEZONE);
+        int instanceCount = getInstanceCount(timeZone, "2003-08-05T00:00:00",
+                "2003-08-31T11:59:59");
+        if (false) {
+            Cursor instances = getInstances(timeZone, "2003-08-05T00:00:00", "2003-08-31T11:59:59",
+                    new String[] { Instances.BEGIN });
+            dumpInstances(instances, timeZone, "initial");
+        }
+        assertEquals("recurrence instance count", 4, instanceCount);
+
+        // delete the calendar
+        removeAndVerifyCalendar(account, calendarId);
+    }
+
+    /**
+     * Tests creation of a recurring event with single-instance exceptions.
+     */
+    @MediumTest
+    public void testSingleRecurrenceExceptions() {
+        String account = "rex_account";
+        int seed = 0;
+
+        // Clean up just in case
+        CalendarHelper.deleteCalendarByAccount(mContentResolver, account);
+
+        // Create calendar
+        long calendarId = createAndVerifyCalendar(account, seed++, null);
+
+        // Create recurring event.
+        ContentValues eventValues = EventHelper.getNewRecurringEventValues(account, seed++,
+                calendarId, true, "1999-03-28T09:00:00", "PT1H", "FREQ=WEEKLY;WKST=SU;COUNT=100");
+        long eventId = createAndVerifyEvent(account, seed++, calendarId, eventValues);
+
+        // Add some attendees and reminders.
+        addAttendees(account, eventId, seed);
+        addReminders(account, eventId, seed);
+
+        // Select a period that gives us 5 instances.
+        String timeZone = eventValues.getAsString(Events.EVENT_TIMEZONE);
+        String testStart = "1999-03-28T00:00:00";
+        String testEnd = "1999-04-25T23:59:59";
+        String[] projection = { Instances.BEGIN, Instances.START_MINUTE };
+
+        Cursor instances = getInstances(timeZone, testStart, testEnd, projection);
+        //dumpInstances(instances, timeZone, "initial");
+
+        assertEquals("initial recurrence instance count", 5, instances.getCount());
+
+        // Leave first instance alone.
+        instances.moveToPosition(1);
+
+        long startMillis;
+        ContentValues excepValues;
+
+        // Advance the start time of the 2nd instance.
+        startMillis = instances.getLong(0);
+        excepValues = EventHelper.getNewExceptionValues(startMillis);
+        excepValues.put(Events.DTSTART, startMillis + 3600*1000);
+        long excepEventId2 = createAndVerifyException(account, eventId, excepValues);
+        instances.moveToNext();
+
+        // Advance the start time of the 3rd instance.
+        startMillis = instances.getLong(0);
+        excepValues = EventHelper.getNewExceptionValues(startMillis);
+        excepValues.put(Events.DTSTART, startMillis + 3600*1000*2);
+        long excepEventId3 = createAndVerifyException(account, eventId, excepValues);
+        instances.moveToNext();
+
+        // Cancel the 4th instance.
+        startMillis = instances.getLong(0);
+        excepValues = EventHelper.getNewExceptionValues(startMillis);
+        excepValues.put(Events.STATUS, Events.STATUS_CANCELED);
+        long excepEventId4 = createAndVerifyException(account, eventId, excepValues);
+        instances.moveToNext();
+
+        // TODO: try to modify a non-existent instance.
+
+        instances.close();
+
+
+        // TODO: compare Reminders, Attendees, ExtendedProperties on one of the exception events
+
+
+        // Re-query the instances and figure out if they look right.
+        instances = getInstances(timeZone, testStart, testEnd, projection);
+        //dumpInstances(instances, timeZone, "with exceptions");
+        assertEquals("exceptional recurrence instance count", 4, instances.getCount());
+
+        long prevMinute = -1;
+        while (instances.moveToNext()) {
+            // expect the start times for each entry to be different from the previous entry
+            long startMinute = instances.getLong(1);
+            assertTrue("instance start times are different", startMinute != prevMinute);
+
+            prevMinute = startMinute;
+        }
+        instances.close();
+
+
+        // Delete all of our exceptions, and verify.
+        int deleteCount = 0;
+        deleteCount += deleteException(account, eventId, excepEventId2);
+        deleteCount += deleteException(account, eventId, excepEventId3);
+        deleteCount += deleteException(account, eventId, excepEventId4);
+        assertEquals("events deleted", 3, deleteCount);
+
+        // Re-query the instances and figure out if they look right.
+        instances = getInstances(timeZone, testStart, testEnd, projection);
+        //dumpInstances(instances, timeZone, "post exception deletion");
+        assertEquals("post-exception deletion instance count", 5, instances.getCount());
+
+        prevMinute = -1;
+        while (instances.moveToNext()) {
+            // expect the start times for each entry to be the same
+            long startMinute = instances.getLong(1);
+            if (prevMinute != -1) {
+                assertEquals("instance start times are the same", startMinute, prevMinute);
+            }
+            prevMinute = startMinute;
+        }
+        instances.close();
+
+        // delete the calendar
+        removeAndVerifyCalendar(account, calendarId);
+    }
+
+    /**
+     * Tests exceptions that modify all future instances of a recurring event.
+     */
+    @MediumTest
+    public void testForwardRecurrenceExceptions() {
+        String account = "refx_account";
+        int seed = 0;
+
+        // Clean up just in case
+        CalendarHelper.deleteCalendarByAccount(mContentResolver, account);
+
+        // Create calendar
+        long calendarId = createAndVerifyCalendar(account, seed++, null);
+
+        // Create recurring event
+        ContentValues eventValues = EventHelper.getNewRecurringEventValues(account, seed++,
+                calendarId, true, "1999-01-01T06:00:00", "PT1H", "FREQ=WEEKLY;WKST=SU;COUNT=100");
+        long eventId = createAndVerifyEvent(account, seed++, calendarId, eventValues);
+
+        // Add some attendees and reminders.
+        addAttendees(account, eventId, seed++);
+        addReminders(account, eventId, seed++);
+
+        // Get some instances.
+        String timeZone = eventValues.getAsString(Events.EVENT_TIMEZONE);
+        String testStart = "1999-01-01T00:00:00";
+        String testEnd = "1999-01-29T23:59:59";
+        String[] projection = { Instances.BEGIN, Instances.START_MINUTE };
+
+        Cursor instances = getInstances(timeZone, testStart, testEnd, projection);
+        //dumpInstances(instances, timeZone, "initial");
+
+        assertEquals("initial recurrence instance count", 5, instances.getCount());
+
+        // Modify starting from 3rd instance.
+        instances.moveToPosition(2);
+
+        long startMillis;
+        ContentValues excepValues;
+
+        // Replace with a new recurrence rule.  We move the start time an hour later, and cap
+        // it at two instances.
+        startMillis = instances.getLong(0);
+        excepValues = EventHelper.getNewExceptionValues(startMillis);
+        excepValues.put(Events.DTSTART, startMillis + 3600*1000);
+        excepValues.put(Events.RRULE, "FREQ=WEEKLY;COUNT=2;WKST=SU");
+        long excepEventId = createAndVerifyException(account, eventId, excepValues);
+        instances.close();
+
+
+        // Check to see if it took.
+        instances = getInstances(timeZone, testStart, testEnd, projection);
+        //dumpInstances(instances, timeZone, "with new rule");
+
+        assertEquals("count with exception", 4, instances.getCount());
+
+        long prevMinute = -1;
+        for (int i = 0; i < 4; i++) {
+            long startMinute;
+            instances.moveToNext();
+            switch (i) {
+                case 0:
+                    startMinute = instances.getLong(1);
+                    break;
+                case 1:
+                case 3:
+                    startMinute = instances.getLong(1);
+                    assertEquals("first/last pairs match", prevMinute, startMinute);
+                    break;
+                case 2:
+                    startMinute = instances.getLong(1);
+                    assertFalse("first two != last two", prevMinute == startMinute);
+                    break;
+                default:
+                    fail();
+                    startMinute = -1;   // make compiler happy
+                    break;
+            }
+
+            prevMinute = startMinute;
+        }
+        instances.close();
+
+        // delete the calendar
+        removeAndVerifyCalendar(account, calendarId);
+    }
+
+    /**
+     * Tests exceptions that modify all instances of a recurring event.  This is not really an
+     * exception, since it won't create a new event, but supporting it allows us to use the
+     * exception URI without having to determine whether the "start from here" instance is the
+     * very first instance.
+     */
+    @MediumTest
+    public void testFullRecurrenceUpdate() {
+        String account = "ref_account";
+        int seed = 0;
+
+        // Clean up just in case
+        CalendarHelper.deleteCalendarByAccount(mContentResolver, account);
+
+        // Create calendar
+        long calendarId = createAndVerifyCalendar(account, seed++, null);
+
+        // Create recurring event
+        String rrule = "FREQ=DAILY;WKST=MO;COUNT=100";
+        ContentValues eventValues = EventHelper.getNewRecurringEventValues(account, seed++,
+                calendarId, true, "1997-08-29T02:14:00", "PT1H", rrule);
+        long eventId = createAndVerifyEvent(account, seed++, calendarId, eventValues);
+        //Log.i(TAG, "+++ eventId is " + eventId);
+
+        // Get some instances.
+        String timeZone = eventValues.getAsString(Events.EVENT_TIMEZONE);
+        String testStart = "1997-08-01T00:00:00";
+        String testEnd = "1997-08-31T23:59:59";
+        String[] projection = { Instances.BEGIN, Instances.EVENT_LOCATION };
+        String newLocation = "NEW!";
+
+        Cursor instances = getInstances(timeZone, testStart, testEnd, projection);
+        //dumpInstances(instances, timeZone, "initial");
+
+        assertEquals("initial recurrence instance count", 3, instances.getCount());
+
+        instances.moveToFirst();
+        long startMillis = instances.getLong(0);
+        ContentValues excepValues = EventHelper.getNewExceptionValues(startMillis);
+        excepValues.put(Events.RRULE, rrule);   // identifies this as an "all future events" excep
+        excepValues.put(Events.EVENT_LOCATION, newLocation);
+        long excepEventId = createAndVerifyException(account, eventId, excepValues);
+        instances.close();
+
+        // Check results.
+        assertEquals("full update does not create new ID", eventId, excepEventId);
+
+        instances = getInstances(timeZone, testStart, testEnd, projection);
+        assertEquals("post-update instance count", 3, instances.getCount());
+        while (instances.moveToNext()) {
+            assertEquals("new location", newLocation, instances.getString(1));
+        }
+
+        // delete the calendar
+        removeAndVerifyCalendar(account, calendarId);
+    }
+
+
+    /**
+     * Acquires the set of instances that appear between the specified start and end points.
+     *
+     * @param timeZone Time zone to use when parsing startWhen and endWhen
+     * @param startWhen Start date/time, in RFC 3339 format
+     * @param endWhen End date/time, in RFC 3339 format
+     * @param projection Array of desired column names
+     * @return Cursor with instances (caller should close when done)
+     */
+    private Cursor getInstances(String timeZone, String startWhen, String endWhen,
+            String[] projection) {
+        Time startTime = new Time(timeZone);
+        startTime.parse3339(startWhen);
+        long startMillis = startTime.toMillis(false);
+
+        Time endTime = new Time(timeZone);
+        endTime.parse3339(endWhen);
+        long endMillis = endTime.toMillis(false);
+
+        Log.d(TAG, "getInstances: startMillis=" + startMillis + ", endMillis=" + endMillis);
+
+        // We want a list of instances that occur between the specified dates.
+        Uri uri = Uri.withAppendedPath(Calendar.Instances.CONTENT_URI,
+                startMillis + "/" + endMillis);
+
+        Cursor instances = mContentResolver.query(uri, projection, null, null,
+                projection[0] + " ASC");
+
+        return instances;
+    }
+
+    /** debug -- dump instances cursor */
+    private static void dumpInstances(Cursor instances, String timeZone, String msg) {
+        Log.d(TAG, "Instances (" + msg + ")");
+
+        int posn = instances.getPosition();
+        instances.moveToPosition(-1);
+
+        //Log.d(TAG, "+++ instances has " + instances.getCount() + " rows, " +
+        //        instances.getColumnCount() + " columns");
+        while (instances.moveToNext()) {
+            long beginMil = instances.getLong(0);
+            Time beginT = new Time(timeZone);
+            beginT.set(beginMil);
+            Log.d(TAG, "--> begin=" + beginT.format3339(false) + " (" + beginMil + ")");
+        }
+        instances.moveToPosition(posn);
+    }
+
+
+    /**
+     * Counts the number of instances that appear between the specified start and end times.
+     */
+    private int getInstanceCount(String timeZone, String startWhen, String endWhen) {
+        Cursor instances = getInstances(timeZone, startWhen, endWhen,
+                new String[] { Instances._ID });
+        int count = instances.getCount();
+        instances.close();
+        return count;
     }
 
     /**
@@ -562,6 +995,71 @@ public class CalendarCts extends InstrumentationTestCase {
 
         verifyEvent(values, eventId);
         return eventId;
+    }
+
+    /**
+     * Creates an exception to a recurring event, and verifies it.
+     * @param account The account to use.
+     * @param originalEventId The ID of the original event.
+     * @param values Values for the exception; must include originalInstanceTime.
+     * @return The _id for the new event.
+     */
+    private long createAndVerifyException(String account, long originalEventId,
+            ContentValues values) {
+        // Create the exception
+        Uri uri = Uri.withAppendedPath(Events.EXCEPTION_CONTENT_URI,
+                String.valueOf(originalEventId));
+        uri = asSyncAdapter(uri, account, CTS_TEST_TYPE);
+        Uri resultUri = mContentResolver.insert(uri, values);
+        assertNotNull(resultUri);
+        long eventId = ContentUris.parseId(resultUri);
+        assertTrue(eventId >= 0);
+        return eventId;
+    }
+
+    /**
+     * Deletes an exception to a recurring event.
+     * @param account The account to use.
+     * @param eventId The ID of the original recurring event.
+     * @param excepId The ID of the exception event.
+     * @return The number of rows deleted.
+     */
+    private int deleteException(String account, long eventId, long excepId) {
+        Uri uri = Uri.withAppendedPath(Events.EXCEPTION_CONTENT_URI,
+                eventId + "/" + excepId);
+        uri = asSyncAdapter(uri, account, CTS_TEST_TYPE);
+        return mContentResolver.delete(uri, null, null);
+    }
+
+    /**
+     * Add some attendees to an event.
+     */
+    private void addAttendees(String account, long eventId, int seed) {
+        ContentValues values = new ContentValues();
+
+        values.put(Attendees.EVENT_ID, eventId);
+        values.put(Attendees.ATTENDEE_NAME, "Attender" + seed);
+        values.put(Attendees.ATTENDEE_EMAIL, "attender" + seed + "@example.com");
+        values.put(Attendees.ATTENDEE_STATUS, Attendees.ATTENDEE_STATUS_TENTATIVE);
+        values.put(Attendees.ATTENDEE_RELATIONSHIP, Attendees.RELATIONSHIP_NONE);
+        values.put(Attendees.ATTENDEE_TYPE, Attendees.TYPE_NONE);
+
+        Uri syncUri = asSyncAdapter(Attendees.CONTENT_URI, account, CTS_TEST_TYPE);
+        Uri uri = mContentResolver.insert(syncUri, values);
+    }
+
+    /**
+     * Add some reminders to an event.
+     */
+    private void addReminders(String account, long eventId, int seed) {
+        ContentValues values = new ContentValues();
+
+        values.put(Reminders.EVENT_ID, eventId);
+        values.put(Reminders.MINUTES, seed * 5);
+        values.put(Reminders.METHOD, Reminders.METHOD_ALERT);
+
+        Uri syncUri = asSyncAdapter(Reminders.CONTENT_URI, account, CTS_TEST_TYPE);
+        Uri uri = mContentResolver.insert(syncUri, values);
     }
 
     /**

@@ -30,7 +30,9 @@ import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Bundle;
 import android.provider.Calendar;
+import android.provider.Calendar.Attendees;
 import android.provider.Calendar.Events;
+import android.provider.Calendar.Reminders;
 import android.provider.ContactsContract;
 import android.provider.SyncStateContract;
 import android.text.TextUtils;
@@ -136,7 +138,7 @@ import java.util.TimeZone;
     }
 
     public interface Views {
-      public static final String EVENTS = "view_events";
+        public static final String EVENTS = "view_events";
     }
 
     // Copied from SyncStateContentProviderHelper.  Don't really want to make them public there.
@@ -185,7 +187,6 @@ import java.util.TimeZone;
     private static final String SCHEMA_HTTPS = "https://";
     private static final String SCHEMA_HTTP = "http://";
 
-    private final Context mContext;
     private final SyncStateContentProviderHelper mSyncState;
 
     private static CalendarDatabaseHelper sSingleton = null;
@@ -254,7 +255,6 @@ import java.util.TimeZone;
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
         if (LOGD) Log.d(TAG, "Creating OpenHelper");
 
-        mContext = context;
         mSyncState = new SyncStateContentProviderHelper();
     }
 
@@ -442,6 +442,9 @@ import java.util.TimeZone;
     }
 
     private void createEventsTable(SQLiteDatabase db) {
+        // IMPORTANT: when adding new columns, be sure to update ALLOWED_IN_EXCEPTION and
+        // DONT_CLONE_INTO_EXCEPTION in CalendarProvider2.
+        //
         // TODO: do we need both dtend and duration?
         db.execSQL("CREATE TABLE " + Tables.EVENTS + " (" +
                 Calendar.Events._ID + " INTEGER PRIMARY KEY," +
@@ -2560,6 +2563,10 @@ import java.util.TimeZone;
             Log.v(TAG, "Duplicating event " + id + " into new event " + newId);
         }
 
+        copyEventRelatedTables(db, newId, id);
+    }
+
+    static void copyEventRelatedTables(SQLiteDatabase db, long newId, long id) {
         db.execSQL("INSERT INTO " + Tables.REMINDERS
                 + " ( "  + Calendar.Reminders.EVENT_ID + ", " + LAST_SYNCED_REMINDER_COLUMNS + ") "
                 + "SELECT ?," + LAST_SYNCED_REMINDER_COLUMNS

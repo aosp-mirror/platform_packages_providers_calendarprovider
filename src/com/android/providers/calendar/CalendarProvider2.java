@@ -2499,7 +2499,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 } else if (callerIsSyncAdapter) {
                     // TODO: same remark as for CALENDARS/CALENDARS_ID case as this is not
                     // sufficient to deal with all the "_id" case in selection
-                    if (selection != null && selection.startsWith("_id=")) {
+                    if (selection != null && selection.startsWith("_id=?")) {
+                        id = Long.parseLong(selectionArgs[0]);
+                    } else if (selection != null && selection.startsWith("_id=")) {
                         // The ContentProviderOperation generates an _id=n string instead of
                         // adding the id to the URL, so parse that out here.
                         id = Long.parseLong(selection.substring(4));

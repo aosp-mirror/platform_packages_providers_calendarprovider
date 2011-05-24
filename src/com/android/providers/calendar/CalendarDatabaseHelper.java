@@ -62,7 +62,7 @@ import java.util.TimeZone;
     // Versions under 100 cover through Froyo, 1xx version are for Gingerbread,
     // 2xx for Honeycomb, and 3xx for ICS. For future versions bump this to the
     // next hundred at each major release.
-    static final int DATABASE_VERSION = 301;
+    static final int DATABASE_VERSION = 302;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -929,6 +929,10 @@ import java.util.TimeZone;
                 createEventsView = true;
                 oldVersion++;
             }
+            if (oldVersion == 301) {
+                upgradeToVersion302(db);
+                oldVersion++;
+            }
             if (createEventsView) {
                 createEventsView(db);
             }
@@ -976,6 +980,19 @@ import java.util.TimeZone;
             return true;
         }
         return false;
+    }
+
+    @VisibleForTesting
+    void upgradeToVersion302(SQLiteDatabase db) {
+        /*
+         * Changes from version 301 to 302
+         * - Move Exchange eventEndTimezone values to SYNC_DATA1
+         */
+        db.execSQL("UPDATE Events SET sync_data1=eventEndTimezone WHERE calendar_id IN "
+                + "(SELECT _id FROM Calendars WHERE account_type='com.android.exchange');");
+
+        db.execSQL("UPDATE Events SET eventEndTimezone=NULL WHERE calendar_id IN "
+                + "(SELECT _id FROM Calendars WHERE account_type='com.android.exchange');");
     }
 
     @VisibleForTesting

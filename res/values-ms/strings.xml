@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--  Copyright (C) 2009 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+ -->
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage" msgid="5387668002987562770">"Storan Kalendar"</string>
+    <!-- no translation found for calendar_default_name (6924293766625167275) -->
+    <skip />
+    <!-- no translation found for calendar_info (6687678621418059281) -->
+    <skip />
+    <!-- no translation found for calendar_info_error (5575162446528419982) -->
+    <skip />
+    <!-- no translation found for calendar_info_no_calendars (4287534468186704433) -->
+    <skip />
+    <!-- no translation found for calendar_info_events (1805502308105103803) -->
+    <skip />
+    <!-- no translation found for calendar_info_events_dirty (8879392112564499515) -->
+    <skip />
+    <!-- no translation found for provider_label (2306513350843464739) -->
+    <skip />
+    <!-- no translation found for debug_tool_delete_button (5052706251268452090) -->
+    <skip />
+    <!-- no translation found for debug_tool_start_button (5384780896342913563) -->
+    <skip />
+    <!-- no translation found for debug_tool_message (4414152820946316089) -->
+    <skip />
+    <!-- no translation found for debug_tool_email_sender_picker (4418621476577347562) -->
+    <skip />
+    <!-- no translation found for debug_tool_email_subject (2403590332256471194) -->
+    <skip />
+    <!-- no translation found for debug_tool_email_body (740309162644398319) -->
+    <skip />
+</resources>

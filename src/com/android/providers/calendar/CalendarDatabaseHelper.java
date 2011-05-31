@@ -62,7 +62,7 @@ import java.util.TimeZone;
     // Versions under 100 cover through Froyo, 1xx version are for Gingerbread,
     // 2xx for Honeycomb, and 3xx for ICS. For future versions bump this to the
     // next hundred at each major release.
-    static final int DATABASE_VERSION = 302;
+    static final int DATABASE_VERSION = 303;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -527,12 +527,50 @@ import java.util.TimeZone;
                 Calendar.Calendars.MAX_REMINDERS + " INTEGER DEFAULT 5," +
                 Calendar.Calendars.ALLOWED_REMINDERS + " TEXT DEFAULT '0,1,2,3'," +
                 Calendar.Calendars.DELETED + " INTEGER NOT NULL DEFAULT 0," +
-                Calendar.Calendars.SYNC1 + " TEXT," +
-                Calendar.Calendars.SYNC2 + " TEXT," +
-                Calendar.Calendars.SYNC3 + " TEXT," +
-                Calendar.Calendars.SYNC4 + " TEXT," +
-                Calendar.Calendars.SYNC5 + " TEXT," +
-                Calendar.Calendars.SYNC6 + " TEXT" +
+                Calendar.Calendars.CAL_SYNC1 + " TEXT," +
+                Calendar.Calendars.CAL_SYNC2 + " TEXT," +
+                Calendar.Calendars.CAL_SYNC3 + " TEXT," +
+                Calendar.Calendars.CAL_SYNC4 + " TEXT," +
+                Calendar.Calendars.CAL_SYNC5 + " TEXT," +
+                Calendar.Calendars.CAL_SYNC6 + " TEXT" +
+                ");");
+
+        // Trigger to remove a calendar's events when we delete the calendar
+        db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON " + Tables.CALENDARS + " " +
+                "BEGIN " +
+                CALENDAR_CLEANUP_TRIGGER_SQL +
+                "END");
+    }
+
+    private void createCalendarsTable300(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE " + Tables.CALENDARS + " (" +
+                "_id INTEGER PRIMARY KEY," +
+                "account_name TEXT," +
+                "account_type TEXT," +
+                "_sync_id TEXT," +
+                "_sync_version TEXT," +
+                "_sync_time TEXT," +  // UTC
+                "dirty INTEGER," +
+                "name TEXT," +
+                "displayName TEXT," +
+                "calendar_color INTEGER," +
+                "access_level INTEGER," +
+                "visible INTEGER NOT NULL DEFAULT 1," +
+                "sync_events INTEGER NOT NULL DEFAULT 0," +
+                "calendar_location TEXT," +
+                "calendar_timezone TEXT," +
+                "ownerAccount TEXT, " +
+                "canOrganizerRespond INTEGER NOT NULL DEFAULT 1," +
+                "canModifyTimeZone INTEGER DEFAULT 1," +
+                "maxReminders INTEGER DEFAULT 5," +
+                "allowedReminders TEXT DEFAULT '0,1,2'," +
+                "deleted INTEGER NOT NULL DEFAULT 0," +
+                "sync1 TEXT," +
+                "sync2 TEXT," +
+                "sync3 TEXT," +
+                "sync4 TEXT," +
+                "sync5 TEXT," +
+                "sync6 TEXT" +
                 ");");
 
         // Trigger to remove a calendar's events when we delete the calendar
@@ -933,6 +971,11 @@ import java.util.TimeZone;
                 upgradeToVersion302(db);
                 oldVersion++;
             }
+            if (oldVersion == 302) {
+                upgradeToVersion303(db);
+                oldVersion++;
+                createEventsView = true;
+            }
             if (createEventsView) {
                 createEventsView(db);
             }
@@ -980,6 +1023,82 @@ import java.util.TimeZone;
             return true;
         }
         return false;
+    }
+
+    @VisibleForTesting
+    void upgradeToVersion303(SQLiteDatabase db) {
+        /*
+         * Changes from version 302 to 303:
+         * - change SYNCx columns to CAL_SYNCx
+         */
+
+        // rename old table, create new table with updated layout
+        db.execSQL("ALTER TABLE Calendars RENAME TO Calendars_Backup;");
+        db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
+        createCalendarsTable(db);
+
+        // copy fields from old to new
+        db.execSQL("INSERT INTO Calendars (" +
+                "_id, " +
+                "account_name, " +
+                "account_type, " +
+                "_sync_id, " +
+                "_sync_version, " +
+                "_sync_time, " +
+                "dirty, " +
+                "name, " +
+                "displayName, " +
+                "calendar_color, " +
+                "access_level, " +
+                "visible, " +
+                "sync_events, " +
+                "calendar_location, " +
+                "calendar_timezone, " +
+                "ownerAccount, " +
+                "canOrganizerRespond, " +
+                "canModifyTimeZone, " +
+                "maxReminders, " +
+                "allowedReminders, " +
+                "deleted, " +
+                "cal_sync1, " +     // rename from sync1
+                "cal_sync2, " +     // rename from sync2
+                "cal_sync3, " +     // rename from sync3
+                "cal_sync4, " +     // rename from sync4
+                "cal_sync5, " +     // rename from sync5
+                "cal_sync6) " +     // rename from sync6
+                "SELECT " +
+                "_id, " +
+                "account_name, " +
+                "account_type, " +
+                "_sync_id, " +
+                "_sync_version, " +
+                "_sync_time, " +
+                "dirty, " +
+                "name, " +
+                "displayName, " +
+                "calendar_color, " +
+                "access_level, " +
+                "visible, " +
+                "sync_events, " +
+                "calendar_location, " +
+                "calendar_timezone, " +
+                "ownerAccount, " +
+                "canOrganizerRespond, " +
+                "canModifyTimeZone, " +
+                "maxReminders, " +
+                "allowedReminders," +
+                "deleted, " +
+                "sync1, " +
+                "sync2, " +
+                "sync3, " +
+                "sync4," +
+                "sync5," +
+                "sync6 " +
+                "FROM Calendars_Backup;"
+        );
+
+        // drop the old table
+        db.execSQL("DROP TABLE Calendars_Backup;");
     }
 
     @VisibleForTesting
@@ -1041,7 +1160,7 @@ import java.util.TimeZone;
         // rename old table, create new table with updated layout
         db.execSQL("ALTER TABLE Calendars RENAME TO Calendars_Backup;");
         db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup;");
-        createCalendarsTable(db);
+        createCalendarsTable300(db);
 
         // copy fields from old to new
         db.execSQL("INSERT INTO Calendars (" +
@@ -1210,7 +1329,7 @@ import java.util.TimeZone;
                 EVENTS_CLEANUP_TRIGGER_SQL +
                 "END");
 
-    };
+    }
 
     @VisibleForTesting
     void upgradeToVersion205(SQLiteDatabase db) {
@@ -2176,7 +2295,12 @@ import java.util.TimeZone;
                 + " AS " + Calendar.Events._SYNC_DATA + ","
                 + Tables.EVENTS + "." + Calendar.Events._SYNC_MARK
                 + " AS " + Calendar.Events._SYNC_MARK + ","
-                + Calendar.Calendars.SYNC1 + ","
+                + Calendar.Calendars.CAL_SYNC1 + ","
+                + Calendar.Calendars.CAL_SYNC2 + ","
+                + Calendar.Calendars.CAL_SYNC3 + ","
+                + Calendar.Calendars.CAL_SYNC4 + ","
+                + Calendar.Calendars.CAL_SYNC5 + ","
+                + Calendar.Calendars.CAL_SYNC6 + ","
                 + Calendar.Calendars.OWNER_ACCOUNT + ","
                 + Calendar.Calendars.SYNC_EVENTS  + ","
                 + Calendar.Events.SYNC_DATA1

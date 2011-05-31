@@ -1529,7 +1529,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     String accountType = values.getAsString(
                             Calendars.ACCOUNT_TYPE);
                     final Account account = new Account(accountName, accountType);
-                    String eventsUrl = values.getAsString(Calendars.SYNC1);
+                    String eventsUrl = values.getAsString(Calendars.CAL_SYNC1);
                     mDbHelper.scheduleSync(account, false /* two-way sync */, eventsUrl);
                 }
                 id = mDbHelper.calendarsInsert(values);
@@ -2955,7 +2955,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // for this calendar.
         Cursor cursor = query(ContentUris.withAppendedId(Calendars.CONTENT_URI, id),
                 new String[] {Calendars.ACCOUNT_NAME, Calendars.ACCOUNT_TYPE,
-                        Calendars.SYNC1, Calendars.SYNC_EVENTS},
+                        Calendars.CAL_SYNC1, Calendars.SYNC_EVENTS},
                 null /* selection */,
                 null /* selectionArgs */,
                 null /* sort */);
@@ -3208,7 +3208,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Calendars.CALENDAR_COLOR, Calendars.CALENDAR_COLOR);
         sEventsProjectionMap.put(Calendars.ACCESS_LEVEL, Calendars.ACCESS_LEVEL);
         sEventsProjectionMap.put(Calendars.VISIBLE, Calendars.VISIBLE);
-        sEventsProjectionMap.put(Calendars.SYNC1, Calendars.SYNC1);
+        sEventsProjectionMap.put(Calendars.CAL_SYNC1, Calendars.CAL_SYNC1);
         sEventsProjectionMap.put(Calendars.CALENDAR_TIMEZONE, Calendars.CALENDAR_TIMEZONE);
         sEventsProjectionMap.put(Calendars.OWNER_ACCOUNT, Calendars.OWNER_ACCOUNT);
 
@@ -3271,7 +3271,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventEntitiesProjectionMap.put(Events._SYNC_VERSION, Events._SYNC_VERSION);
         sEventEntitiesProjectionMap.put(Events._SYNC_MARK, Events._SYNC_MARK);
         sEventEntitiesProjectionMap.put(Events.DIRTY, Events.DIRTY);
-        sEventEntitiesProjectionMap.put(Calendars.SYNC1, Calendars.SYNC1);
+        sEventEntitiesProjectionMap.put(Calendars.CAL_SYNC1, Calendars.CAL_SYNC1);
         sEventEntitiesProjectionMap.put(Events.SYNC_DATA1, Events.SYNC_DATA1);
 
         // Instances columns

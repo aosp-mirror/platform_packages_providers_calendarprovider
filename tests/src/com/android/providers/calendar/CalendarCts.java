@@ -68,12 +68,12 @@ public class CalendarCts extends InstrumentationTestCase {
                 Calendars.CAN_MODIFY_TIME_ZONE,
                 Calendars.MAX_REMINDERS,
                 Calendars.DELETED,
-                Calendars.SYNC1,
-                Calendars.SYNC2,
-                Calendars.SYNC3,
-                Calendars.SYNC4,
-                Calendars.SYNC5,
-                Calendars.SYNC6,
+                Calendars.CAL_SYNC1,
+                Calendars.CAL_SYNC2,
+                Calendars.CAL_SYNC3,
+                Calendars.CAL_SYNC4,
+                Calendars.CAL_SYNC5,
+                Calendars.CAL_SYNC6,
                 };
         // @formatter:on
 
@@ -111,12 +111,12 @@ public class CalendarCts extends InstrumentationTestCase {
             values.put(Calendars.CAN_ORGANIZER_RESPOND, seed % 2);
             values.put(Calendars.CAN_MODIFY_TIME_ZONE, seed % 2);
             values.put(Calendars.MAX_REMINDERS, seed);
-            values.put(Calendars.SYNC1, "SYNC1:" + seedString);
-            values.put(Calendars.SYNC2, "SYNC2:" + seedString);
-            values.put(Calendars.SYNC3, "SYNC3:" + seedString);
-            values.put(Calendars.SYNC4, "SYNC4:" + seedString);
-            values.put(Calendars.SYNC5, "SYNC5:" + seedString);
-            values.put(Calendars.SYNC6, "SYNC6:" + seedString);
+            values.put(Calendars.CAL_SYNC1, "SYNC1:" + seedString);
+            values.put(Calendars.CAL_SYNC2, "SYNC2:" + seedString);
+            values.put(Calendars.CAL_SYNC3, "SYNC3:" + seedString);
+            values.put(Calendars.CAL_SYNC4, "SYNC4:" + seedString);
+            values.put(Calendars.CAL_SYNC5, "SYNC5:" + seedString);
+            values.put(Calendars.CAL_SYNC6, "SYNC6:" + seedString);
 
             return values;
         }

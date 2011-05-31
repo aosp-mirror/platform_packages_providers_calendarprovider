@@ -175,7 +175,7 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
         ContentValues values = new ContentValues();
 
         values.put(Calendar.Calendars.ACCOUNT_NAME, getAccount());
-        values.put(Calendar.Calendars.SYNC1, calendarUrl);
+        values.put(Calendar.Calendars.CAL_SYNC1, calendarUrl);
         values.put(Calendar.Calendars.NAME, name);
         values.put(Calendar.Calendars.DISPLAY_NAME, name);
 

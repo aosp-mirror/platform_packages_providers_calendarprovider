@@ -1028,7 +1028,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         m.put(Calendars.CALENDAR_COLOR, "0xff123456");
         m.put(Calendars.CALENDAR_TIMEZONE, timezone);
         m.put(Calendars.VISIBLE, 1);
-        m.put(Calendars.SYNC1, CALENDAR_URL);
+        m.put(Calendars.CAL_SYNC1, CALENDAR_URL);
         m.put(Calendars.OWNER_ACCOUNT, account);
         m.put(Calendars.ACCOUNT_NAME,  account);
         m.put(Calendars.ACCOUNT_TYPE, DEFAULT_ACCOUNT_TYPE);
@@ -1702,7 +1702,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             while (ei.hasNext()) {
                 Entity entity = ei.next();
                 ContentValues values = entity.getEntityValues();
-                assertEquals(CALENDAR_URL, values.getAsString(Calendars.SYNC1));
+                assertEquals(CALENDAR_URL, values.getAsString(Calendars.CAL_SYNC1));
                 ArrayList<Entity.NamedContentValues> subvalues = entity.getSubValues();
                 switch (values.getAsInteger("_id")) {
                     case 1:

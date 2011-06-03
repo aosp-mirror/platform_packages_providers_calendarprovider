@@ -95,9 +95,9 @@ public class CalendarDebug extends ListActivity {
                         String displayName = cursor.getString(INDEX_DISPLAY_NAME);
 
                         // Compute number of events in the calendar
-                        String where = Calendar.EventsColumns.CALENDAR_ID + "=" + id;
+                        String where = Calendar.Events.CALENDAR_ID + "=" + id;
                         Cursor eventCursor = Calendar.Events.query(mContentResolver,
-                                EVENTS_PROJECTION, where, null);
+                                EVENTS_PROJECTION, where, null, null);
                         try {
                             eventCount = eventCursor.getCount();
                         } finally {
@@ -105,10 +105,10 @@ public class CalendarDebug extends ListActivity {
                         }
 
                         // Compute number of dirty events in the calendar
-                        String dirtyWhere = Calendar.EventsColumns.CALENDAR_ID + "=" + id
+                        String dirtyWhere = Calendar.Events.CALENDAR_ID + "=" + id
                                 + " AND " + Calendar.Events.DIRTY + "=1";
                         Cursor dirtyCursor = Calendar.Events.query(mContentResolver,
-                                EVENTS_PROJECTION, dirtyWhere, null);
+                                EVENTS_PROJECTION, dirtyWhere, null, null);
                         try {
                             dirtyCount = dirtyCursor.getCount();
                         } finally {

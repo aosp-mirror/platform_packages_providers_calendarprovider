@@ -231,7 +231,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             ContentValues map = new ContentValues();
             for (KeyValue pair : pairs) {
                 String value = pair.value;
-                if (Calendar.EventsColumns.STATUS.equals(pair.key)) {
+                if (Calendar.Events.STATUS.equals(pair.key)) {
                     // Do type conversion for STATUS
                     map.put(pair.key, Integer.parseInt(value));
                 } else {
@@ -816,8 +816,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
                             "2008-05-20T13:00:00", }),
             new Insert("cancel0"),
             new Update("cancel0", new KeyValue[] {
-                    new KeyValue(Calendar.EventsColumns.STATUS,
-                            "" + Calendar.EventsColumns.STATUS_CANCELED),
+                    new KeyValue(Calendar.Events.STATUS,
+                        Integer.toString(Calendar.Events.STATUS_CANCELED)),
             }),
             new VerifyAllInstances("2008-05-01T00:00:00", "2008-05-22T00:01:00",
                     new String[] {"2008-05-06T13:00:00",
@@ -879,7 +879,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
             // It would be nice for the provider to handle this automatically,
             // but for now simulate the server-side cancel.
             new Update("except1", new KeyValue[] {
-                    new KeyValue(Calendar.EventsColumns.STATUS, "" + Calendar.EventsColumns.STATUS_CANCELED),
+                new KeyValue(Calendar.Events.STATUS,
+                        Integer.toString(Calendar.Events.STATUS_CANCELED)),
             }),
             // Verify that the recurrence exception does not appear.
             new VerifyAllInstances("2008-05-01T00:00:00", "2008-05-04T00:01:00",
@@ -1149,7 +1150,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                     || values.containsKey(Events.DURATION) || values.containsKey(Events.ALL_DAY)
                     || values.containsKey(Events.RRULE)
                     || values.containsKey(Events.EVENT_TIMEZONE)
-                    || values.containsKey(Calendar.EventsColumns.STATUS)) {
+                    || values.containsKey(Calendar.Events.STATUS)) {
                 long dtstart = cursor.getLong(1);
                 long dtend = cursor.getLong(2);
                 String duration = cursor.getString(3);
@@ -1523,7 +1524,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 Events.GUESTS_CAN_MODIFY,        // 18
         };
 
-        String orderBy = Instances.SORT_CALENDAR_VIEW;
+        String orderBy = CalendarProvider2.SORT_CALENDAR_VIEW;
         String where = Instances.SELF_ATTENDEE_STATUS + "!=" +
                 Calendar.Attendees.ATTENDEE_STATUS_DECLINED;
 
@@ -1569,7 +1570,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             cursor = Instances.query(mResolver, PROJECTION,
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
-                    "search", where, orderBy);
+                    "search", where, null, orderBy);
             assertEquals(2, cursor.getCount());
         } finally {
             if (cursor != null) {
@@ -1581,7 +1582,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             cursor = Instances.query(mResolver, PROJECTION,
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
-                    "purple", where, orderBy);
+                    "purple", where, null, orderBy);
             assertEquals(1, cursor.getCount());
         } finally {
             if (cursor != null) {
@@ -1593,7 +1594,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             cursor = Instances.query(mResolver, PROJECTION,
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
-                    "puurple", where, orderBy);
+                    "puurple", where, null, orderBy);
             assertEquals(0, cursor.getCount());
         } finally {
             if (cursor != null) {
@@ -1605,7 +1606,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             cursor = Instances.query(mResolver, PROJECTION,
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
-                    "purple lasers", where, orderBy);
+                    "purple lasers", where, null, orderBy);
             assertEquals(1, cursor.getCount());
         } finally {
             if (cursor != null) {
@@ -1617,7 +1618,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             cursor = Instances.query(mResolver, PROJECTION,
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
-                    "lasers kapow", where, orderBy);
+                    "lasers kapow", where, null, orderBy);
             assertEquals(0, cursor.getCount());
         } finally {
             if (cursor != null) {
@@ -1629,7 +1630,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             cursor = Instances.query(mResolver, PROJECTION,
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
-                    "\"search purple\"", where, orderBy);
+                    "\"search purple\"", where, null, orderBy);
             assertEquals(1, cursor.getCount());
         } finally {
             if (cursor != null) {
@@ -1641,7 +1642,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             cursor = Instances.query(mResolver, PROJECTION,
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
-                    "\"purple search\"", where, orderBy);
+                    "\"purple search\"", where, null, orderBy);
             assertEquals(0, cursor.getCount());
         } finally {
             if (cursor != null) {
@@ -1653,7 +1654,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             cursor = Instances.query(mResolver, PROJECTION,
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
-                    "%", where, orderBy);
+                    "%", where, null, orderBy);
             assertEquals(0, cursor.getCount());
         } finally {
             if (cursor != null) {
@@ -2322,7 +2323,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 Events.GUESTS_CAN_MODIFY,        // 18
         };
 
-        String orderBy = Instances.SORT_CALENDAR_VIEW;
+        String orderBy = CalendarProvider2.SORT_CALENDAR_VIEW;
         String where = Instances.SELF_ATTENDEE_STATUS + "!=" + Calendar.Attendees.ATTENDEE_STATUS_DECLINED;
 
         int calId = insertCal("Calendar0", DEFAULT_TIMEZONE);
@@ -2344,7 +2345,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         // Query is more than 2 months so the range won't get extended by the provider.
         Cursor cursor = Instances.query(mResolver, PROJECTION,
                 startMs - DateUtils.YEAR_IN_MILLIS, startMs + DateUtils.HOUR_IN_MILLIS,
-                where, orderBy);
+                where, null, orderBy);
         try {
             assertEquals(1, cursor.getCount());
         } finally {
@@ -2354,7 +2355,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         // Now expand the instance range.  The event overlaps the new part of the range.
         cursor = Instances.query(mResolver, PROJECTION,
                 startMs - DateUtils.YEAR_IN_MILLIS, startMs + 2 * DateUtils.HOUR_IN_MILLIS,
-                where, orderBy);
+                where, null, orderBy);
         try {
             assertEquals(1, cursor.getCount());
         } finally {

@@ -25,7 +25,6 @@ import android.database.sqlite.SQLiteQueryBuilder;
 import android.os.Debug;
 import android.pim.EventRecurrence;
 import android.pim.RecurrenceSet;
-import android.provider.BaseColumns;
 import android.provider.Calendar.Calendars;
 import android.provider.Calendar.Events;
 import android.provider.Calendar.Instances;
@@ -74,8 +73,8 @@ public class CalendarInstancesHelper {
             " WHERE " + CalendarProvider2.SQL_WHERE_ID;
 
     private static final String SQL_WHERE_ID_FROM_INSTANCES_NOT_SYNCED =
-            BaseColumns._ID + " IN " +
-            "(SELECT " + Tables.INSTANCES + "." + BaseColumns._ID + " as _id" +
+            Instances._ID + " IN " +
+            "(SELECT " + Tables.INSTANCES + "." + Instances._ID + " as _id" +
             " FROM " + Tables.INSTANCES +
             " INNER JOIN " + Tables.EVENTS +
             " ON (" +
@@ -84,8 +83,8 @@ public class CalendarInstancesHelper {
             " WHERE " + Tables.EVENTS + "." + Events._ID + "=?)";
 
     private static final String SQL_WHERE_ID_FROM_INSTANCES_SYNCED =
-            BaseColumns._ID + " IN " +
-            "(SELECT " + Tables.INSTANCES + "." + BaseColumns._ID + " as _id" +
+            Instances._ID + " IN " +
+            "(SELECT " + Tables.INSTANCES + "." + Instances._ID + " as _id" +
             " FROM " + Tables.INSTANCES +
             " INNER JOIN " + Tables.EVENTS +
             " ON (" +

@@ -1874,6 +1874,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         cursor.close();
 
         cursor = mResolver.query(eventUri, null, null, null, null);
+        // TODO figure out why this test fails. App works fine for this case.
         assertEquals("Created event is missing - cannot find EventUri = " + eventUri, 1,
                 cursor.getCount());
         int selfColumn = cursor.getColumnIndex(Calendar.Events.SELF_ATTENDEE_STATUS);
@@ -1914,7 +1915,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
     /**
      * Test the event's dirty status and clear it.
-     *
+     * 
      * @param eventId event to fetch.
      * @param wanted the wanted dirty status
      */
@@ -2174,8 +2175,6 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 "_id=" + eventId, null /* selectionArgs */));
         testQueryCount(Calendar.Events.CONTENT_URI, null, 2);
         // Right account, should be deleted
-        // TODO this test is now failing due to a race condition, should be
-        // rewritten using a dummy account like the CalendarCTS tests
         assertEquals("delete", 1, mResolver.delete(
                 updatedUri(Calendar.Events.CONTENT_URI, true /* syncAdapter */, DEFAULT_ACCOUNT,
                         DEFAULT_ACCOUNT_TYPE),

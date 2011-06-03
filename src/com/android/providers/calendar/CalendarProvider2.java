@@ -90,9 +90,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final String[] ID_ONLY_PROJECTION =
             new String[] {Events._ID};
 
-    private static final String[] ID_RRULE_ONLY_PROJECTION =
-        new String[] {Events._ID, Events.RRULE};
-
     private static final String[] EVENTS_PROJECTION = new String[] {
             Events._SYNC_ID,
             Events.RRULE,
@@ -164,9 +161,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     protected static final String SQL_WHERE_ID = BaseColumns._ID + "=?";
     private static final String SQL_WHERE_EVENT_ID = "event_id=?";
-    private static final String SQL_WHERE_ORIGINAL_ID = Events.ORIGINAL_ID + "=?";
-    private static final String SQL_WHERE_ORIGINAL_ID_DELETED = Events.ORIGINAL_ID + "=? AND " +
-            Events.DELETED + "=?";
+    private static final String SQL_WHERE_ORIGINAL_EVENT = Events.ORIGINAL_SYNC_ID + "=?";
     private static final String SQL_WHERE_ATTENDEES_ID =
             Tables.ATTENDEES + "." + Attendees._ID + "=? AND " +
             Tables.EVENTS + "." + Events._ID + "=" + Tables.ATTENDEES + "." + Attendees.EVENT_ID;
@@ -2051,7 +2046,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 selection = appendSyncAccountToSelection(uri, selection);
 
                 // Query this event to get the ids to delete.
-                Cursor cursor = mDb.query(Views.EVENTS, ID_RRULE_ONLY_PROJECTION,
+                Cursor cursor = mDb.query(Views.EVENTS, ID_ONLY_PROJECTION,
                         selection, selectionArgs, null /* groupBy */,
                         null /* having */, null /* sortOrder */);
                 try {
@@ -2075,8 +2070,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                             + "doesn't support selection based deletion for type "
                             + match);
                 }
-                // Trying to clean exceptions is faster than querying and
-                // checking, so pass in true for hasRRule
                 return deleteEventInternal(id, callerIsSyncAdapter, false /* isBatch */);
             }
             case ATTENDEES:
@@ -2214,15 +2207,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 if (isRecurrenceEvent(rrule, rdate, origEvent)) {
                     mMetaData.clearInstanceRange();
                 }
-                boolean hasRRule = !TextUtils.isEmpty(rrule);
 
                 // we clean the Events and Attendees table if the caller is CalendarSyncAdapter
                 // or if the event is local (no syncId)
                 if (callerIsSyncAdapter || emptySyncId) {
                     mDb.delete(Tables.EVENTS, SQL_WHERE_ID, selectionArgs);
-                    if (hasRRule) {
-                        mDb.delete(Tables.EVENTS, SQL_WHERE_ORIGINAL_ID, selectionArgs);
-                    }
                 } else {
                     ContentValues values = new ContentValues();
                     values.put(Events.DELETED, 1);
@@ -2237,11 +2226,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     mDb.delete(Tables.CALENDAR_ALERTS, SQL_WHERE_EVENT_ID, selectionArgs);
                     mDb.delete(Tables.EXTENDED_PROPERTIES, SQL_WHERE_EVENT_ID,
                             selectionArgs);
-                    if (hasRRule) {
-                        // soft delete any exceptions as well
-                        delete(Events.CONTENT_URI, SQL_WHERE_ORIGINAL_ID_DELETED,
-                                new String[] {String.valueOf(id), "0"});
-                    }
                 }
             }
         } finally {

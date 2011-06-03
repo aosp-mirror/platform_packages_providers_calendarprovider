@@ -194,7 +194,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
         return count;
     }
 
-    private boolean getIsCallerSyncAdapter(Uri uri) {
+    protected boolean getIsCallerSyncAdapter(Uri uri) {
         boolean isCurrentSyncAdapter = QueryParameterUtils.readBooleanQueryParameter(uri,
                 Calendar.CALLER_IS_SYNCADAPTER, false);
         if (mIsCallerSyncAdapter == null || mIsCallerSyncAdapter) {

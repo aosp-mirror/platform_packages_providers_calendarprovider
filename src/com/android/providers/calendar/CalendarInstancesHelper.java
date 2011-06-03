@@ -65,7 +65,8 @@ public class CalendarInstancesHelper {
             + "(" + Events.ORIGINAL_INSTANCE_TIME + " IS NOT NULL AND "
                     + Events.ORIGINAL_INSTANCE_TIME
                     + " <= ? AND " + Events.ORIGINAL_INSTANCE_TIME + " >= ?)) AND "
-            + "(" + Calendars.SYNC_EVENTS + " != 0)";
+            + "(" + Calendars.SYNC_EVENTS + " != ?) AND "
+            + "(" + Events.LAST_SYNCED + " = ?)";
 
     private static final String SQL_SELECT_EVENTS_SYNC_ID =
             "SELECT " + Events._SYNC_ID +
@@ -552,11 +553,18 @@ public class CalendarInstancesHelper {
         // instance lasts no longer than 1 week.
         // also filter with syncable state (we dont want the entries from a non
         // syncable account)
+        // also filter with last_synced=0 so we don't expand events that were
+        // dup'ed for partial updates.
         // TODO: compute the originalInstanceEndTime or get this from the
         // server.
         qb.appendWhere(SQL_WHERE_GET_EVENTS_ENTRIES);
         String selectionArgs[] = new String[] {
-                endString, beginString, endString, String.valueOf(begin - MAX_ASSUMED_DURATION)
+                endString,
+                beginString,
+                endString,
+                String.valueOf(begin - MAX_ASSUMED_DURATION),
+                "0", // Calendars.SYNC_EVENTS
+                "0", // Events.LAST_SYNCED
         };
         Cursor c = qb.query(mDb, EXPAND_COLUMNS, null /* selection */, selectionArgs,
                 null /* groupBy */, null /* having */, null /* sortOrder */);
@@ -751,10 +759,14 @@ public class CalendarInstancesHelper {
                 String.valueOf(rowId)
             };
         } else {
-            String where = Events._SYNC_ID + "=? OR " + Events.ORIGINAL_SYNC_ID + "=?";
+            // don't expand events that were dup'ed for partial updates
+            String where = "(" + Events._SYNC_ID + "=? OR " + Events.ORIGINAL_SYNC_ID + "=?) AND "
+                    + Events.LAST_SYNCED + " = ?";
             qb.appendWhere(where);
             selectionArgs = new String[] {
-                    recurrenceSyncId, recurrenceSyncId
+                    recurrenceSyncId,
+                    recurrenceSyncId,
+                    "0", // Events.LAST_SYNCED
             };
         }
         if (Log.isLoggable(TAG, Log.VERBOSE)) {

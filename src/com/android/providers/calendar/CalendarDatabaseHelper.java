@@ -16,15 +16,13 @@
 
 package com.android.providers.calendar;
 
-import com.google.common.annotations.VisibleForTesting;
-
 import com.android.common.content.SyncStateContentProviderHelper;
+import com.google.common.annotations.VisibleForTesting;
 
 import android.accounts.Account;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
-import android.content.res.Resources;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.sqlite.SQLiteDatabase;
@@ -62,9 +60,65 @@ import java.util.TimeZone;
     // Versions under 100 cover through Froyo, 1xx version are for Gingerbread,
     // 2xx for Honeycomb, and 3xx for ICS. For future versions bump this to the
     // next hundred at each major release.
-    static final int DATABASE_VERSION = 303;
+    static final int DATABASE_VERSION = 304;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
+
+    // columns used to duplicate an event row
+    private static final String LAST_SYNCED_EVENT_COLUMNS = TextUtils.join(",", new String[] {
+            Events._SYNC_ID,
+            Events.CALENDAR_ID,
+            Events.TITLE,
+            Events.EVENT_LOCATION,
+            Events.DESCRIPTION,
+            Events.STATUS,
+            Events.SELF_ATTENDEE_STATUS,
+            Events.DTSTART,
+            Events.DTEND,
+            Events.EVENT_TIMEZONE,
+            Events.EVENT_END_TIMEZONE,
+            Events.DURATION,
+            Events.ALL_DAY,
+            Events.ACCESS_LEVEL,
+            Events.AVAILABILITY,
+            Events.HAS_ALARM,
+            Events.HAS_EXTENDED_PROPERTIES,
+            Events.RRULE,
+            Events.RDATE,
+            Events.EXRULE,
+            Events.EXDATE,
+            Events.ORIGINAL_SYNC_ID,
+            Events.ORIGINAL_INSTANCE_TIME,
+            Events.ORIGINAL_ALL_DAY,
+            Events.LAST_DATE,
+            Events.HAS_ATTENDEE_DATA,
+            Events.GUESTS_CAN_MODIFY,
+            Events.GUESTS_CAN_INVITE_OTHERS,
+            Events.GUESTS_CAN_SEE_GUESTS,
+            Events.ORGANIZER,
+    });
+
+    // columns used to duplicate a reminder row
+    private static final String LAST_SYNCED_REMINDER_COLUMNS = TextUtils.join(",", new String[] {
+            Calendar.Reminders.MINUTES,
+            Calendar.Reminders.METHOD,
+    });
+
+    // columns used to duplicate an attendee row
+    private static final String LAST_SYNCED_ATTENDEE_COLUMNS = TextUtils.join(",", new String[] {
+            Calendar.Attendees.ATTENDEE_NAME,
+            Calendar.Attendees.ATTENDEE_EMAIL,
+            Calendar.Attendees.ATTENDEE_STATUS,
+            Calendar.Attendees.ATTENDEE_RELATIONSHIP,
+            Calendar.Attendees.ATTENDEE_TYPE,
+    });
+
+    // columns used to duplicate an extended property row
+    private static final String LAST_SYNCED_EXTENDED_PROPERTY_COLUMNS
+            = TextUtils.join(",", new String[] {
+            Calendar.ExtendedProperties.NAME,
+            Calendar.ExtendedProperties.VALUE,
+    });
 
     public interface Tables {
         public static final String CALENDARS = "Calendars";
@@ -396,7 +450,9 @@ import java.util.TimeZone;
                 // sync time in UTC
                 Calendar.Events._SYNC_TIME + " TEXT,"  +
                 Calendar.Events._SYNC_DATA + " INTEGER," +
+                Calendar.Events.SYNC_DATA7 + " TEXT," +
                 Calendar.Events.DIRTY + " INTEGER," +
+                Calendar.Events.LAST_SYNCED + " INTEGER DEFAULT 0," +
                 // sync mark to filter out new rows
                 Calendar.Events._SYNC_MARK + " INTEGER," +
                 Calendar.Events.CALENDAR_ID + " INTEGER NOT NULL," +
@@ -504,6 +560,44 @@ import java.util.TimeZone;
                 + Calendar.Events.CALENDAR_ID + ");");
     }
 
+    private void createCalendarsTable303(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE " + Tables.CALENDARS + " (" +
+                "_id INTEGER PRIMARY KEY," +
+                "account_name TEXT," +
+                "account_type TEXT," +
+                "_sync_id TEXT," +
+                "_sync_version TEXT," +
+                "_sync_time TEXT," +  // UTC
+                "dirty INTEGER," +
+                "name TEXT," +
+                "displayName TEXT," +
+                "calendar_color INTEGER," +
+                "access_level INTEGER," +
+                "visible INTEGER NOT NULL DEFAULT 1," +
+                "sync_events INTEGER NOT NULL DEFAULT 0," +
+                "calendar_location TEXT," +
+                "calendar_timezone TEXT," +
+                "ownerAccount TEXT, " +
+                "canOrganizerRespond INTEGER NOT NULL DEFAULT 1," +
+                "canModifyTimeZone INTEGER DEFAULT 1," +
+                "maxReminders INTEGER DEFAULT 5," +
+                "allowedReminders TEXT DEFAULT '0,1,2,3'," +
+                "deleted INTEGER NOT NULL DEFAULT 0," +
+                "cal_sync1 TEXT," +
+                "cal_sync2 TEXT," +
+                "cal_sync3 TEXT," +
+                "cal_sync4 TEXT," +
+                "cal_sync5 TEXT," +
+                "cal_sync6 TEXT" +
+                ");");
+
+        // Trigger to remove a calendar's events when we delete the calendar
+        db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON " + Tables.CALENDARS + " " +
+                "BEGIN " +
+                CALENDAR_CLEANUP_TRIGGER_SQL +
+                "END");
+    }
+
     private void createCalendarsTable(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE " + Tables.CALENDARS + " (" +
                 Calendar.Calendars._ID + " INTEGER PRIMARY KEY," +
@@ -524,6 +618,7 @@ import java.util.TimeZone;
                 Calendar.Calendars.OWNER_ACCOUNT + " TEXT, " +
                 Calendar.Calendars.CAN_ORGANIZER_RESPOND + " INTEGER NOT NULL DEFAULT 1," +
                 Calendar.Calendars.CAN_MODIFY_TIME_ZONE + " INTEGER DEFAULT 1," +
+                Calendar.Calendars.CAN_PARTIALLY_UPDATE + " INTEGER DEFAULT 0," +
                 Calendar.Calendars.MAX_REMINDERS + " INTEGER DEFAULT 5," +
                 Calendar.Calendars.ALLOWED_REMINDERS + " TEXT DEFAULT '0,1,2,3'," +
                 Calendar.Calendars.DELETED + " INTEGER NOT NULL DEFAULT 0," +
@@ -976,6 +1071,11 @@ import java.util.TimeZone;
                 oldVersion++;
                 createEventsView = true;
             }
+            if (oldVersion == 303) {
+                upgradeToVersion304(db);
+                oldVersion++;
+                createEventsView = true;
+            }
             if (createEventsView) {
                 createEventsView(db);
             }
@@ -1026,6 +1126,19 @@ import java.util.TimeZone;
     }
 
     @VisibleForTesting
+    void upgradeToVersion304(SQLiteDatabase db) {
+        /*
+         * Changes from version 303 to 304:
+         * - add canPartiallyUpdate to Calendars table
+         * - add sync_data7 to Calendars to Events table
+         * - add lastSynced to Calendars to Events table
+         */
+        db.execSQL("ALTER TABLE Calendars ADD COLUMN canPartiallyUpdate INTEGER DEFAULT 0;");
+        db.execSQL("ALTER TABLE Events ADD COLUMN sync_data7 TEXT;");
+        db.execSQL("ALTER TABLE Events ADD COLUMN lastSynced INTEGER DEFAULT 0;");
+    }
+
+    @VisibleForTesting
     void upgradeToVersion303(SQLiteDatabase db) {
         /*
          * Changes from version 302 to 303:
@@ -1035,7 +1148,7 @@ import java.util.TimeZone;
         // rename old table, create new table with updated layout
         db.execSQL("ALTER TABLE Calendars RENAME TO Calendars_Backup;");
         db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
-        createCalendarsTable(db);
+        createCalendarsTable303(db);
 
         // copy fields from old to new
         db.execSQL("INSERT INTO Calendars (" +
@@ -2283,8 +2396,10 @@ import java.util.TimeZone;
                 + " AS " + Calendar.Events._SYNC_ID + ","
                 + Tables.EVENTS + "." + Calendar.Events._SYNC_VERSION
                 + " AS " + Calendar.Events._SYNC_VERSION + ","
+                + Calendar.Events.SYNC_DATA7 + ","
                 + Tables.EVENTS + "." + Calendar.Events.DIRTY
                 + " AS " + Calendar.Events.DIRTY + ","
+                + Calendar.Events.LAST_SYNCED + ","
                 + Tables.CALENDARS + "." + Calendar.Calendars.ACCOUNT_NAME
                 + " AS " + Calendar.Events.ACCOUNT_NAME + ","
                 + Tables.CALENDARS + "." + Calendar.Calendars.ACCOUNT_TYPE
@@ -2295,6 +2410,7 @@ import java.util.TimeZone;
                 + " AS " + Calendar.Events._SYNC_DATA + ","
                 + Tables.EVENTS + "." + Calendar.Events._SYNC_MARK
                 + " AS " + Calendar.Events._SYNC_MARK + ","
+                + Calendar.Calendars.CAN_PARTIALLY_UPDATE + ","
                 + Calendar.Calendars.CAL_SYNC1 + ","
                 + Calendar.Calendars.CAL_SYNC2 + ","
                 + Calendar.Calendars.CAL_SYNC3 + ","
@@ -2411,5 +2527,85 @@ import java.util.TimeZone;
             throw new IllegalArgumentException("invalid url parameter, unknown scheme: " + url);
         }
         return SCHEMA_HTTPS + url.substring(SCHEMA_HTTP.length());
+    }
+
+    protected void duplicateEvent(final long id) {
+        final SQLiteDatabase db = getWritableDatabase();
+        final long canPartiallyUpdate = DatabaseUtils.longForQuery(
+                db,
+                "SELECT " + Calendar.Calendars.CAN_PARTIALLY_UPDATE + " FROM " + Views.EVENTS
+                        + " WHERE " + Events._ID + " = ?",
+                new String[]{String.valueOf(id)});
+        if (canPartiallyUpdate == 0) {
+            return;
+        }
+
+        db.execSQL("INSERT INTO " + CalendarDatabaseHelper.Tables.EVENTS
+                + "  (" + LAST_SYNCED_EVENT_COLUMNS + ","
+                +         Events.DIRTY + "," + Events.LAST_SYNCED + ")"
+                + " SELECT " + LAST_SYNCED_EVENT_COLUMNS + ", 0, 1"
+                + " FROM " + Tables.EVENTS
+                + " WHERE "  + Events._ID + " = ? AND " + Events.DIRTY + " = ?",
+                new Object[]{
+                        id,
+                        0, // Events.DIRTY
+                });
+        final long newId = DatabaseUtils.longForQuery(
+                db, "SELECT CASE changes() WHEN 0 THEN -1 ELSE last_insert_rowid() END", null);
+        if (newId < 0) {
+            return;
+        }
+
+        if (Log.isLoggable(TAG, Log.VERBOSE)) {
+            Log.v(TAG, "Duplicating event " + id + " into new event " + newId);
+        }
+
+        db.execSQL("INSERT INTO " + Tables.REMINDERS
+                + " ( "  + Calendar.Reminders.EVENT_ID + ", " + LAST_SYNCED_REMINDER_COLUMNS + ") "
+                + "SELECT ?," + LAST_SYNCED_REMINDER_COLUMNS
+                + " FROM " + Tables.REMINDERS
+                + " WHERE " + Calendar.Reminders.EVENT_ID + " = ?",
+                new Object[] {newId, id});
+        db.execSQL("INSERT INTO "
+                + Tables.ATTENDEES
+                + " (" + Calendar.Attendees.EVENT_ID + "," + LAST_SYNCED_ATTENDEE_COLUMNS + ") "
+                + "SELECT ?," + LAST_SYNCED_ATTENDEE_COLUMNS + " FROM " + Tables.ATTENDEES
+                + " WHERE " + Calendar.Attendees.EVENT_ID + " = ?",
+                new Object[] {newId, id});
+        db.execSQL("INSERT INTO " + Tables.EXTENDED_PROPERTIES
+                + " (" + Calendar.ExtendedProperties.EVENT_ID + ","
+                + LAST_SYNCED_EXTENDED_PROPERTY_COLUMNS + ") "
+                + "SELECT ?, " + LAST_SYNCED_EXTENDED_PROPERTY_COLUMNS
+                + " FROM " + Tables.EXTENDED_PROPERTIES
+                + " WHERE " + Calendar.ExtendedProperties.EVENT_ID + " = ?",
+                new Object[]{newId, id});
+    }
+
+    protected void removeDuplicateEvent(final long id) {
+        final SQLiteDatabase db = getWritableDatabase();
+        final Cursor cursor = db.rawQuery("SELECT " + Events._ID + " FROM " + Tables.EVENTS
+                + " WHERE " + Events._SYNC_ID
+                + " = (SELECT " + Events._SYNC_ID
+                + " FROM " + Tables.EVENTS
+                + " WHERE " + Events._ID + " = ?) "
+                + "AND " + Events.LAST_SYNCED + " = ?",
+                new String[]{
+                        String.valueOf(id),
+                        "1", // Events.LAST_SYNCED
+                });
+        try {
+            // there should only be at most one but this can't hurt
+            if (cursor.moveToNext()) {
+                final long dupId = cursor.getLong(0);
+
+                if (Log.isLoggable(TAG, Log.VERBOSE)) {
+                    Log.v(TAG, "Removing duplicate event " + dupId + " of original event " + id);
+                }
+                // triggers will clean up related tables.
+                db.execSQL("DELETE FROM Events WHERE " + Events._ID + " = ?", new Object[]{dupId});
+            }
+        } finally {
+          cursor.close();
+        }
     }
 }

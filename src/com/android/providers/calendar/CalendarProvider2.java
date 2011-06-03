@@ -94,6 +94,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Events.RDATE,
             Events.ORIGINAL_SYNC_ID,
     };
+
     private static final int EVENTS_SYNC_ID_INDEX = 0;
     private static final int EVENTS_RRULE_INDEX = 1;
     private static final int EVENTS_RDATE_INDEX = 2;
@@ -696,7 +697,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case EVENTS:
                 qb.setTables(CalendarDatabaseHelper.Views.EVENTS);
                 qb.setProjectionMap(sEventsProjectionMap);
-                appendAccountFromParameter(qb, uri);
+                selection = appendAccountFromParameterToSelection(selection, uri);
+                selection = appendLastSyncedColumnToSelection(selection, uri);
                 break;
             case EVENTS_ID:
                 qb.setTables(CalendarDatabaseHelper.Views.EVENTS);
@@ -708,7 +710,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case EVENT_ENTITIES:
                 qb.setTables(CalendarDatabaseHelper.Views.EVENTS);
                 qb.setProjectionMap(sEventEntitiesProjectionMap);
-                appendAccountFromParameter(qb, uri);
+                selection = appendAccountFromParameterToSelection(selection, uri);
+                selection = appendLastSyncedColumnToSelection(selection, uri);
                 break;
             case EVENT_ENTITIES_ID:
                 qb.setTables(CalendarDatabaseHelper.Views.EVENTS);
@@ -720,7 +723,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case CALENDARS:
             case CALENDAR_ENTITIES:
                 qb.setTables(Tables.CALENDARS);
-                appendAccountFromParameter(qb, uri);
+                selection = appendAccountFromParameterToSelection(selection, uri);
                 break;
             case CALENDARS_ID:
             case CALENDAR_ENTITIES_ID:
@@ -1129,7 +1132,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     /**
      * Ensure that the date range given has all elements in the instance
-     * table.  Acquires the database lock and calls {@link #acquireInstanceRangeLocked}.
+     * table.  Acquires the database lock and calls
+     * {@link #acquireInstanceRangeLocked(long, long, boolean, boolean, String, boolean)}.
      *
      * @param begin start of range (ms)
      * @param end end of range (ms)
@@ -1581,10 +1585,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     throw new IllegalArgumentException("Attendees values must "
                             + "contain an event_id");
                 }
-                id = mDbHelper.attendeesInsert(values);
                 if (!callerIsSyncAdapter) {
-                    setEventDirty(values.getAsInteger(Attendees.EVENT_ID));
+                    final Long eventId = values.getAsLong(Attendees.EVENT_ID);
+                    mDbHelper.duplicateEvent(eventId);
+                    setEventDirty(eventId);
                 }
+                id = mDbHelper.attendeesInsert(values);
 
                 // Copy the attendee status value to the Events table.
                 updateEventAttendeeStatus(mDb, values);
@@ -1594,10 +1600,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     throw new IllegalArgumentException("Reminders values must "
                             + "contain an event_id");
                 }
-                id = mDbHelper.remindersInsert(values);
                 if (!callerIsSyncAdapter) {
-                    setEventDirty(values.getAsInteger(Reminders.EVENT_ID));
+                    final Long eventId = values.getAsLong(Reminders.EVENT_ID);
+                    mDbHelper.duplicateEvent(eventId);
+                    setEventDirty(eventId);
                 }
+                id = mDbHelper.remindersInsert(values);
 
                 // Schedule another event alarm, if necessary
                 if (Log.isLoggable(TAG, Log.DEBUG)) {
@@ -1619,10 +1627,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     throw new IllegalArgumentException("ExtendedProperties values must "
                             + "contain an event_id");
                 }
-                id = mDbHelper.extendedPropertiesInsert(values);
                 if (!callerIsSyncAdapter) {
-                    setEventDirty(values.getAsInteger(Calendar.ExtendedProperties.EVENT_ID));
+                    final Long eventId = values.getAsLong(Calendar.ExtendedProperties.EVENT_ID);
+                    mDbHelper.duplicateEvent(eventId);
+                    setEventDirty(eventId);
                 }
+                id = mDbHelper.extendedPropertiesInsert(values);
                 break;
             case EVENTS_ID:
             case REMINDERS_ID:
@@ -1709,8 +1719,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     }
 
-    private void setEventDirty(int eventId) {
-        mDb.execSQL(SQL_UPDATE_EVENT_SET_DIRTY, new Integer[] {eventId});
+    private void setEventDirty(long eventId) {
+        mDb.execSQL(SQL_UPDATE_EVENT_SET_DIRTY, new Object[] {eventId});
     }
 
     private long getOriginalId(String originalSyncId) {
@@ -2293,15 +2303,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private int deleteFromTable(String table, Uri uri, String selection, String[] selectionArgs) {
         // Note that the query will return data according to the access restrictions,
         // so we don't need to worry about deleting data we don't have permission to read.
-        Cursor c = query(uri, ID_PROJECTION, selection, selectionArgs, null);
-        ContentValues values = new ContentValues();
+        final Cursor c = query(uri, ID_PROJECTION, selection, selectionArgs, null);
+        final ContentValues values = new ContentValues();
         values.put(Events.DIRTY, "1");
         int count = 0;
         try {
             while(c.moveToNext()) {
-                long id = c.getLong(ID_INDEX);
-                long event_id = c.getLong(EVENT_ID_INDEX);
-                mDb.delete(table, SQL_WHERE_ID, new String[] {String.valueOf(id)});
+                final long id = c.getLong(ID_INDEX);
+                final long event_id = c.getLong(EVENT_ID_INDEX);
+                mDbHelper.duplicateEvent(event_id);
+                mDb.delete(table, SQL_WHERE_ID, new String[]{String.valueOf(id)});
                 mDb.update(Tables.EVENTS, values, SQL_WHERE_ID,
                         new String[] {String.valueOf(event_id)});
                 count++;
@@ -2324,14 +2335,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             String[] selectionArgs) {
         // Note that the query will return data according to the access restrictions,
         // so we don't need to worry about deleting data we don't have permission to read.
-        Cursor c = query(uri, ID_PROJECTION, selection, selectionArgs, null);
-        ContentValues dirtyValues = new ContentValues();
+        final Cursor c = query(uri, ID_PROJECTION, selection, selectionArgs, null);
+        final ContentValues dirtyValues = new ContentValues();
         dirtyValues.put(Events.DIRTY, "1");
         int count = 0;
         try {
             while(c.moveToNext()) {
-                long id = c.getLong(ID_INDEX);
-                long event_id = c.getLong(EVENT_ID_INDEX);
+                final long id = c.getLong(ID_INDEX);
+                final long event_id = c.getLong(EVENT_ID_INDEX);
+                mDbHelper.duplicateEvent(event_id);
                 mDb.update(table, values, SQL_WHERE_ID, new String[] {String.valueOf(id)});
                 mDb.update(Tables.EVENTS, dirtyValues, SQL_WHERE_ID,
                         new String[] {String.valueOf(event_id)});
@@ -2595,6 +2607,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 int result;
 
                 if (isUpdate) {
+                    // If a user made a change, possibly duplicate the event so we can do a partial
+                    // update. If a sync adapter made a change and that change marks an event as
+                    // un-dirty, remove any duplicates that may have been created earlier.
+                    if (!callerIsSyncAdapter) {
+                        mDbHelper.duplicateEvent(id);
+                    } else {
+                        if (values.containsKey(Events.DIRTY)
+                                && values.getAsInteger(Events.DIRTY) == 0) {
+                            mDbHelper.removeDuplicateEvent(id);
+                        }
+                    }
                     result = mDb.update(Tables.EVENTS, updatedValues, SQL_WHERE_ID,
                             new String[] { strId });
                     if (result > 0) {
@@ -2792,19 +2815,32 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     }
 
-    private void appendAccountFromParameter(SQLiteQueryBuilder qb, Uri uri) {
+    private String appendAccountFromParameterToSelection(String selection, Uri uri) {
         final String accountName = QueryParameterUtils.getQueryParameter(uri,
                 Calendar.EventsEntity.ACCOUNT_NAME);
         final String accountType = QueryParameterUtils.getQueryParameter(uri,
                 Calendar.EventsEntity.ACCOUNT_TYPE);
         if (!TextUtils.isEmpty(accountName)) {
-            qb.appendWhere(Calendar.Calendars.ACCOUNT_NAME + "="
-                    + DatabaseUtils.sqlEscapeString(accountName) + " AND "
-                    + Calendar.Calendars.ACCOUNT_TYPE + "="
-                    + DatabaseUtils.sqlEscapeString(accountType));
+            final StringBuilder sb = new StringBuilder();
+            sb.append(Calendars.ACCOUNT_NAME + "=")
+                    .append(DatabaseUtils.sqlEscapeString(accountName))
+                    .append(" AND ")
+                    .append(Calendars.ACCOUNT_TYPE)
+                    .append(" = ")
+                    .append(DatabaseUtils.sqlEscapeString(accountType));
+            return appendSelection(sb, selection);
         } else {
-            qb.appendWhere("1"); // I.e. always true
+            return selection;
         }
+    }
+
+    private String appendLastSyncedColumnToSelection(String selection, Uri uri) {
+        if (getIsCallerSyncAdapter(uri)) {
+            return selection;
+        }
+        final StringBuilder sb = new StringBuilder();
+        sb.append(Calendar.Events.LAST_SYNCED).append(" = 0");
+        return appendSelection(sb, selection);
     }
 
     private String appendAccountToSelection(Uri uri, String selection) {
@@ -2817,12 +2853,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     + DatabaseUtils.sqlEscapeString(accountName) + " AND "
                     + Calendar.Calendars.ACCOUNT_TYPE + "="
                     + DatabaseUtils.sqlEscapeString(accountType));
-            if (!TextUtils.isEmpty(selection)) {
-                selectionSb.append(" AND (");
-                selectionSb.append(selection);
-                selectionSb.append(')');
-            }
-            return selectionSb.toString();
+            return appendSelection(selectionSb, selection);
         } else {
             return selection;
         }
@@ -2838,15 +2869,19 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     + DatabaseUtils.sqlEscapeString(accountName) + " AND "
                     + Calendar.Events.ACCOUNT_TYPE + "="
                     + DatabaseUtils.sqlEscapeString(accountType));
-            if (!TextUtils.isEmpty(selection)) {
-                selectionSb.append(" AND (");
-                selectionSb.append(selection);
-                selectionSb.append(')');
-            }
-            return selectionSb.toString();
+            return appendSelection(selectionSb, selection);
         } else {
             return selection;
         }
+    }
+
+    private String appendSelection(StringBuilder sb, String selection) {
+        if (!TextUtils.isEmpty(selection)) {
+            sb.append(" AND (");
+            sb.append(selection);
+            sb.append(')');
+        }
+        return sb.toString();
     }
 
     /**
@@ -3034,7 +3069,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * This also provides a timeout, so any calls to this method will be batched
      * over a period of BROADCAST_TIMEOUT_MILLIS defined in this class.
      *
-     * @param whether or not the update is being triggered by a sync
+     * @param callerIsSyncAdapter whether or not the update is being triggered by a sync
      */
     private void sendUpdateNotification(boolean callerIsSyncAdapter) {
         // We use -1 to represent an update to all events
@@ -3050,8 +3085,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      *
      * TODO add support for eventId
      *
-     * @param the ID of the event that changed, or -1 for no specific event
-     * @param whether or not the update is being triggered by a sync
+     * @param eventId the ID of the event that changed, or -1 for no specific event
+     * @param callerIsSyncAdapter whether or not the update is being triggered by a sync
      */
     private void sendUpdateNotification(long eventId,
             boolean callerIsSyncAdapter) {
@@ -3084,9 +3119,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     /**
      * This method should not ever be called directly, to prevent sending too
      * many potentially expensive broadcasts.  Instead, call
-     * {@link #sendUpdateNotification()} instead.
+     * {@link #sendUpdateNotification(boolean)} instead.
      *
-     * @see #sendUpdateNotification()
+     * @see #sendUpdateNotification(boolean)
      */
     private void doSendUpdateNotification() {
         Intent intent = new Intent(Intent.ACTION_PROVIDER_CHANGED,
@@ -3249,7 +3284,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Events._SYNC_TIME, Events._SYNC_TIME);
         sEventsProjectionMap.put(Events._SYNC_DATA, Events._SYNC_DATA);
         sEventsProjectionMap.put(Events._SYNC_MARK, Events._SYNC_MARK);
+        sEventsProjectionMap.put(Events.SYNC_DATA7, Events.SYNC_DATA7);
         sEventsProjectionMap.put(Events.DIRTY, Events.DIRTY);
+        sEventsProjectionMap.put(Events.LAST_SYNCED, Events.LAST_SYNCED);
         sEventsProjectionMap.put(Events.ACCOUNT_NAME, Events.ACCOUNT_NAME);
         sEventsProjectionMap.put(Events.ACCOUNT_TYPE, Events.ACCOUNT_TYPE);
 
@@ -3295,7 +3332,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventEntitiesProjectionMap.put(Events._SYNC_DATA, Events._SYNC_DATA);
         sEventEntitiesProjectionMap.put(Events._SYNC_VERSION, Events._SYNC_VERSION);
         sEventEntitiesProjectionMap.put(Events._SYNC_MARK, Events._SYNC_MARK);
-        sEventEntitiesProjectionMap.put(Events.DIRTY, Events.DIRTY);
+        sEventEntitiesProjectionMap.put(Events.SYNC_DATA7, Events.SYNC_DATA7);
+        sEventEntitiesProjectionMap.put(Events.LAST_SYNCED, Events.LAST_SYNCED);
         sEventEntitiesProjectionMap.put(Calendars.CAL_SYNC1, Calendars.CAL_SYNC1);
         sEventEntitiesProjectionMap.put(Events.SYNC_DATA1, Events.SYNC_DATA1);
 

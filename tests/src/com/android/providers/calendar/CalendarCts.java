@@ -55,17 +55,17 @@ public class CalendarCts extends InstrumentationTestCase {
                 Calendars.ACCOUNT_NAME,
                 Calendars.ACCOUNT_TYPE,
                 Calendars._SYNC_ID,
-                Calendars._SYNC_VERSION,
-                Calendars._SYNC_TIME,
+                Calendars.CAL_SYNC7,
+                Calendars.CAL_SYNC8,
                 Calendars.DIRTY,
                 Calendars.NAME,
-                Calendars.DISPLAY_NAME,
+                Calendars.CALENDAR_DISPLAY_NAME,
                 Calendars.CALENDAR_COLOR,
-                Calendars.ACCESS_LEVEL,
+                Calendars.CALENDAR_ACCESS_LEVEL,
                 Calendars.VISIBLE,
                 Calendars.SYNC_EVENTS,
                 Calendars.CALENDAR_LOCATION,
-                Calendars.CALENDAR_TIMEZONE,
+                Calendars.CALENDAR_TIME_ZONE,
                 Calendars.OWNER_ACCOUNT,
                 Calendars.CAN_ORGANIZER_RESPOND,
                 Calendars.CAN_MODIFY_TIME_ZONE,
@@ -98,21 +98,21 @@ public class CalendarCts extends InstrumentationTestCase {
 
             values.put(Calendars.ACCOUNT_NAME, account);
             values.put(Calendars._SYNC_ID, "SYNC_ID:" + seedString);
-            values.put(Calendars._SYNC_VERSION, "SYNC_V:" + seedString);
-            values.put(Calendars._SYNC_TIME, "SYNC_TIME:" + seedString);
+            values.put(Calendars.CAL_SYNC7, "SYNC_V:" + seedString);
+            values.put(Calendars.CAL_SYNC8, "SYNC_TIME:" + seedString);
             values.put(Calendars.DIRTY, 0);
             values.put(Calendars.OWNER_ACCOUNT, "OWNER_" + account);
 
             values.put(Calendars.NAME, seedString);
-            values.put(Calendars.DISPLAY_NAME, "DISPLAY_" + seedString);
+            values.put(Calendars.CALENDAR_DISPLAY_NAME, "DISPLAY_" + seedString);
 
-            values.put(Calendars.ACCESS_LEVEL, (seed % 8) * 100);
+            values.put(Calendars.CALENDAR_ACCESS_LEVEL, (seed % 8) * 100);
 
             values.put(Calendars.CALENDAR_COLOR, 0xff000000 + seed);
             values.put(Calendars.VISIBLE, seed % 2);
             values.put(Calendars.SYNC_EVENTS, 1);   // must be 1 for recurrence expansion
             values.put(Calendars.CALENDAR_LOCATION, "LOCATION:" + seedString);
-            values.put(Calendars.CALENDAR_TIMEZONE, TIME_ZONES[seed % TIME_ZONES.length]);
+            values.put(Calendars.CALENDAR_TIME_ZONE, TIME_ZONES[seed % TIME_ZONES.length]);
             values.put(Calendars.CAN_ORGANIZER_RESPOND, seed % 2);
             values.put(Calendars.CAN_MODIFY_TIME_ZONE, seed % 2);
             values.put(Calendars.MAX_REMINDERS, seed);
@@ -135,7 +135,7 @@ public class CalendarCts extends InstrumentationTestCase {
             ContentValues values = new ContentValues();
             String seedString = Long.toString(seed);
 
-            values.put(Calendars.DISPLAY_NAME, "DISPLAY_" + seedString);
+            values.put(Calendars.CALENDAR_DISPLAY_NAME, "DISPLAY_" + seedString);
             values.put(Calendars.CALENDAR_COLOR, 0xff000000 + seed);
             values.put(Calendars.VISIBLE, seed % 2);
             values.put(Calendars.SYNC_EVENTS, seed % 2);
@@ -188,8 +188,8 @@ public class CalendarCts extends InstrumentationTestCase {
             // Events.CALENDAR_COLOR, from Calendars
             // Events.CALENDAR_ACL, from Calendars
             // Events.CALENDAR_VISIBLE, from Calendars
-            Events.HTML_URI,
-            Events.COMMENTS_URI,
+            Events.SYNC_DATA3,
+            Events.SYNC_DATA6,
             Events.TITLE,
             Events.EVENT_LOCATION,
             Events.DESCRIPTION,
@@ -209,7 +209,7 @@ public class CalendarCts extends InstrumentationTestCase {
             Events.RDATE,
             Events.EXRULE,
             Events.EXDATE,
-            // Events.ORIGINAL_ID
+            Events.ORIGINAL_ID,
             Events.ORIGINAL_SYNC_ID,
             Events.ORIGINAL_INSTANCE_TIME,
             Events.ORIGINAL_ALL_DAY,
@@ -221,11 +221,11 @@ public class CalendarCts extends InstrumentationTestCase {
             Events.ORGANIZER,
             Events.DELETED,
             Events._SYNC_ID,
-            Events._SYNC_VERSION,
-            Events._SYNC_TIME,
+            Events.SYNC_DATA4,
+            Events.SYNC_DATA5,
             Events.DIRTY,
-            Events._SYNC_MARK,
-            Events._SYNC_DATA, // Events.SYNC_DATA1
+            Events.SYNC_DATA8,
+            Events.SYNC_DATA2, // Events.SYNC_DATA1
             // Events.SYNC_DATA2
             // Events.SYNC_DATA3
             // Events.SYNC_DATA4
@@ -270,12 +270,12 @@ public class CalendarCts extends InstrumentationTestCase {
 
             if (asSyncAdapter) {
                 values.put(Events._SYNC_ID, "SYNC_ID:" + seedString);
-                values.put(Events._SYNC_VERSION, "SYNC_V:" + seedString);
-                values.put(Events._SYNC_TIME, "SYNC_TIME:" + seedString);
-                values.put(Events.HTML_URI, "HTML:" + seedString);
-                values.put(Events.COMMENTS_URI, "COMMENTS:" + seedString);
+                values.put(Events.SYNC_DATA4, "SYNC_V:" + seedString);
+                values.put(Events.SYNC_DATA5, "SYNC_TIME:" + seedString);
+                values.put(Events.SYNC_DATA3, "HTML:" + seedString);
+                values.put(Events.SYNC_DATA6, "COMMENTS:" + seedString);
                 values.put(Events.DIRTY, 0);
-                values.put(Events._SYNC_MARK, 0);
+                values.put(Events.SYNC_DATA8, "0");
             }
             // values.put(Events.SYNC1, "SYNC1:" + seedString);
             // values.put(Events.SYNC2, "SYNC2:" + seedString);
@@ -364,8 +364,8 @@ public class CalendarCts extends InstrumentationTestCase {
             values.put(Events.GUESTS_CAN_SEE_GUESTS, seed % 2);
             if (asSyncAdapter) {
                 values.put(Events._SYNC_ID, "SYNC_ID:" + seedString);
-                values.put(Events._SYNC_VERSION, "SYNC_V:" + seedString);
-                values.put(Events._SYNC_TIME, "SYNC_TIME:" + seedString);
+                values.put(Events.SYNC_DATA4, "SYNC_V:" + seedString);
+                values.put(Events.SYNC_DATA5, "SYNC_TIME:" + seedString);
             }
             original.putAll(values);
             original.put(Events.DIRTY, asSyncAdapter ? 0 : 1);

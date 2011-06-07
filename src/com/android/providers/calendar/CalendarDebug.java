@@ -41,7 +41,7 @@ import java.util.Map;
 public class CalendarDebug extends ListActivity {
     private static final String[] CALENDARS_PROJECTION = new String[]{
             Calendar.Calendars._ID,
-            Calendar.Calendars.DISPLAY_NAME,
+            Calendar.Calendars.CALENDAR_DISPLAY_NAME,
     };
     private static final int INDEX_ID = 0;
     private static final int INDEX_DISPLAY_NAME = 1;

@@ -53,17 +53,17 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
 
     static {
         EVENT_COLUMNS_TO_SKIP.add(Calendar.Events._ID);
-        EVENT_COLUMNS_TO_SKIP.add(Calendar.Events._SYNC_TIME);
-        EVENT_COLUMNS_TO_SKIP.add(Calendar.Events._SYNC_VERSION);
-        EVENT_COLUMNS_TO_SKIP.add(Calendar.Events._SYNC_DATA);
+        EVENT_COLUMNS_TO_SKIP.add(Calendar.Events.SYNC_DATA5);
+        EVENT_COLUMNS_TO_SKIP.add(Calendar.Events.SYNC_DATA4);
+        EVENT_COLUMNS_TO_SKIP.add(Calendar.Events.SYNC_DATA2);
         EVENT_COLUMNS_TO_SKIP.add(Calendar.Events.DIRTY);
-        EVENT_COLUMNS_TO_SKIP.add(Calendar.Events._SYNC_MARK);
+        EVENT_COLUMNS_TO_SKIP.add(Calendar.Events.SYNC_DATA8);
         ATTENDEES_COLUMNS_TO_SKIP.add(Calendar.Attendees._ID);
         CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars._ID);
-        CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars._SYNC_TIME);
-        CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars._SYNC_VERSION);
+        CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars.CAL_SYNC8);
+        CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars.CAL_SYNC7);
         CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars.DIRTY);
-        CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars._SYNC_MARK);
+        CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars.CAL_SYNC6);
         INSTANCES_COLUMNS_TO_SKIP.add(Calendar.Instances._ID);
     }
 
@@ -177,15 +177,15 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
         values.put(Calendar.Calendars.ACCOUNT_NAME, getAccount());
         values.put(Calendar.Calendars.CAL_SYNC1, calendarUrl);
         values.put(Calendar.Calendars.NAME, name);
-        values.put(Calendar.Calendars.DISPLAY_NAME, name);
+        values.put(Calendar.Calendars.CALENDAR_DISPLAY_NAME, name);
 
         values.put(Calendar.Calendars.SYNC_EVENTS, 1);
         values.put(Calendar.Calendars.VISIBLE, 1);
         values.put(Calendar.Calendars.CALENDAR_COLOR, -14069085 /* blue */);
-        values.put(Calendar.Calendars.ACCESS_LEVEL, Calendar.Calendars.OWNER_ACCESS);
+        values.put(Calendar.Calendars.CALENDAR_ACCESS_LEVEL, Calendar.Calendars.CAL_ACCESS_OWNER);
 
         values.put(Calendar.Calendars.CALENDAR_COLOR, "0xff123456");
-        values.put(Calendar.Calendars.CALENDAR_TIMEZONE, timezone);
+        values.put(Calendar.Calendars.CALENDAR_TIME_ZONE, timezone);
         mResolver.insert(Calendar.Calendars.CONTENT_URI, values);
         syncCalendar();
     }

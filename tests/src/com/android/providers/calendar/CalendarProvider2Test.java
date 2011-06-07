@@ -1030,9 +1030,9 @@ public class CalendarProvider2Test extends AndroidTestCase {
     private int insertCal(String name, String timezone, String account) {
         ContentValues m = new ContentValues();
         m.put(Calendars.NAME, name);
-        m.put(Calendars.DISPLAY_NAME, name);
+        m.put(Calendars.CALENDAR_DISPLAY_NAME, name);
         m.put(Calendars.CALENDAR_COLOR, "0xff123456");
-        m.put(Calendars.CALENDAR_TIMEZONE, timezone);
+        m.put(Calendars.CALENDAR_TIME_ZONE, timezone);
         m.put(Calendars.VISIBLE, 1);
         m.put(Calendars.CAL_SYNC1, CALENDAR_URL);
         m.put(Calendars.OWNER_ACCOUNT, account);

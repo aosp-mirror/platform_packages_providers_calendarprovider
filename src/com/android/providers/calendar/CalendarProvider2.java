@@ -3525,8 +3525,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     // @formatter:off
     private static final String[] SYNC_WRITABLE_DEFAULT_COLUMNS = new String[] {
-        Calendar.SyncColumns.DIRTY,
-        Calendar.SyncColumns._SYNC_ID
+        Calendar.Calendars.DIRTY,
+        Calendar.Calendars._SYNC_ID
     };
     private static final String[] PROVIDER_WRITABLE_DEFAULT_COLUMNS = new String[] {
     };

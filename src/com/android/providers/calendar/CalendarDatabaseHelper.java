@@ -16,9 +16,6 @@
 
 package com.android.providers.calendar;
 
-import com.android.common.content.SyncStateContentProviderHelper;
-import com.google.common.annotations.VisibleForTesting;
-
 import android.accounts.Account;
 import android.content.ContentResolver;
 import android.content.ContentValues;
@@ -33,11 +30,12 @@ import android.provider.CalendarContract;
 import android.provider.CalendarContract.Attendees;
 import android.provider.CalendarContract.Events;
 import android.provider.CalendarContract.Reminders;
-import android.provider.ContactsContract;
 import android.provider.SyncStateContract;
 import android.text.TextUtils;
 import android.text.format.Time;
 import android.util.Log;
+import com.android.common.content.SyncStateContentProviderHelper;
+import com.google.common.annotations.VisibleForTesting;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
@@ -62,7 +60,7 @@ import java.util.TimeZone;
     // Versions under 100 cover through Froyo, 1xx version are for Gingerbread,
     // 2xx for Honeycomb, and 3xx for ICS. For future versions bump this to the
     // next hundred at each major release.
-    static final int DATABASE_VERSION = 305;
+    static final int DATABASE_VERSION = 306;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -103,16 +101,16 @@ import java.util.TimeZone;
 
     // columns used to duplicate a reminder row
     private static final String LAST_SYNCED_REMINDER_COLUMNS =
-            CalendarContract.Reminders.MINUTES + "," +
-            CalendarContract.Reminders.METHOD;
+            Reminders.MINUTES + "," +
+            Reminders.METHOD;
 
     // columns used to duplicate an attendee row
     private static final String LAST_SYNCED_ATTENDEE_COLUMNS =
-            CalendarContract.Attendees.ATTENDEE_NAME + "," +
-            CalendarContract.Attendees.ATTENDEE_EMAIL + "," +
-            CalendarContract.Attendees.ATTENDEE_STATUS + "," +
-            CalendarContract.Attendees.ATTENDEE_RELATIONSHIP + "," +
-            CalendarContract.Attendees.ATTENDEE_TYPE;
+            Attendees.ATTENDEE_NAME + "," +
+            Attendees.ATTENDEE_EMAIL + "," +
+            Attendees.ATTENDEE_STATUS + "," +
+            Attendees.ATTENDEE_RELATIONSHIP + "," +
+            Attendees.ATTENDEE_TYPE;
 
     // columns used to duplicate an extended property row
     private static final String LAST_SYNCED_EXTENDED_PROPERTY_COLUMNS =
@@ -434,8 +432,7 @@ import java.util.TimeZone;
         // _sync_id
         db.execSQL(CREATE_SYNC_ID_UPDATE_TRIGGER);
 
-        ContentResolver.requestSync(null /* all accounts */,
-                ContactsContract.AUTHORITY, new Bundle());
+        scheduleSync(null /* all accounts */, false, null);
     }
 
     private void createEventsTable(SQLiteDatabase db) {
@@ -828,7 +825,7 @@ import java.util.TimeZone;
                 CalendarCache.COLUMN_NAME_KEY + ", " +
                 CalendarCache.COLUMN_NAME_VALUE + ") VALUES (" +
                 CalendarCache.KEY_TIMEZONE_DATABASE_VERSION.hashCode() + "," +
-                "'" + CalendarCache.KEY_TIMEZONE_DATABASE_VERSION + "',"  +
+                "'" + CalendarCache.KEY_TIMEZONE_DATABASE_VERSION + "'," +
                 "'" + timezoneDbVersion + "'" +
                 ");");
     }
@@ -1086,6 +1083,12 @@ import java.util.TimeZone;
                 oldVersion++;
                 createEventsView = true;
             }
+            if (oldVersion == 305) {
+                upgradeToVersion306(db);
+                // force a sync to update edit url and etag
+                scheduleSync(null /* all accounts */, false, null);
+                oldVersion++;
+            }
             if (createEventsView) {
                 createEventsView(db);
             }
@@ -1133,6 +1136,28 @@ import java.util.TimeZone;
             return true;
         }
         return false;
+    }
+
+    @VisibleForTesting
+    void upgradeToVersion306(SQLiteDatabase db) {
+        /*
+        * The following changes are for google.com accounts only.
+        *
+        * Change event id's from ".../private/full/... to .../events/...
+        * Set Calendars.canPartiallyUpdate to 1 to support partial updates
+        * Nuke sync state so we re-sync with a fresh etag and edit url
+        */
+        db.execSQL("UPDATE Events SET "
+                + "_sync_id = REPLACE(_sync_id, '/private/full/', '/events/'), "
+                + "original_sync_id = REPLACE(original_sync_id, '/private/full/', '/events/') "
+                + "WHERE _id IN (SELECT Events._id FROM Events "
+                +    "JOIN Calendars ON Events.calendar_id = Calendars._id "
+                +    "WHERE account_type = 'com.google')"
+        );
+
+        db.execSQL("UPDATE Calendars SET canPartiallyUpdate = 1 WHERE account_type = 'com.google'");
+
+        db.execSQL("DELETE FROM _sync_state WHERE account_type = 'com.google'");
     }
 
     @VisibleForTesting

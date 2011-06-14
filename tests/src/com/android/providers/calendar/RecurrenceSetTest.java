@@ -19,7 +19,7 @@ package com.android.providers.calendar;
 import android.content.ContentValues;
 import android.pim.ICalendar;
 import android.pim.RecurrenceSet;
-import android.provider.Calendar;
+import android.provider.CalendarContract;
 import android.test.suitebuilder.annotation.SmallTest;
 import junit.framework.TestCase;
 
@@ -104,9 +104,9 @@ public class RecurrenceSetTest extends TestCase {
         ICalendar.Component component = new ICalendar.Component(MOCK_COMPONENT_NAME, null);
 
         ContentValues values = new ContentValues();
-        values.put(Calendar.Events.DTSTART, 0);
-        values.put(Calendar.Events.DURATION, "P3600S");
-        values.put(Calendar.Events.RRULE, RRULE_LESS_THAN_75_CHARS);
+        values.put(CalendarContract.Events.DTSTART, 0);
+        values.put(CalendarContract.Events.DURATION, "P3600S");
+        values.put(CalendarContract.Events.RRULE, RRULE_LESS_THAN_75_CHARS);
 
         assertTrue(RecurrenceSet.populateComponent(values, component));
         List<ICalendar.Property> list = component.getProperties("DTSTART");
@@ -120,9 +120,9 @@ public class RecurrenceSetTest extends TestCase {
         component = new ICalendar.Component(MOCK_COMPONENT_NAME, null);
 
         values = new ContentValues();
-        values.put(Calendar.Events.DTSTART, 0);
-        values.put(Calendar.Events.DURATION, "P3600S");
-        values.put(Calendar.Events.RRULE, RRULE_MORE_THAN_75_CHARS);
+        values.put(CalendarContract.Events.DTSTART, 0);
+        values.put(CalendarContract.Events.DURATION, "P3600S");
+        values.put(CalendarContract.Events.RRULE, RRULE_MORE_THAN_75_CHARS);
 
         assertTrue(RecurrenceSet.populateComponent(values, component));
 
@@ -133,9 +133,9 @@ public class RecurrenceSetTest extends TestCase {
         component = new ICalendar.Component(MOCK_COMPONENT_NAME, null);
 
         values = new ContentValues();
-        values.put(Calendar.Events.DTSTART, 0);
-        values.put(Calendar.Events.DURATION, "P3600S");
-        values.put(Calendar.Events.RRULE, STRING_WITH_160_CHARS);
+        values.put(CalendarContract.Events.DTSTART, 0);
+        values.put(CalendarContract.Events.DURATION, "P3600S");
+        values.put(CalendarContract.Events.RRULE, STRING_WITH_160_CHARS);
 
         assertTrue(RecurrenceSet.populateComponent(values, component));
 

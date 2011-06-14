@@ -31,12 +31,12 @@ import android.net.Uri;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 import android.os.SystemClock;
-import android.provider.Calendar;
-import android.provider.Calendar.CalendarAlerts;
-import android.provider.Calendar.Calendars;
-import android.provider.Calendar.Events;
-import android.provider.Calendar.Instances;
-import android.provider.Calendar.Reminders;
+import android.provider.CalendarContract;
+import android.provider.CalendarContract.CalendarAlerts;
+import android.provider.CalendarContract.Calendars;
+import android.provider.CalendarContract.Events;
+import android.provider.CalendarContract.Instances;
+import android.provider.CalendarContract.Reminders;
 import android.text.format.DateUtils;
 import android.text.format.Time;
 import android.util.Log;
@@ -59,9 +59,9 @@ public class CalendarAlarmManager {
     /* package */static final String SCHEDULE_ALARM_REMOVE_PATH = "schedule_alarms_remove";
     private static final String REMOVE_ALARM_VALUE = "removeAlarms";
     /* package */static final Uri SCHEDULE_ALARM_REMOVE_URI = Uri.withAppendedPath(
-            Calendar.CONTENT_URI, SCHEDULE_ALARM_REMOVE_PATH);
+            CalendarContract.CONTENT_URI, SCHEDULE_ALARM_REMOVE_PATH);
     /* package */static final Uri SCHEDULE_ALARM_URI = Uri.withAppendedPath(
-            Calendar.CONTENT_URI, SCHEDULE_ALARM_PATH);
+            CalendarContract.CONTENT_URI, SCHEDULE_ALARM_PATH);
 
     static final String INVALID_CALENDARALERTS_SELECTOR =
     "_id IN (SELECT ca." + CalendarAlerts._ID + " FROM "
@@ -503,10 +503,10 @@ public class CalendarAlarmManager {
     }
 
     public void scheduleAlarm(long alarmTime) {
-        Calendar.CalendarAlerts.scheduleAlarm(mContext, mAlarmManager, alarmTime);
+        CalendarContract.CalendarAlerts.scheduleAlarm(mContext, mAlarmManager, alarmTime);
     }
 
     public void rescheduleMissedAlarms(ContentResolver cr) {
-        Calendar.CalendarAlerts.rescheduleMissedAlarms(cr, mContext, mAlarmManager);
+        CalendarContract.CalendarAlerts.rescheduleMissedAlarms(cr, mContext, mAlarmManager);
     }
 }

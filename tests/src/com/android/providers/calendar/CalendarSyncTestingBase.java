@@ -25,7 +25,7 @@ import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.SystemClock;
-import android.provider.Calendar;
+import android.provider.CalendarContract;
 import android.test.SyncBaseInstrumentation;
 import android.text.format.DateUtils;
 import android.text.format.Time;
@@ -42,7 +42,7 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
     protected Context mTargetContext;
     protected String mAccount;
     protected ContentResolver mResolver;
-    protected Uri mEventsUri = Calendar.Events.CONTENT_URI;
+    protected Uri mEventsUri = CalendarContract.Events.CONTENT_URI;
 
     static final String TAG = "calendar";
     static final String DEFAULT_TIMEZONE = "America/Los_Angeles";
@@ -52,19 +52,19 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
     static final Set<String> INSTANCES_COLUMNS_TO_SKIP = new HashSet<String>();
 
     static {
-        EVENT_COLUMNS_TO_SKIP.add(Calendar.Events._ID);
-        EVENT_COLUMNS_TO_SKIP.add(Calendar.Events.SYNC_DATA5);
-        EVENT_COLUMNS_TO_SKIP.add(Calendar.Events.SYNC_DATA4);
-        EVENT_COLUMNS_TO_SKIP.add(Calendar.Events.SYNC_DATA2);
-        EVENT_COLUMNS_TO_SKIP.add(Calendar.Events.DIRTY);
-        EVENT_COLUMNS_TO_SKIP.add(Calendar.Events.SYNC_DATA8);
-        ATTENDEES_COLUMNS_TO_SKIP.add(Calendar.Attendees._ID);
-        CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars._ID);
-        CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars.CAL_SYNC8);
-        CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars.CAL_SYNC7);
-        CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars.DIRTY);
-        CALENDARS_COLUMNS_TO_SKIP.add(Calendar.Calendars.CAL_SYNC6);
-        INSTANCES_COLUMNS_TO_SKIP.add(Calendar.Instances._ID);
+        EVENT_COLUMNS_TO_SKIP.add(CalendarContract.Events._ID);
+        EVENT_COLUMNS_TO_SKIP.add(CalendarContract.Events.SYNC_DATA5);
+        EVENT_COLUMNS_TO_SKIP.add(CalendarContract.Events.SYNC_DATA4);
+        EVENT_COLUMNS_TO_SKIP.add(CalendarContract.Events.SYNC_DATA2);
+        EVENT_COLUMNS_TO_SKIP.add(CalendarContract.Events.DIRTY);
+        EVENT_COLUMNS_TO_SKIP.add(CalendarContract.Events.SYNC_DATA8);
+        ATTENDEES_COLUMNS_TO_SKIP.add(CalendarContract.Attendees._ID);
+        CALENDARS_COLUMNS_TO_SKIP.add(CalendarContract.Calendars._ID);
+        CALENDARS_COLUMNS_TO_SKIP.add(CalendarContract.Calendars.CAL_SYNC8);
+        CALENDARS_COLUMNS_TO_SKIP.add(CalendarContract.Calendars.CAL_SYNC7);
+        CALENDARS_COLUMNS_TO_SKIP.add(CalendarContract.Calendars.DIRTY);
+        CALENDARS_COLUMNS_TO_SKIP.add(CalendarContract.Calendars.CAL_SYNC6);
+        INSTANCES_COLUMNS_TO_SKIP.add(CalendarContract.Instances._ID);
     }
 
     @Override
@@ -83,7 +83,7 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
      */
     protected void syncCalendar() throws Exception {
         cancelSyncsandDisableAutoSync();
-        syncProvider(Calendar.CONTENT_URI, mAccount, Calendar.AUTHORITY);
+        syncProvider(CalendarContract.CONTENT_URI, mAccount, CalendarContract.AUTHORITY);
     }
 
     /**
@@ -105,25 +105,25 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
      */
     protected Uri insertEvent(int calendarId, EventInfo event) throws Exception{
         ContentValues m = new ContentValues();
-        m.put(Calendar.Events.CALENDAR_ID, calendarId);
-        m.put(Calendar.Events.TITLE, event.mTitle);
-        m.put(Calendar.Events.DTSTART, event.mDtstart);
-        m.put(Calendar.Events.ALL_DAY, event.mAllDay ? 1 : 0);
+        m.put(CalendarContract.Events.CALENDAR_ID, calendarId);
+        m.put(CalendarContract.Events.TITLE, event.mTitle);
+        m.put(CalendarContract.Events.DTSTART, event.mDtstart);
+        m.put(CalendarContract.Events.ALL_DAY, event.mAllDay ? 1 : 0);
 
         if (event.mRrule == null) {
             // This is a normal event
-            m.put(Calendar.Events.DTEND, event.mDtend);
+            m.put(CalendarContract.Events.DTEND, event.mDtend);
         } else {
             // This is a repeating event
-            m.put(Calendar.Events.RRULE, event.mRrule);
-            m.put(Calendar.Events.DURATION, event.mDuration);
+            m.put(CalendarContract.Events.RRULE, event.mRrule);
+            m.put(CalendarContract.Events.DURATION, event.mDuration);
         }
 
         if (event.mDescription != null) {
-            m.put(Calendar.Events.DESCRIPTION, event.mDescription);
+            m.put(CalendarContract.Events.DESCRIPTION, event.mDescription);
         }
         if (event.mTimezone != null) {
-            m.put(Calendar.Events.EVENT_TIMEZONE, event.mTimezone);
+            m.put(CalendarContract.Events.EVENT_TIMEZONE, event.mTimezone);
         }
 
         Uri url = mResolver.insert(mEventsUri, m);
@@ -139,16 +139,16 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
      */
     protected void editEvent(long eventId, EventInfo event) throws Exception {
         ContentValues values = new ContentValues();
-        values.put(Calendar.Events.TITLE, event.mTitle);
-        values.put(Calendar.Events.DTSTART, event.mDtstart);
-        values.put(Calendar.Events.DTEND, event.mDtend);
-        values.put(Calendar.Events.ALL_DAY, event.mAllDay ? 1 : 0);
+        values.put(CalendarContract.Events.TITLE, event.mTitle);
+        values.put(CalendarContract.Events.DTSTART, event.mDtstart);
+        values.put(CalendarContract.Events.DTEND, event.mDtend);
+        values.put(CalendarContract.Events.ALL_DAY, event.mAllDay ? 1 : 0);
 
         if (event.mDescription != null) {
-            values.put(Calendar.Events.DESCRIPTION, event.mDescription);
+            values.put(CalendarContract.Events.DESCRIPTION, event.mDescription);
         }
 
-        Uri uri = ContentUris.withAppendedId(Calendar.Events.CONTENT_URI, eventId);
+        Uri uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId);
         mResolver.update(uri, values, null, null);
         syncCalendar();
     }
@@ -174,19 +174,20 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
             throws Exception {
         ContentValues values = new ContentValues();
 
-        values.put(Calendar.Calendars.ACCOUNT_NAME, getAccount());
-        values.put(Calendar.Calendars.CAL_SYNC1, calendarUrl);
-        values.put(Calendar.Calendars.NAME, name);
-        values.put(Calendar.Calendars.CALENDAR_DISPLAY_NAME, name);
+        values.put(CalendarContract.Calendars.ACCOUNT_NAME, getAccount());
+        values.put(CalendarContract.Calendars.CAL_SYNC1, calendarUrl);
+        values.put(CalendarContract.Calendars.NAME, name);
+        values.put(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME, name);
 
-        values.put(Calendar.Calendars.SYNC_EVENTS, 1);
-        values.put(Calendar.Calendars.VISIBLE, 1);
-        values.put(Calendar.Calendars.CALENDAR_COLOR, -14069085 /* blue */);
-        values.put(Calendar.Calendars.CALENDAR_ACCESS_LEVEL, Calendar.Calendars.CAL_ACCESS_OWNER);
+        values.put(CalendarContract.Calendars.SYNC_EVENTS, 1);
+        values.put(CalendarContract.Calendars.VISIBLE, 1);
+        values.put(CalendarContract.Calendars.CALENDAR_COLOR, -14069085 /* blue */);
+        values.put(CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL,
+                CalendarContract.Calendars.CAL_ACCESS_OWNER);
 
-        values.put(Calendar.Calendars.CALENDAR_COLOR, "0xff123456");
-        values.put(Calendar.Calendars.CALENDAR_TIME_ZONE, timezone);
-        mResolver.insert(Calendar.Calendars.CONTENT_URI, values);
+        values.put(CalendarContract.Calendars.CALENDAR_COLOR, "0xff123456");
+        values.put(CalendarContract.Calendars.CALENDAR_TIME_ZONE, timezone);
+        mResolver.insert(CalendarContract.Calendars.CONTENT_URI, values);
         syncCalendar();
     }
 
@@ -206,7 +207,8 @@ public class CalendarSyncTestingBase extends SyncBaseInstrumentation {
      */
     protected int getDefaultCalendarId() {
         Cursor calendarsCursor;
-        calendarsCursor = mResolver.query(Calendar.Calendars.CONTENT_URI, null, null, null, null);
+        calendarsCursor = mResolver.query(CalendarContract.Calendars.CONTENT_URI, null, null, null,
+                null);
         calendarsCursor.moveToNext();
         return calendarsCursor.getInt(calendarsCursor.getColumnIndex("_id"));
     }

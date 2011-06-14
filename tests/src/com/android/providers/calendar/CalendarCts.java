@@ -21,12 +21,12 @@ import android.content.ContentUris;
 import android.content.ContentValues;
 import android.database.Cursor;
 import android.net.Uri;
-import android.provider.Calendar;
-import android.provider.Calendar.Attendees;
-import android.provider.Calendar.Calendars;
-import android.provider.Calendar.Events;
-import android.provider.Calendar.Instances;
-import android.provider.Calendar.Reminders;
+import android.provider.CalendarContract;
+import android.provider.CalendarContract.Attendees;
+import android.provider.CalendarContract.Calendars;
+import android.provider.CalendarContract.Events;
+import android.provider.CalendarContract.Instances;
+import android.provider.CalendarContract.Reminders;
 import android.test.InstrumentationTestCase;
 import android.test.suitebuilder.annotation.*;
 import android.text.format.DateUtils;
@@ -431,7 +431,8 @@ public class CalendarCts extends InstrumentationTestCase {
 
     static Uri asSyncAdapter(Uri uri, String account, String accountType) {
         return uri.buildUpon()
-                .appendQueryParameter(android.provider.Calendar.CALLER_IS_SYNCADAPTER, "true")
+                .appendQueryParameter(android.provider.CalendarContract.CALLER_IS_SYNCADAPTER,
+                        "true")
                 .appendQueryParameter(Calendars.ACCOUNT_NAME, account)
                 .appendQueryParameter(Calendars.ACCOUNT_TYPE, accountType).build();
     }
@@ -910,7 +911,7 @@ public class CalendarCts extends InstrumentationTestCase {
         Log.d(TAG, "getInstances: startMillis=" + startMillis + ", endMillis=" + endMillis);
 
         // We want a list of instances that occur between the specified dates.
-        Uri uri = Uri.withAppendedPath(Calendar.Instances.CONTENT_URI,
+        Uri uri = Uri.withAppendedPath(CalendarContract.Instances.CONTENT_URI,
                 startMillis + "/" + endMillis);
 
         Cursor instances = mContentResolver.query(uri, projection, null, null,

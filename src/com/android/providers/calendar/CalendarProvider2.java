@@ -44,14 +44,14 @@ import android.os.Process;
 import android.pim.EventRecurrence;
 import android.pim.RecurrenceSet;
 import android.provider.BaseColumns;
-import android.provider.Calendar;
-import android.provider.Calendar.Attendees;
-import android.provider.Calendar.CalendarAlerts;
-import android.provider.Calendar.Calendars;
-import android.provider.Calendar.Events;
-import android.provider.Calendar.Instances;
-import android.provider.Calendar.Reminders;
-import android.provider.Calendar.SyncState;
+import android.provider.CalendarContract;
+import android.provider.CalendarContract.Attendees;
+import android.provider.CalendarContract.CalendarAlerts;
+import android.provider.CalendarContract.Calendars;
+import android.provider.CalendarContract.Events;
+import android.provider.CalendarContract.Instances;
+import android.provider.CalendarContract.Reminders;
+import android.provider.CalendarContract.SyncState;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.text.format.Time;
@@ -72,7 +72,7 @@ import java.util.regex.Pattern;
 
 /**
  * Calendar content provider. The contract between this provider and applications
- * is defined in {@link android.provider.Calendar}.
+ * is defined in {@link android.provider.CalendarContract}.
  */
 public class CalendarProvider2 extends SQLiteContentProvider implements OnAccountsUpdateListener {
 
@@ -144,15 +144,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         "CalendarSyncAdapter#originalTimezone";
 
     private static final String SQL_SELECT_EVENTSRAWTIMES = "SELECT " +
-            Calendar.EventsRawTimes.EVENT_ID + ", " +
-            Calendar.EventsRawTimes.DTSTART_2445 + ", " +
-            Calendar.EventsRawTimes.DTEND_2445 + ", " +
+            CalendarContract.EventsRawTimes.EVENT_ID + ", " +
+            CalendarContract.EventsRawTimes.DTSTART_2445 + ", " +
+            CalendarContract.EventsRawTimes.DTEND_2445 + ", " +
             Events.EVENT_TIMEZONE +
             " FROM " +
             Tables.EVENTS_RAW_TIMES + ", " +
             Tables.EVENTS +
             " WHERE " +
-            Calendar.EventsRawTimes.EVENT_ID + " = " + Tables.EVENTS + "." + Events._ID;
+            CalendarContract.EventsRawTimes.EVENT_ID + " = " + Tables.EVENTS + "." + Events._ID;
 
     private static final String SQL_UPDATE_EVENT_SET_DIRTY = "UPDATE " +
             Tables.EVENTS +
@@ -181,7 +181,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Tables.CALENDAR_ALERTS + "." + CalendarAlerts._ID + "=?";
 
     private static final String SQL_WHERE_EXTENDED_PROPERTIES_ID =
-            Tables.EXTENDED_PROPERTIES + "." + Calendar.ExtendedProperties._ID + "=?";
+            Tables.EXTENDED_PROPERTIES + "." + CalendarContract.ExtendedProperties._ID + "=?";
 
     private static final String SQL_DELETE_FROM_CALENDARS = "DELETE FROM " + Tables.CALENDARS +
                 " WHERE " + Calendars.ACCOUNT_NAME + "=? AND " +
@@ -203,31 +203,31 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         CalendarDatabaseHelper.Views.EVENTS + " AS " +
         CalendarDatabaseHelper.Tables.EVENTS +
         " ON (" + CalendarDatabaseHelper.Tables.INSTANCES + "."
-        + Calendar.Instances.EVENT_ID + "=" +
+        + CalendarContract.Instances.EVENT_ID + "=" +
         CalendarDatabaseHelper.Tables.EVENTS + "."
-        + Calendar.Events._ID + ")";
+        + CalendarContract.Events._ID + ")";
 
     private static final String INSTANCE_SEARCH_QUERY_TABLES = "(" +
         CalendarDatabaseHelper.Tables.INSTANCES + " INNER JOIN " +
         CalendarDatabaseHelper.Views.EVENTS + " AS " +
         CalendarDatabaseHelper.Tables.EVENTS +
         " ON (" + CalendarDatabaseHelper.Tables.INSTANCES + "."
-        + Calendar.Instances.EVENT_ID + "=" +
+        + CalendarContract.Instances.EVENT_ID + "=" +
         CalendarDatabaseHelper.Tables.EVENTS + "."
-        + Calendar.Events._ID + ")" + ") LEFT OUTER JOIN " +
+        + CalendarContract.Events._ID + ")" + ") LEFT OUTER JOIN " +
         CalendarDatabaseHelper.Tables.ATTENDEES +
         " ON (" + CalendarDatabaseHelper.Tables.ATTENDEES + "."
-        + Calendar.Attendees.EVENT_ID + "=" +
+        + CalendarContract.Attendees.EVENT_ID + "=" +
         CalendarDatabaseHelper.Tables.EVENTS + "."
-        + Calendar.Events._ID + ")";
+        + CalendarContract.Events._ID + ")";
 
     private static final String SQL_WHERE_INSTANCES_BETWEEN_DAY =
-        Calendar.Instances.START_DAY + "<=? AND " +
-        Calendar.Instances.END_DAY + ">=?";
+        CalendarContract.Instances.START_DAY + "<=? AND " +
+        CalendarContract.Instances.END_DAY + ">=?";
 
     private static final String SQL_WHERE_INSTANCES_BETWEEN =
-        Calendar.Instances.BEGIN + "<=? AND " +
-        Calendar.Instances.END + ">=?";
+        CalendarContract.Instances.BEGIN + "<=? AND " +
+        CalendarContract.Instances.END + ">=?";
 
     private static final int INSTANCES_INDEX_START_DAY = 0;
     private static final int INSTANCES_INDEX_END_DAY = 1;
@@ -274,19 +274,19 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * attendees by instance.
      */
     private static final String ATTENDEES_EMAIL_CONCAT =
-        "group_concat(" + Calendar.Attendees.ATTENDEE_EMAIL + ")";
+        "group_concat(" + CalendarContract.Attendees.ATTENDEE_EMAIL + ")";
 
     /**
      * Alias used for aggregate concatenation of attendee names when grouping
      * attendees by instance.
      */
     private static final String ATTENDEES_NAME_CONCAT =
-        "group_concat(" + Calendar.Attendees.ATTENDEE_NAME + ")";
+        "group_concat(" + CalendarContract.Attendees.ATTENDEE_NAME + ")";
 
     private static final String[] SEARCH_COLUMNS = new String[] {
-        Calendar.Events.TITLE,
-        Calendar.Events.DESCRIPTION,
-        Calendar.Events.EVENT_LOCATION,
+        CalendarContract.Events.TITLE,
+        CalendarContract.Events.DESCRIPTION,
+        CalendarContract.Events.EVENT_LOCATION,
         ATTENDEES_EMAIL_CONCAT,
         ATTENDEES_NAME_CONCAT
     };
@@ -727,7 +727,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     protected void notifyChange(boolean syncToNetwork) {
         // Note that semantics are changed: notification is for CONTENT_URI, not the specific
         // Uri that was modified.
-        mContentResolver.notifyChange(Calendar.CONTENT_URI, null, syncToNetwork);
+        mContentResolver.notifyChange(CalendarContract.CONTENT_URI, null, syncToNetwork);
     }
 
     @Override
@@ -924,7 +924,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 sortOrder, limit);
         if (c != null) {
             // TODO: is this the right notification Uri?
-            c.setNotificationUri(mContentResolver, Calendar.Events.CONTENT_URI);
+            c.setNotificationUri(mContentResolver, CalendarContract.Events.CONTENT_URI);
         }
         return c;
     }
@@ -1896,10 +1896,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         String originalTimezone = values.getAsString(Events.EVENT_TIMEZONE);
 
                         ContentValues expropsValues = new ContentValues();
-                        expropsValues.put(Calendar.ExtendedProperties.EVENT_ID, id);
-                        expropsValues.put(Calendar.ExtendedProperties.NAME,
+                        expropsValues.put(CalendarContract.ExtendedProperties.EVENT_ID, id);
+                        expropsValues.put(CalendarContract.ExtendedProperties.NAME,
                                 EXT_PROP_ORIGINAL_TIMEZONE);
-                        expropsValues.put(Calendar.ExtendedProperties.VALUE, originalTimezone);
+                        expropsValues.put(CalendarContract.ExtendedProperties.VALUE,
+                                originalTimezone);
 
                         // Insert the extended property
                         long exPropId = mDbHelper.extendedPropertiesInsert(expropsValues);
@@ -1999,12 +2000,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // It is generated from Reminders, which is synced.
                 break;
             case EXTENDED_PROPERTIES:
-                if (!values.containsKey(Calendar.ExtendedProperties.EVENT_ID)) {
+                if (!values.containsKey(CalendarContract.ExtendedProperties.EVENT_ID)) {
                     throw new IllegalArgumentException("ExtendedProperties values must "
                             + "contain an event_id");
                 }
                 if (!callerIsSyncAdapter) {
-                    final Long eventId = values.getAsLong(Calendar.ExtendedProperties.EVENT_ID);
+                    final Long eventId = values
+                            .getAsLong(CalendarContract.ExtendedProperties.EVENT_ID);
                     mDbHelper.duplicateEvent(eventId);
                     setEventDirty(eventId);
                 }
@@ -2335,7 +2337,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             } catch (EventRecurrence.InvalidFormatException e) {
                 if (Log.isLoggable(TAG, Log.WARN)) {
                     Log.w(TAG, "Could not parse RRULE recurrence string: " +
-                            values.get(Calendar.Events.RRULE), e);
+                            values.get(CalendarContract.Events.RRULE), e);
                 }
                 return lastMillis; // -1
             }
@@ -2395,7 +2397,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private void updateEventRawTimesLocked(long eventId, ContentValues values) {
         ContentValues rawValues = new ContentValues();
 
-        rawValues.put(Calendar.EventsRawTimes.EVENT_ID, eventId);
+        rawValues.put(CalendarContract.EventsRawTimes.EVENT_ID, eventId);
 
         String timezone = values.getAsString(Events.EVENT_TIMEZONE);
 
@@ -2415,13 +2417,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         Long dtstartMillis = values.getAsLong(Events.DTSTART);
         if (dtstartMillis != null) {
             time.set(dtstartMillis);
-            rawValues.put(Calendar.EventsRawTimes.DTSTART_2445, time.format2445());
+            rawValues.put(CalendarContract.EventsRawTimes.DTSTART_2445, time.format2445());
         }
 
         Long dtendMillis = values.getAsLong(Events.DTEND);
         if (dtendMillis != null) {
             time.set(dtendMillis);
-            rawValues.put(Calendar.EventsRawTimes.DTEND_2445, time.format2445());
+            rawValues.put(CalendarContract.EventsRawTimes.DTEND_2445, time.format2445());
         }
 
         Long originalInstanceMillis = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
@@ -2434,7 +2436,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 time.allDay = allDayInteger != 0;
             }
             time.set(originalInstanceMillis);
-            rawValues.put(Calendar.EventsRawTimes.ORIGINAL_INSTANCE_TIME_2445,
+            rawValues.put(CalendarContract.EventsRawTimes.ORIGINAL_INSTANCE_TIME_2445,
                     time.format2445());
         }
 
@@ -2442,7 +2444,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (lastDateMillis != null) {
             time.allDay = allDay;
             time.set(lastDateMillis);
-            rawValues.put(Calendar.EventsRawTimes.LAST_DATE_2445, time.format2445());
+            rawValues.put(CalendarContract.EventsRawTimes.LAST_DATE_2445, time.format2445());
         }
 
         mDbHelper.eventsRawTimesReplace(rawValues);
@@ -3203,9 +3205,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private String appendAccountFromParameterToSelection(String selection, Uri uri) {
         final String accountName = QueryParameterUtils.getQueryParameter(uri,
-                Calendar.EventsEntity.ACCOUNT_NAME);
+                CalendarContract.EventsEntity.ACCOUNT_NAME);
         final String accountType = QueryParameterUtils.getQueryParameter(uri,
-                Calendar.EventsEntity.ACCOUNT_TYPE);
+                CalendarContract.EventsEntity.ACCOUNT_TYPE);
         if (!TextUtils.isEmpty(accountName)) {
             final StringBuilder sb = new StringBuilder();
             sb.append(Calendars.ACCOUNT_NAME + "=")
@@ -3225,19 +3227,19 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             return selection;
         }
         final StringBuilder sb = new StringBuilder();
-        sb.append(Calendar.Events.LAST_SYNCED).append(" = 0");
+        sb.append(CalendarContract.Events.LAST_SYNCED).append(" = 0");
         return appendSelection(sb, selection);
     }
 
     private String appendAccountToSelection(Uri uri, String selection) {
         final String accountName = QueryParameterUtils.getQueryParameter(uri,
-                Calendar.EventsEntity.ACCOUNT_NAME);
+                CalendarContract.EventsEntity.ACCOUNT_NAME);
         final String accountType = QueryParameterUtils.getQueryParameter(uri,
-                Calendar.EventsEntity.ACCOUNT_TYPE);
+                CalendarContract.EventsEntity.ACCOUNT_TYPE);
         if (!TextUtils.isEmpty(accountName)) {
-            StringBuilder selectionSb = new StringBuilder(Calendar.Calendars.ACCOUNT_NAME + "="
-                    + DatabaseUtils.sqlEscapeString(accountName) + " AND "
-                    + Calendar.Calendars.ACCOUNT_TYPE + "="
+            StringBuilder selectionSb = new StringBuilder(CalendarContract.Calendars.ACCOUNT_NAME
+                    + "=" + DatabaseUtils.sqlEscapeString(accountName) + " AND "
+                    + CalendarContract.Calendars.ACCOUNT_TYPE + "="
                     + DatabaseUtils.sqlEscapeString(accountType));
             return appendSelection(selectionSb, selection);
         } else {
@@ -3247,13 +3249,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private String appendSyncAccountToSelection(Uri uri, String selection) {
         final String accountName = QueryParameterUtils.getQueryParameter(uri,
-                Calendar.EventsEntity.ACCOUNT_NAME);
+                CalendarContract.EventsEntity.ACCOUNT_NAME);
         final String accountType = QueryParameterUtils.getQueryParameter(uri,
-                Calendar.EventsEntity.ACCOUNT_TYPE);
+                CalendarContract.EventsEntity.ACCOUNT_TYPE);
         if (!TextUtils.isEmpty(accountName)) {
-            StringBuilder selectionSb = new StringBuilder(Calendar.Events.ACCOUNT_NAME + "="
+            StringBuilder selectionSb = new StringBuilder(CalendarContract.Events.ACCOUNT_NAME + "="
                     + DatabaseUtils.sqlEscapeString(accountName) + " AND "
-                    + Calendar.Events.ACCOUNT_TYPE + "="
+                    + CalendarContract.Events.ACCOUNT_TYPE + "="
                     + DatabaseUtils.sqlEscapeString(accountType));
             return appendSelection(selectionSb, selection);
         } else {
@@ -3511,7 +3513,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      */
     private void doSendUpdateNotification() {
         Intent intent = new Intent(Intent.ACTION_PROVIDER_CHANGED,
-                Calendar.CONTENT_URI);
+                CalendarContract.CONTENT_URI);
         if (Log.isLoggable(TAG, Log.INFO)) {
             Log.i(TAG, "Sending notification intent: " + intent);
         }
@@ -3525,8 +3527,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     // @formatter:off
     private static final String[] SYNC_WRITABLE_DEFAULT_COLUMNS = new String[] {
-        Calendar.Calendars.DIRTY,
-        Calendar.Calendars._SYNC_ID
+        CalendarContract.Calendars.DIRTY,
+        CalendarContract.Calendars._SYNC_ID
     };
     private static final String[] PROVIDER_WRITABLE_DEFAULT_COLUMNS = new String[] {
     };
@@ -3574,41 +3576,42 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final HashMap<String, String> sCountProjectionMap;
 
     static {
-        sUriMatcher.addURI(Calendar.AUTHORITY, "instances/when/*/*", INSTANCES);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "instances/whenbyday/*/*", INSTANCES_BY_DAY);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "instances/search/*/*/*", INSTANCES_SEARCH);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "instances/searchbyday/*/*/*",
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "instances/when/*/*", INSTANCES);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "instances/whenbyday/*/*", INSTANCES_BY_DAY);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "instances/search/*/*/*", INSTANCES_SEARCH);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "instances/searchbyday/*/*/*",
                 INSTANCES_SEARCH_BY_DAY);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "instances/groupbyday/*/*", EVENT_DAYS);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "events", EVENTS);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "events/#", EVENTS_ID);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "event_entities", EVENT_ENTITIES);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "event_entities/#", EVENT_ENTITIES_ID);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "calendars", CALENDARS);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "calendars/#", CALENDARS_ID);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "calendar_entities", CALENDAR_ENTITIES);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "calendar_entities/#", CALENDAR_ENTITIES_ID);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "attendees", ATTENDEES);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "attendees/#", ATTENDEES_ID);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "reminders", REMINDERS);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "reminders/#", REMINDERS_ID);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "extendedproperties", EXTENDED_PROPERTIES);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "extendedproperties/#", EXTENDED_PROPERTIES_ID);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "calendar_alerts", CALENDAR_ALERTS);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "calendar_alerts/#", CALENDAR_ALERTS_ID);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "calendar_alerts/by_instance",
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "instances/groupbyday/*/*", EVENT_DAYS);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "events", EVENTS);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "events/#", EVENTS_ID);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "event_entities", EVENT_ENTITIES);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "event_entities/#", EVENT_ENTITIES_ID);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "calendars", CALENDARS);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "calendars/#", CALENDARS_ID);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "calendar_entities", CALENDAR_ENTITIES);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "calendar_entities/#", CALENDAR_ENTITIES_ID);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "attendees", ATTENDEES);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "attendees/#", ATTENDEES_ID);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "reminders", REMINDERS);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "reminders/#", REMINDERS_ID);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "extendedproperties", EXTENDED_PROPERTIES);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "extendedproperties/#",
+                EXTENDED_PROPERTIES_ID);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "calendar_alerts", CALENDAR_ALERTS);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "calendar_alerts/#", CALENDAR_ALERTS_ID);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "calendar_alerts/by_instance",
                            CALENDAR_ALERTS_BY_INSTANCE);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "syncstate", SYNCSTATE);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "syncstate/#", SYNCSTATE_ID);
-        sUriMatcher.addURI(Calendar.AUTHORITY, CalendarAlarmManager.SCHEDULE_ALARM_PATH,
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "syncstate", SYNCSTATE);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "syncstate/#", SYNCSTATE_ID);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, CalendarAlarmManager.SCHEDULE_ALARM_PATH,
                 SCHEDULE_ALARM);
-        sUriMatcher.addURI(Calendar.AUTHORITY, CalendarAlarmManager.SCHEDULE_ALARM_REMOVE_PATH,
-                SCHEDULE_ALARM_REMOVE);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "time/#", TIME);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "time", TIME);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "properties", PROVIDER_PROPERTIES);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "exception/#", EXCEPTION_ID);
-        sUriMatcher.addURI(Calendar.AUTHORITY, "exception/#/#", EXCEPTION_ID2);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY,
+                CalendarAlarmManager.SCHEDULE_ALARM_REMOVE_PATH, SCHEDULE_ALARM_REMOVE);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "time/#", TIME);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "time", TIME);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "properties", PROVIDER_PROPERTIES);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "exception/#", EXCEPTION_ID);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "exception/#/#", EXCEPTION_ID2);
 
         /** Contains just BaseColumns._COUNT */
         sCountProjectionMap = new HashMap<String, String>();
@@ -3841,8 +3844,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     // with a system account. Typically, a calendar must be
                     // associated with an account on the device or it will be
                     // deleted.
-                    if (c.getString(0) != null && c.getString(1) != null &&
-                            !TextUtils.equals(c.getString(1), Calendar.ACCOUNT_TYPE_LOCAL)) {
+                    if (c.getString(0) != null
+                            && c.getString(1) != null
+                            && !TextUtils.equals(c.getString(1),
+                                    CalendarContract.ACCOUNT_TYPE_LOCAL)) {
                         Account currAccount = new Account(c.getString(0), c.getString(1));
                         if (!validAccounts.contains(currAccount)) {
                             accountsToDelete.add(currAccount);

@@ -26,7 +26,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.database.sqlite.SQLiteTransactionListener;
 import android.net.Uri;
-import android.provider.Calendar;
+import android.provider.CalendarContract;
 
 import java.util.ArrayList;
 
@@ -196,7 +196,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
 
     protected boolean getIsCallerSyncAdapter(Uri uri) {
         boolean isCurrentSyncAdapter = QueryParameterUtils.readBooleanQueryParameter(uri,
-                Calendar.CALLER_IS_SYNCADAPTER, false);
+                CalendarContract.CALLER_IS_SYNCADAPTER, false);
         if (mIsCallerSyncAdapter == null || mIsCallerSyncAdapter) {
             mIsCallerSyncAdapter = isCurrentSyncAdapter;
         }

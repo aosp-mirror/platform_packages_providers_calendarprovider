@@ -22,7 +22,7 @@ import android.database.Cursor;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
-import android.provider.Calendar;
+import android.provider.CalendarContract;
 import android.widget.ListAdapter;
 import android.widget.SimpleAdapter;
 import android.view.Window;
@@ -40,14 +40,14 @@ import java.util.Map;
  */
 public class CalendarDebug extends ListActivity {
     private static final String[] CALENDARS_PROJECTION = new String[]{
-            Calendar.Calendars._ID,
-            Calendar.Calendars.CALENDAR_DISPLAY_NAME,
+            CalendarContract.Calendars._ID,
+            CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
     };
     private static final int INDEX_ID = 0;
     private static final int INDEX_DISPLAY_NAME = 1;
 
     private static final String[] EVENTS_PROJECTION = new String[]{
-            Calendar.Events._ID,
+            CalendarContract.Events._ID,
     };
     private static final String KEY_TITLE = "title";
     private static final String KEY_TEXT = "text";
@@ -80,10 +80,10 @@ public class CalendarDebug extends ListActivity {
             // items is the list of items to display in the list.
             List<Map<String, String>> items = new ArrayList<Map<String, String>>();
             try {
-                cursor = mContentResolver.query(Calendar.Calendars.CONTENT_URI,
+                cursor = mContentResolver.query(CalendarContract.Calendars.CONTENT_URI,
                         CALENDARS_PROJECTION,
                         null, null /* selectionArgs */,
-                        Calendar.Calendars.DEFAULT_SORT_ORDER);
+                        CalendarContract.Calendars.DEFAULT_SORT_ORDER);
                 if (cursor == null) {
                     addItem(items, mActivity.getString(R.string.calendar_info_error), "");
                 } else {
@@ -95,8 +95,8 @@ public class CalendarDebug extends ListActivity {
                         String displayName = cursor.getString(INDEX_DISPLAY_NAME);
 
                         // Compute number of events in the calendar
-                        String where = Calendar.Events.CALENDAR_ID + "=" + id;
-                        Cursor eventCursor = Calendar.Events.query(mContentResolver,
+                        String where = CalendarContract.Events.CALENDAR_ID + "=" + id;
+                        Cursor eventCursor = CalendarContract.Events.query(mContentResolver,
                                 EVENTS_PROJECTION, where, null, null);
                         try {
                             eventCount = eventCursor.getCount();
@@ -105,9 +105,9 @@ public class CalendarDebug extends ListActivity {
                         }
 
                         // Compute number of dirty events in the calendar
-                        String dirtyWhere = Calendar.Events.CALENDAR_ID + "=" + id
-                                + " AND " + Calendar.Events.DIRTY + "=1";
-                        Cursor dirtyCursor = Calendar.Events.query(mContentResolver,
+                        String dirtyWhere = CalendarContract.Events.CALENDAR_ID + "=" + id
+                                + " AND " + CalendarContract.Events.DIRTY + "=1";
+                        Cursor dirtyCursor = CalendarContract.Events.query(mContentResolver,
                                 EVENTS_PROJECTION, dirtyWhere, null, null);
                         try {
                             dirtyCount = dirtyCursor.getCount();

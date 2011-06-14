@@ -22,7 +22,7 @@ import android.content.ContentValues;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
-import android.provider.Calendar.CalendarMetaData;
+import android.provider.CalendarContract.CalendarMetaData;
 
 /**
  * The global meta-data used for expanding the Instances table is stored in one

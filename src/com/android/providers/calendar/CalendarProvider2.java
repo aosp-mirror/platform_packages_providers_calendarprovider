@@ -2033,10 +2033,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     /**
-     * Do some validation on event data before inserting.
-     * In particular make sure dtend, duration, etc make sense for
-     * the type of event (regular, recurrence, exception).  Remove
-     * any unexpected fields.
+     * Do some validation on event data before inserting. In particular make
+     * sure calendar_id exists and dtend, duration, etc make sense for the type
+     * of event (regular, recurrence, exception). Remove any unexpected fields.
      *
      * @param values the ContentValues to insert
      */
@@ -2045,8 +2044,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         boolean hasDuration = !TextUtils.isEmpty(values.getAsString(Events.DURATION));
         boolean hasRrule = !TextUtils.isEmpty(values.getAsString(Events.RRULE));
         boolean hasRdate = !TextUtils.isEmpty(values.getAsString(Events.RDATE));
+        boolean hasCalId = !TextUtils.isEmpty(values.getAsString(Events.CALENDAR_ID));
         boolean hasOriginalEvent = !TextUtils.isEmpty(values.getAsString(Events.ORIGINAL_SYNC_ID));
         boolean hasOriginalInstanceTime = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME) != null;
+        if (!hasCalId) {
+            throw new IllegalArgumentException("New events must include a calendar_id.");
+        }
         if (hasRrule || hasRdate) {
             // Recurrence:
             // dtstart is start time of first event

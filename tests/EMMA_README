@@ -1,0 +1,28 @@
+#TODO Modify when we move CTS tests to frameworks
+
+#These are instructions for generating code coverage for the provider
+#for only the CalendarCts.java set of tests.  This file can be sourced
+#directly from the command line to generate the coverage results in
+#your home directory.
+
+adb root;
+cd ${ANDROID_BUILD_TOP}/packages/providers/CalendarProvider;
+export EMMA_INSTRUMENT=true;
+rm -R ${ANDROID_BUILD_TOP}/out/target/common/obj/APPS/CalendarProvider_intermediates
+rm -R ${ANDROID_BUILD_TOP}/out/target/common/obj/APPS/CalendarProviderTests_intermediates
+mm;
+adb remount;
+adb push ${ANDROID_PRODUCT_OUT}/system/app/CalendarProvider.apk system/app/CalendarProvider.apk;
+adb push ${ANDROID_PRODUCT_OUT}/data/app/CalendarProviderTests.apk data/app/CalendarProviderTests.apk;
+sleep 2;
+adb shell am instrument -w -e coverage true -e class com.android.providers.calendar.CalendarCts com.android.providers.calendar.tests/android.test.InstrumentationTestRunner;
+# we have a flakey recurrence test so the first time you run it it will sometimes fail
+# with "count expected:<5> but was :<0>" in testSingleRecurrenceExceptions
+if [ -d ~/emmaReport ]; then
+  rm -R ~/emmaReport;
+fi
+mkdir ~/emmaReport;
+pushd ~/emmaReport;
+adb pull /data/user/0/com.android.providers.calendar/files/coverage.ec coverage.ec;
+java -cp ${ANDROID_BUILD_TOP}/external/emma/lib/emma.jar emma report -r html -in coverage.ec -sp ${ANDROID_BUILD_TOP}/packages/providers/CalendarProvider/src -in ${ANDROID_BUILD_TOP}/out/target/common/obj/APPS/CalendarProvider_intermediates/coverage.em;
+popd;

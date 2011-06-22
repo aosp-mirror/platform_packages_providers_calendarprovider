@@ -16,8 +16,6 @@ adb push ${ANDROID_PRODUCT_OUT}/system/app/CalendarProvider.apk system/app/Calen
 adb push ${ANDROID_PRODUCT_OUT}/data/app/CalendarProviderTests.apk data/app/CalendarProviderTests.apk;
 sleep 2;
 adb shell am instrument -w -e coverage true -e class com.android.providers.calendar.CalendarCts com.android.providers.calendar.tests/android.test.InstrumentationTestRunner;
-# we have a flakey recurrence test so the first time you run it it will sometimes fail
-# with "count expected:<5> but was :<0>" in testSingleRecurrenceExceptions
 if [ -d ~/emmaReport ]; then
   rm -R ~/emmaReport;
 fi

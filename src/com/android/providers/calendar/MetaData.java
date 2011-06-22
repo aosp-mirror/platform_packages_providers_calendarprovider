@@ -30,6 +30,8 @@ import android.provider.CalendarContract.CalendarMetaData;
  * values to avoid repeatedly banging on the database.  It is also used
  * for writing the values back to the database, while maintaining the
  * consistency of the cache.
+ * <p>
+ * TODO: there must be only one of these active within CalendarProvider.  Enforce this.
  */
 public class MetaData {
     /**

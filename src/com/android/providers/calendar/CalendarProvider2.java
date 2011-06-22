@@ -455,8 +455,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         mContentResolver = mContext.getContentResolver();
 
         mDbHelper = (CalendarDatabaseHelper)getDatabaseHelper();
-        mInstancesHelper = new CalendarInstancesHelper(mDbHelper);
         mDb = mDbHelper.getWritableDatabase();
+
+        mMetaData = new MetaData(mDbHelper);
+        mInstancesHelper = new CalendarInstancesHelper(mDbHelper, mMetaData);
 
         // Register for Intent broadcasts
         IntentFilter filter = new IntentFilter();
@@ -471,7 +473,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // memory resources will be reclaimed.
         mContext.registerReceiver(mIntentReceiver, filter);
 
-        mMetaData = new MetaData(mDbHelper);
         mCalendarCache = new CalendarCache(mDbHelper);
 
         // This is pulled out for testing

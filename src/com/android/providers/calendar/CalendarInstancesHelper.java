@@ -118,10 +118,10 @@ public class CalendarInstancesHelper {
     // the original start time.
     private static final int MAX_ASSUMED_DURATION = 7 * 24 * 60 * 60 * 1000;
 
-    public CalendarInstancesHelper(CalendarDatabaseHelper calendarDbHelper) {
+    public CalendarInstancesHelper(CalendarDatabaseHelper calendarDbHelper, MetaData metaData) {
         mDbHelper = calendarDbHelper;
         mDb = mDbHelper.getWritableDatabase();
-        mMetaData = new MetaData(mDbHelper);
+        mMetaData = metaData;
         mCalendarCache = new CalendarCache(mDbHelper);
     }
 

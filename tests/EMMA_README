@@ -24,3 +24,4 @@ pushd ~/emmaReport;
 adb pull /data/user/0/com.android.providers.calendar/files/coverage.ec coverage.ec;
 java -cp ${ANDROID_BUILD_TOP}/external/emma/lib/emma.jar emma report -r html -in coverage.ec -sp ${ANDROID_BUILD_TOP}/packages/providers/CalendarProvider/src -in ${ANDROID_BUILD_TOP}/out/target/common/obj/APPS/CalendarProvider_intermediates/coverage.em;
 popd;
+export EMMA_INSTRUMENT=false;

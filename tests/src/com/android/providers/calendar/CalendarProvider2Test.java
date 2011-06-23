@@ -20,6 +20,7 @@ import com.android.common.ArrayListCursor;
 
 import android.content.ComponentName;
 import android.content.ContentProvider;
+import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
@@ -44,6 +45,7 @@ import android.test.mock.MockContext;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.test.suitebuilder.annotation.Smoke;
 import android.test.suitebuilder.annotation.Suppress;
+import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.text.format.Time;
 import android.util.Log;
@@ -78,6 +80,13 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
     private static final String DEFAULT_ACCOUNT_TYPE = "com.google";
     private static final String DEFAULT_ACCOUNT = "joe@joe.com";
+
+
+    private static final String WHERE_CALENDARS_SELECTED = Calendars.VISIBLE + "=?";
+    private static final String[] WHERE_CALENDARS_ARGS = {
+        "1"
+    };
+    private static final String DEFAULT_SORT_ORDER = "begin ASC";
 
     private CalendarProvider2ForTesting mProvider;
     private SQLiteDatabase mDb;
@@ -1576,7 +1585,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         Cursor cursor = null;
 
         try {
-            cursor = Instances.query(mResolver, PROJECTION,
+            cursor = queryInstances(mResolver, PROJECTION,
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
                     "search", where, null, orderBy);
@@ -1588,7 +1597,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         }
 
         try {
-            cursor = Instances.query(mResolver, PROJECTION,
+            cursor = queryInstances(mResolver, PROJECTION,
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
                     "purple", where, null, orderBy);
@@ -1600,7 +1609,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         }
 
         try {
-            cursor = Instances.query(mResolver, PROJECTION,
+            cursor = queryInstances(mResolver, PROJECTION,
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
                     "puurple", where, null, orderBy);
@@ -1612,7 +1621,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         }
 
         try {
-            cursor = Instances.query(mResolver, PROJECTION,
+            cursor = queryInstances(mResolver, PROJECTION,
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
                     "purple lasers", where, null, orderBy);
@@ -1624,7 +1633,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         }
 
         try {
-            cursor = Instances.query(mResolver, PROJECTION,
+            cursor = queryInstances(mResolver, PROJECTION,
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
                     "lasers kapow", where, null, orderBy);
@@ -1636,7 +1645,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         }
 
         try {
-            cursor = Instances.query(mResolver, PROJECTION,
+            cursor = queryInstances(mResolver, PROJECTION,
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
                     "\"search purple\"", where, null, orderBy);
@@ -1648,7 +1657,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         }
 
         try {
-            cursor = Instances.query(mResolver, PROJECTION,
+            cursor = queryInstances(mResolver, PROJECTION,
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
                     "\"purple search\"", where, null, orderBy);
@@ -1660,7 +1669,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         }
 
         try {
-            cursor = Instances.query(mResolver, PROJECTION,
+            cursor = queryInstances(mResolver, PROJECTION,
                     startMs - DateUtils.YEAR_IN_MILLIS,
                     startMs + DateUtils.HOUR_IN_MILLIS,
                     "%", where, null, orderBy);
@@ -2358,7 +2367,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         long startMs = time.toMillis(true /* ignoreDst */);
         // Query starting from way in the past to one hour into the event.
         // Query is more than 2 months so the range won't get extended by the provider.
-        Cursor cursor = Instances.query(mResolver, PROJECTION,
+        Cursor cursor = queryInstances(mResolver, PROJECTION,
                 startMs - DateUtils.YEAR_IN_MILLIS, startMs + DateUtils.HOUR_IN_MILLIS,
                 where, null, orderBy);
         try {
@@ -2368,7 +2377,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         }
 
         // Now expand the instance range.  The event overlaps the new part of the range.
-        cursor = Instances.query(mResolver, PROJECTION,
+        cursor = queryInstances(mResolver, PROJECTION,
                 startMs - DateUtils.YEAR_IN_MILLIS, startMs + 2 * DateUtils.HOUR_IN_MILLIS,
                 where, null, orderBy);
         try {
@@ -2376,6 +2385,87 @@ public class CalendarProvider2Test extends AndroidTestCase {
         } finally {
             cursor.close();
         }
+    }
+
+    /**
+     * Performs a query to return all visible instances in the given range that
+     * match the given selection. This is a blocking function and should not be
+     * done on the UI thread. This will cause an expansion of recurring events
+     * to fill this time range if they are not already expanded and will slow
+     * down for larger time ranges with many recurring events.
+     *
+     * @param cr The ContentResolver to use for the query
+     * @param projection The columns to return
+     * @param begin The start of the time range to query in UTC millis since
+     *            epoch
+     * @param end The end of the time range to query in UTC millis since epoch
+     * @param selection Filter on the query as an SQL WHERE statement
+     * @param selectionArgs Args to replace any '?'s in the selection
+     * @param orderBy How to order the rows as an SQL ORDER BY statement
+     * @return A Cursor of instances matching the selection
+     */
+    private static final Cursor queryInstances(ContentResolver cr, String[] projection, long begin,
+            long end, String selection, String[] selectionArgs, String orderBy) {
+
+        Uri.Builder builder = Instances.CONTENT_URI.buildUpon();
+        ContentUris.appendId(builder, begin);
+        ContentUris.appendId(builder, end);
+        if (TextUtils.isEmpty(selection)) {
+            selection = WHERE_CALENDARS_SELECTED;
+            selectionArgs = WHERE_CALENDARS_ARGS;
+        } else {
+            selection = "(" + selection + ") AND " + WHERE_CALENDARS_SELECTED;
+            if (selectionArgs != null && selectionArgs.length > 0) {
+                selectionArgs = Arrays.copyOf(selectionArgs, selectionArgs.length + 1);
+                selectionArgs[selectionArgs.length - 1] = WHERE_CALENDARS_ARGS[0];
+            } else {
+                selectionArgs = WHERE_CALENDARS_ARGS;
+            }
+        }
+        return cr.query(builder.build(), projection, selection, selectionArgs,
+                orderBy == null ? DEFAULT_SORT_ORDER : orderBy);
+    }
+
+    /**
+     * Performs a query to return all visible instances in the given range that
+     * match the given selection. This is a blocking function and should not be
+     * done on the UI thread. This will cause an expansion of recurring events
+     * to fill this time range if they are not already expanded and will slow
+     * down for larger time ranges with many recurring events.
+     *
+     * @param cr The ContentResolver to use for the query
+     * @param projection The columns to return
+     * @param begin The start of the time range to query in UTC millis since
+     *            epoch
+     * @param end The end of the time range to query in UTC millis since epoch
+     * @param searchQuery A string of space separated search terms. Segments
+     *            enclosed by double quotes will be treated as a single term.
+     * @param selection Filter on the query as an SQL WHERE statement
+     * @param selectionArgs Args to replace any '?'s in the selection
+     * @param orderBy How to order the rows as an SQL ORDER BY statement
+     * @return A Cursor of instances matching the selection
+     */
+    public static final Cursor queryInstances(ContentResolver cr, String[] projection, long begin,
+            long end, String searchQuery, String selection, String[] selectionArgs, String orderBy)
+            {
+        Uri.Builder builder = Instances.CONTENT_SEARCH_URI.buildUpon();
+        ContentUris.appendId(builder, begin);
+        ContentUris.appendId(builder, end);
+        builder = builder.appendPath(searchQuery);
+        if (TextUtils.isEmpty(selection)) {
+            selection = WHERE_CALENDARS_SELECTED;
+            selectionArgs = WHERE_CALENDARS_ARGS;
+        } else {
+            selection = "(" + selection + ") AND " + WHERE_CALENDARS_SELECTED;
+            if (selectionArgs != null && selectionArgs.length > 0) {
+                selectionArgs = Arrays.copyOf(selectionArgs, selectionArgs.length + 1);
+                selectionArgs[selectionArgs.length - 1] = WHERE_CALENDARS_ARGS[0];
+            } else {
+                selectionArgs = WHERE_CALENDARS_ARGS;
+            }
+        }
+        return cr.query(builder.build(), projection, selection, selectionArgs,
+                orderBy == null ? DEFAULT_SORT_ORDER : orderBy);
     }
 
     private Cursor queryInstances(long begin, long end) {

@@ -320,10 +320,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         ALLOWED_IN_EXCEPTION.add(Events.EVENT_LOCATION);
         ALLOWED_IN_EXCEPTION.add(Events.DESCRIPTION);
         ALLOWED_IN_EXCEPTION.add(Events.STATUS);
-        // selfAttendeeStatus
+        ALLOWED_IN_EXCEPTION.add(Events.SELF_ATTENDEE_STATUS);
         ALLOWED_IN_EXCEPTION.add(Events.SYNC_DATA6);
         ALLOWED_IN_EXCEPTION.add(Events.DTSTART);
-        ALLOWED_IN_EXCEPTION.add(Events.DTEND);
+        // dtend -- set from duration as part of creating the exception
         ALLOWED_IN_EXCEPTION.add(Events.EVENT_TIMEZONE);
         ALLOWED_IN_EXCEPTION.add(Events.EVENT_END_TIMEZONE);
         ALLOWED_IN_EXCEPTION.add(Events.DURATION);
@@ -358,6 +358,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         Events.SYNC_DATA6,
         Events.SYNC_DATA7,
         Events.SYNC_DATA8,
+        Events.SYNC_DATA9,
+        Events.SYNC_DATA10,
     };
 
     /** set to 'true' to enable debug logging for recurrence exception code */
@@ -1575,9 +1577,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      *
      * @param originalEventId The _id of the event to be modified
      * @param modValues Event columns to update
+     * @param callerIsSyncAdapter Set if the content provider client is the sync adapter
      * @return the ID of the new "exception" event, or -1 on failure
      */
-    private long handleInsertException(long originalEventId, ContentValues modValues) {
+    private long handleInsertException(long originalEventId, ContentValues modValues,
+            boolean callerIsSyncAdapter) {
         if (DEBUG_EXCEPTION) {
             Log.i(TAG, "RE: values: " + modValues.toString());
         }
@@ -1591,6 +1595,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         // Check for attempts to override values that shouldn't be touched.
         checkAllowedInException(modValues.keySet());
+
+        // If this isn't the sync adapter, set the "dirty" flag in any Event we modify.
+        if (!callerIsSyncAdapter) {
+            modValues.put(Events.DIRTY, true);
+        }
 
         // Wrap all database accesses in a transaction.
         mDb.beginTransaction();
@@ -1691,7 +1700,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
                 // We're converting from recurring to non-recurring.  Clear out RRULE and replace
                 // DURATION with DTEND.
-                values.put(Events.RRULE, (String) null);
+                values.remove(Events.RRULE);
 
                 Duration duration = new Duration();
                 String durationStr = values.getAsString(Events.DURATION);
@@ -1704,10 +1713,23 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     return -1;
                 }
 
-                long start = values.getAsLong(Events.DTSTART);
+                /*
+                 * We want to compute DTEND as an offset from the start time of the instance.
+                 * If the caller specified a new value for DTSTART, we want to use that; if not,
+                 * the DTSTART in "values" will be the start time of the first instance in the
+                 * recurrence, so we want to replace it with ORIGINAL_INSTANCE_TIME.
+                 */
+                long start;
+                if (modValues.containsKey(Events.DTSTART)) {
+                    start = values.getAsLong(Events.DTSTART);
+                } else {
+                    start = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
+                    values.put(Events.DTSTART, start);
+                }
                 values.put(Events.DTEND, start + duration.getMillis());
                 if (DEBUG_EXCEPTION) {
-                    Log.d(TAG, "RE: DTSTART=" + start + ", duration=" + durationStr +
+                    Log.d(TAG, "RE: ORIG_INST_TIME=" + start +
+                            ", duration=" + duration.getMillis() +
                             ", generated DTEND=" + values.getAsLong(Events.DTEND));
                 }
             } else {
@@ -1764,7 +1786,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     values.putAll(modValues);
                     values.remove(Events.ORIGINAL_INSTANCE_TIME);
                 }
-           }
+            }
 
             long newEventId;
             if (createNewEvent) {
@@ -1783,11 +1805,48 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
                 /*
                  * Some of the other tables (Attendees, Reminders, ExtendedProperties) reference
-                 * the Event ID.  We need to copy the entries from the old event, filling in the new
-                 * event ID, so that  somebody doing a SELECT on those tables will find matching
-                 * entries.
+                 * the Event ID.  We need to copy the entries from the old event, filling in the
+                 * new event ID, so that somebody doing a SELECT on those tables will find
+                 * matching entries.
                  */
                 CalendarDatabaseHelper.copyEventRelatedTables(mDb, newEventId, originalEventId);
+
+                /*
+                 * If we modified Event.selfAttendeeStatus, we need to keep the corresponding
+                 * entry in the Attendees table in sync.
+                 */
+                if (modValues.containsKey(Events.SELF_ATTENDEE_STATUS)) {
+                    /*
+                     * Each Attendee is identified by email address.  To find the entry that
+                     * corresponds to "self", we want to compare that address to the owner of
+                     * the Calendar.  We're expecting to find one matching entry in Attendees.
+                     */
+                    long calendarId = values.getAsLong(Events.CALENDAR_ID);
+                    cursor = mDb.query(Tables.CALENDARS, new String[] { Calendars.OWNER_ACCOUNT },
+                            SQL_WHERE_ID, new String[] { String.valueOf(calendarId) },
+                            null /* groupBy */, null /* having */, null /* sortOrder */);
+                    if (!cursor.moveToFirst()) {
+                        Log.w(TAG, "Can't get calendar account_name for calendar " + calendarId);
+                    } else {
+                        String accountName = cursor.getString(0);
+                        ContentValues attValues = new ContentValues();
+                        attValues.put(Attendees.ATTENDEE_STATUS,
+                                modValues.getAsString(Events.SELF_ATTENDEE_STATUS));
+
+                        if (DEBUG_EXCEPTION) {
+                            Log.d(TAG, "Updating attendee status for event=" + newEventId +
+                                    " name=" + accountName + " to " +
+                                    attValues.getAsString(Attendees.ATTENDEE_STATUS));
+                        }
+                        int count = mDb.update(Tables.ATTENDEES, attValues,
+                                Attendees.EVENT_ID + "=? AND " + Attendees.ATTENDEE_EMAIL + "=?",
+                                new String[] { String.valueOf(newEventId), accountName });
+                        if (count != 1) {
+                            Log.wtf(TAG, "Attendee status update touched " + count + " rows");
+                        }
+                    }
+                    cursor.close();
+                }
             } else {
                 newEventId = originalEventId;
             }
@@ -1943,7 +2002,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 break;
             case EXCEPTION_ID:
                 long originalEventId = ContentUris.parseId(uri);
-                id = handleInsertException(originalEventId, values);
+                id = handleInsertException(originalEventId, values, callerIsSyncAdapter);
                 break;
             case CALENDARS:
                 Integer syncEvents = values.getAsInteger(Calendars.SYNC_EVENTS);

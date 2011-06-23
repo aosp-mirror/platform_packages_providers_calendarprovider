@@ -47,6 +47,9 @@ public class CalendarCts extends InstrumentationTestCase {
 
     private ContentResolver mContentResolver;
 
+    /** If set, log verbose instance info when running recurrence tests. */
+    private static final boolean DEBUG_RECURRENCE = false;
+
     private static class CalendarHelper {
 
         // @formatter:off
@@ -82,6 +85,10 @@ public class CalendarCts extends InstrumentationTestCase {
 
         private CalendarHelper() {}     // do not instantiate this class
 
+        static String generateCalendarOwnerEmail(String account) {
+            return "OWNER_" + account + "@example.com";
+        }
+
         /**
          * Creates a new set of values for creating a single calendar with every
          * field.
@@ -101,7 +108,7 @@ public class CalendarCts extends InstrumentationTestCase {
             values.put(Calendars.CAL_SYNC7, "SYNC_V:" + seedString);
             values.put(Calendars.CAL_SYNC8, "SYNC_TIME:" + seedString);
             values.put(Calendars.DIRTY, 0);
-            values.put(Calendars.OWNER_ACCOUNT, "OWNER_" + account);
+            values.put(Calendars.OWNER_ACCOUNT, generateCalendarOwnerEmail(account));
 
             values.put(Calendars.NAME, seedString);
             values.put(Calendars.CALENDAR_DISPLAY_NAME, "DISPLAY_" + seedString);
@@ -377,7 +384,7 @@ public class CalendarCts extends InstrumentationTestCase {
             values.put(Events.SELF_ATTENDEE_STATUS, Events.STATUS_TENTATIVE);
             values.put(Events.DELETED, 0);
             values.put(Events.DIRTY, asSyncAdapter ? 0 : 1);
-            values.put(Events.OWNER_ACCOUNT, "OWNER_" + account);
+            values.put(Events.OWNER_ACCOUNT, CalendarHelper.generateCalendarOwnerEmail(account));
             values.put(Events.ACCOUNT_TYPE, CTS_TEST_TYPE);
             values.put(Events.ACCOUNT_NAME, account);
         }
@@ -659,12 +666,18 @@ public class CalendarCts extends InstrumentationTestCase {
         String timeZone = eventValues.getAsString(Events.EVENT_TIMEZONE);
         String testStart = "1999-03-28T00:00:00";
         String testEnd = "1999-04-25T23:59:59";
-        String[] projection = { Instances.BEGIN, Instances.START_MINUTE };
+        String[] projection = { Instances.BEGIN, Instances.START_MINUTE, Instances.END_MINUTE };
 
         Cursor instances = getInstances(timeZone, testStart, testEnd, projection);
-        //dumpInstances(instances, timeZone, "initial");
+        if (DEBUG_RECURRENCE) {
+            dumpInstances(instances, timeZone, "initial");
+        }
 
         assertEquals("initial recurrence instance count", 5, instances.getCount());
+
+        /*
+         * Advance the start time of a few instances, and verify.
+         */
 
         // Leave first instance alone.
         instances.moveToPosition(1);
@@ -697,13 +710,13 @@ public class CalendarCts extends InstrumentationTestCase {
 
         instances.close();
 
-
         // TODO: compare Reminders, Attendees, ExtendedProperties on one of the exception events
-
 
         // Re-query the instances and figure out if they look right.
         instances = getInstances(timeZone, testStart, testEnd, projection);
-        //dumpInstances(instances, timeZone, "with exceptions");
+        if (DEBUG_RECURRENCE) {
+            dumpInstances(instances, timeZone, "with DTSTART exceptions");
+        }
         assertEquals("exceptional recurrence instance count", 4, instances.getCount());
 
         long prevMinute = -1;
@@ -726,7 +739,9 @@ public class CalendarCts extends InstrumentationTestCase {
 
         // Re-query the instances and figure out if they look right.
         instances = getInstances(timeZone, testStart, testEnd, projection);
-        //dumpInstances(instances, timeZone, "post exception deletion");
+        if (DEBUG_RECURRENCE) {
+            dumpInstances(instances, timeZone, "post exception deletion");
+        }
         assertEquals("post-exception deletion instance count", 5, instances.getCount());
 
         prevMinute = -1;
@@ -737,6 +752,63 @@ public class CalendarCts extends InstrumentationTestCase {
                 assertEquals("instance start times are the same", startMinute, prevMinute);
             }
             prevMinute = startMinute;
+        }
+        instances.close();
+
+        /*
+         * Repeat the test, this time modifying DURATION.
+         */
+
+        instances = getInstances(timeZone, testStart, testEnd, projection);
+        if (DEBUG_RECURRENCE) {
+            dumpInstances(instances, timeZone, "initial");
+        }
+
+        assertEquals("initial recurrence instance count", 5, instances.getCount());
+
+        // Leave first instance alone.
+        instances.moveToPosition(1);
+
+        // Advance the end time of the 2nd instance.
+        startMillis = instances.getLong(0);
+        excepValues = EventHelper.getNewExceptionValues(startMillis);
+        excepValues.put(Events.DURATION, "P" + 3600*2 + "S");
+        excepEventId2 = createAndVerifyException(account, eventId, excepValues);
+        instances.moveToNext();
+
+        // Advance the end time of the 3rd instance, and change the self-attendee status.
+        startMillis = instances.getLong(0);
+        excepValues = EventHelper.getNewExceptionValues(startMillis);
+        excepValues.put(Events.DURATION, "P" + 3600*3 + "S");
+        excepValues.put(Events.SELF_ATTENDEE_STATUS, Attendees.ATTENDEE_STATUS_DECLINED);
+        excepEventId3 = createAndVerifyException(account, eventId, excepValues);
+        instances.moveToNext();
+
+        // Advance the start time of the 4th instance, which will also advance the end time.
+        startMillis = instances.getLong(0);
+        excepValues = EventHelper.getNewExceptionValues(startMillis);
+        excepValues.put(Events.DTSTART, startMillis + 3600*1000);
+        excepEventId4 = createAndVerifyException(account, eventId, excepValues);
+        instances.moveToNext();
+
+        instances.close();
+
+        // TODO: make sure the selfAttendeeStatus change took
+
+        // Re-query the instances and figure out if they look right.
+        instances = getInstances(timeZone, testStart, testEnd, projection);
+        if (DEBUG_RECURRENCE) {
+            dumpInstances(instances, timeZone, "with DURATION exceptions");
+        }
+        assertEquals("exceptional recurrence instance count", 5, instances.getCount());
+
+        prevMinute = -1;
+        while (instances.moveToNext()) {
+            // expect the start times for each entry to be different from the previous entry
+            long endMinute = instances.getLong(2);
+            assertTrue("instance end times are different", endMinute != prevMinute);
+
+            prevMinute = endMinute;
         }
         instances.close();
 
@@ -774,7 +846,9 @@ public class CalendarCts extends InstrumentationTestCase {
         String[] projection = { Instances.BEGIN, Instances.START_MINUTE };
 
         Cursor instances = getInstances(timeZone, testStart, testEnd, projection);
-        //dumpInstances(instances, timeZone, "initial");
+        if (DEBUG_RECURRENCE) {
+            dumpInstances(instances, timeZone, "initial");
+        }
 
         assertEquals("initial recurrence instance count", 5, instances.getCount());
 
@@ -796,7 +870,9 @@ public class CalendarCts extends InstrumentationTestCase {
 
         // Check to see if it took.
         instances = getInstances(timeZone, testStart, testEnd, projection);
-        //dumpInstances(instances, timeZone, "with new rule");
+        if (DEBUG_RECURRENCE) {
+            dumpInstances(instances, timeZone, "with new rule");
+        }
 
         assertEquals("count with exception", 4, instances.getCount());
 
@@ -863,7 +939,9 @@ public class CalendarCts extends InstrumentationTestCase {
         String newLocation = "NEW!";
 
         Cursor instances = getInstances(timeZone, testStart, testEnd, projection);
-        //dumpInstances(instances, timeZone, "initial");
+        if (DEBUG_RECURRENCE) {
+            dumpInstances(instances, timeZone, "initial");
+        }
 
         assertEquals("initial recurrence instance count", 3, instances.getCount());
 
@@ -908,8 +986,6 @@ public class CalendarCts extends InstrumentationTestCase {
         endTime.parse3339(endWhen);
         long endMillis = endTime.toMillis(false);
 
-        Log.d(TAG, "getInstances: startMillis=" + startMillis + ", endMillis=" + endMillis);
-
         // We want a list of instances that occur between the specified dates.
         Uri uri = Uri.withAppendedPath(CalendarContract.Instances.CONTENT_URI,
                 startMillis + "/" + endMillis);
@@ -933,7 +1009,11 @@ public class CalendarCts extends InstrumentationTestCase {
             long beginMil = instances.getLong(0);
             Time beginT = new Time(timeZone);
             beginT.set(beginMil);
-            Log.d(TAG, "--> begin=" + beginT.format3339(false) + " (" + beginMil + ")");
+            String logMsg = "--> begin=" + beginT.format3339(false) + " (" + beginMil + ")";
+            for (int i = 2; i < instances.getColumnCount(); i++) {
+                logMsg += " [" + instances.getString(i) + "]";
+            }
+            Log.d(TAG, logMsg);
         }
         instances.moveToPosition(posn);
     }
@@ -1036,17 +1116,28 @@ public class CalendarCts extends InstrumentationTestCase {
      * Add some attendees to an event.
      */
     private void addAttendees(String account, long eventId, int seed) {
-        ContentValues values = new ContentValues();
 
+        assertTrue(eventId >= 0);
+        Uri syncUri = asSyncAdapter(Attendees.CONTENT_URI, account, CTS_TEST_TYPE);
+
+        ContentValues values = new ContentValues();
+        values.put(Attendees.EVENT_ID, eventId);
+        values.put(Attendees.ATTENDEE_NAME, "Attender" + seed);
+        values.put(Attendees.ATTENDEE_EMAIL, CalendarHelper.generateCalendarOwnerEmail(account));
+        values.put(Attendees.ATTENDEE_STATUS, Attendees.ATTENDEE_STATUS_ACCEPTED);
+        values.put(Attendees.ATTENDEE_RELATIONSHIP, Attendees.RELATIONSHIP_ORGANIZER);
+        values.put(Attendees.ATTENDEE_TYPE, Attendees.TYPE_NONE);
+        Uri uri = mContentResolver.insert(syncUri, values);
+        seed++;
+
+        values = new ContentValues();
         values.put(Attendees.EVENT_ID, eventId);
         values.put(Attendees.ATTENDEE_NAME, "Attender" + seed);
         values.put(Attendees.ATTENDEE_EMAIL, "attender" + seed + "@example.com");
         values.put(Attendees.ATTENDEE_STATUS, Attendees.ATTENDEE_STATUS_TENTATIVE);
         values.put(Attendees.ATTENDEE_RELATIONSHIP, Attendees.RELATIONSHIP_NONE);
         values.put(Attendees.ATTENDEE_TYPE, Attendees.TYPE_NONE);
-
-        Uri syncUri = asSyncAdapter(Attendees.CONTENT_URI, account, CTS_TEST_TYPE);
-        Uri uri = mContentResolver.insert(syncUri, values);
+        uri = mContentResolver.insert(syncUri, values);
     }
 
     /**

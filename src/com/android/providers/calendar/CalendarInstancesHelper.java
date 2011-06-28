@@ -68,11 +68,11 @@ public class CalendarInstancesHelper {
             + "(" + Calendars.SYNC_EVENTS + " != ?) AND "
             + "(" + Events.LAST_SYNCED + " = ?)";
 
-    private static final String SQL_SELECT_EVENTS_SYNC_ID =
-            "SELECT " + Events._SYNC_ID +
-            " FROM " + Tables.EVENTS +
-            " WHERE " + CalendarProvider2.SQL_WHERE_ID;
-
+    /**
+     * Determines the set of Events where the _id matches the first query argument, or the
+     * originalId matches the second argument.  Returns the _id field from the set of
+     * Instances whose event_id field matches one of those events.
+     */
     private static final String SQL_WHERE_ID_FROM_INSTANCES_NOT_SYNCED =
             Instances._ID + " IN " +
             "(SELECT " + Tables.INSTANCES + "." + Instances._ID + " as _id" +
@@ -81,8 +81,14 @@ public class CalendarInstancesHelper {
             " ON (" +
             Tables.EVENTS + "." + Events._ID + "=" + Tables.INSTANCES + "." + Instances.EVENT_ID +
             ")" +
-            " WHERE " + Tables.EVENTS + "." + Events._ID + "=?)";
+            " WHERE " + Tables.EVENTS + "." + Events._ID + "=? OR " +
+                    Tables.EVENTS + "." + Events.ORIGINAL_ID + "=?)";
 
+    /**
+     * Determines the set of Events where the _sync_id matches the first query argument, or the
+     * originalSyncId matches the second argument.  Returns the _id field from the set of
+     * Instances whose event_id field matches one of those events.
+     */
     private static final String SQL_WHERE_ID_FROM_INSTANCES_SYNCED =
             Instances._ID + " IN " +
             "(SELECT " + Tables.INSTANCES + "." + Instances._ID + " as _id" +
@@ -126,6 +132,21 @@ public class CalendarInstancesHelper {
     }
 
     /**
+     * Extract the value from the specifed row and column of the Events table.
+     *
+     * @param db The database to access.
+     * @param rowId The Event's _id.
+     * @param columnName The name of the column to access.
+     * @return The value in string form.
+     */
+    private static String getEventValue(SQLiteDatabase db, long rowId, String columnName) {
+        String where = "SELECT " + columnName + " FROM " + Tables.EVENTS +
+            " WHERE " + Events._ID + "=?";
+        return DatabaseUtils.stringForQuery(db, where,
+                new String[] { String.valueOf(rowId) });
+    }
+
+    /**
      * Perform instance expansion on the given entries.
      *
      * @param begin Window start (ms).
@@ -135,6 +156,7 @@ public class CalendarInstancesHelper {
      */
     protected void performInstanceExpansion(long begin, long end, String localTimezone,
             Cursor entries) {
+        // TODO: this only knows how to work with events that have been synced with the server
         RecurrenceProcessor rp = new RecurrenceProcessor();
 
         // Key into the instance values to hold the original event concatenated
@@ -176,7 +198,7 @@ public class CalendarInstancesHelper {
         // d) Recurrence exceptions that modify an instance inside the
         //    window (subject to 1 week assumption above), but are outside
         //    the window.  These will not be displayed.  Cases c and d are
-        //    distingushed by the start / end time.
+        //    distinguished by the start / end time.
 
         while (entries.moveToNext()) {
             try {
@@ -584,6 +606,14 @@ public class CalendarInstancesHelper {
      */
     public void updateInstancesLocked(ContentValues values, long rowId, boolean newEvent,
             SQLiteDatabase db) {
+        /*
+         * This may be a recurring event (has an RRULE or RDATE), an exception to a recurring
+         * event (has ORIGINAL_ID or ORIGINAL_SYNC_ID), or a regular event.  Recurring events
+         * and exceptions require additional handling.
+         *
+         * If this is not a new event, it may already have entries in Instances, so we want
+         * to delete those before we do any additional work.
+         */
 
         // If there are no expanded Instances, then return.
         MetaData.Fields fields = mMetaData.getFieldsLocked();
@@ -603,9 +633,6 @@ public class CalendarInstancesHelper {
             return;
         }
 
-        Long lastDateMillis = values.getAsLong(Events.LAST_DATE);
-        Long originalInstanceTime = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
-
         if (!newEvent) {
             // Want to do this for regular event, recurrence, or exception.
             // For recurrence or exception, more deletion may happen below if we
@@ -619,8 +646,12 @@ public class CalendarInstancesHelper {
 
         String rrule = values.getAsString(Events.RRULE);
         String rdate = values.getAsString(Events.RDATE);
-        String originalEvent = values.getAsString(Events.ORIGINAL_SYNC_ID);
-        if (CalendarProvider2.isRecurrenceEvent(rrule, rdate, originalEvent)) {
+        String originalId = values.getAsString(Events.ORIGINAL_ID);
+        String originalSyncId = values.getAsString(Events.ORIGINAL_SYNC_ID);
+        if (CalendarProvider2.isRecurrenceEvent(rrule, rdate, originalId, originalSyncId)) {
+            Long lastDateMillis = values.getAsLong(Events.LAST_DATE);
+            Long originalInstanceTime = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
+
             // The recurrence or exception needs to be (re-)expanded if:
             // a) Exception or recurrence that falls inside window
             boolean insideWindow = dtstartMillis <= fields.maxInstance
@@ -631,6 +662,7 @@ public class CalendarInstancesHelper {
             boolean affectsWindow = originalInstanceTime != null
                     && originalInstanceTime <= fields.maxInstance
                     && originalInstanceTime >= fields.minInstance - MAX_ASSUMED_DURATION;
+            //Log.d(TAG, "Recurrence: inside=" + insideWindow + ", affects=" + affectsWindow);
             if (insideWindow || affectsWindow) {
                 updateRecurrenceInstancesLocked(values, rowId, db);
             }
@@ -688,41 +720,87 @@ public class CalendarInstancesHelper {
      */
     private void updateRecurrenceInstancesLocked(ContentValues values, long rowId,
             SQLiteDatabase db) {
+        /*
+         *  There are two categories of event that "rowId" may refer to:
+         *  (1) Recurrence event.
+         *  (2) Exception to recurrence event.  Has non-empty originalId (if it originated
+         *      locally), originalSyncId (if it originated from the server), or both (if
+         *      it's fully synchronized).
+         *
+         * Exceptions may arrive from the server before the recurrence event, which means:
+         *  - We could find an originalSyncId but a lookup on originalSyncId could fail (in
+         *    which case we can just ignore the exception for now).
+         *  - There may be a brief period between the time we receive a recurrence and the
+         *    time we set originalId in related exceptions where originalSyncId is the only
+         *    way to find exceptions for a recurrence.  Thus, an empty originalId field may
+         *    not be used to decide if an event is an exception.
+         */
+
         MetaData.Fields fields = mMetaData.getFieldsLocked();
         String instancesTimezone = mCalendarCache.readTimezoneInstances();
-        String originalEvent = values.getAsString(Events.ORIGINAL_SYNC_ID);
-        String recurrenceSyncId;
-        if (originalEvent != null) {
-            recurrenceSyncId = originalEvent;
-        } else {
-            // Get the recurrence's sync id from the database
-            recurrenceSyncId = DatabaseUtils.stringForQuery(db, SQL_SELECT_EVENTS_SYNC_ID,
-                    new String[] {
-                        String.valueOf(rowId)
-                    });
-        }
-        // recurrenceSyncId is the _sync_id of the underlying recurrence
-        // If the recurrence hasn't gone to the server, it will be null.
 
-        // Need to clear out old instances
+        // Get the originalSyncId.  If it's not in "values", check the database.
+        String originalSyncId = values.getAsString(Events.ORIGINAL_SYNC_ID);
+        if (originalSyncId == null) {
+            originalSyncId = getEventValue(db, rowId, Events.ORIGINAL_SYNC_ID);
+        }
+
+        String recurrenceSyncId;
+        if (originalSyncId != null) {
+            // This event is an exception; set recurrenceSyncId to the original.
+            recurrenceSyncId = originalSyncId;
+        } else {
+            // This could be a recurrence or an exception.  If it has been synced with the
+            // server we can get the _sync_id and know for certain that it's a recurrence.
+            // If not, we'll deal with it below.
+            recurrenceSyncId = values.getAsString(Events._SYNC_ID);
+            if (recurrenceSyncId == null) {
+                // Not in "values", check the database.
+                recurrenceSyncId = getEventValue(db, rowId, Events._SYNC_ID);
+            }
+        }
+
+        // Clear out old instances
+        int delCount;
         if (recurrenceSyncId == null) {
-            // Creating updating a recurrence that hasn't gone to the server.
-            // Need to delete based on row id
+            // We're creating or updating a recurrence or exception that hasn't been to the
+            // server.  If this is a recurrence event, the event ID is simply the rowId.  If
+            // it's an exception, we will find the value in the originalId field.
+            String originalId = values.getAsString(Events.ORIGINAL_ID);
+            if (originalId == null) {
+                // Not in "values", check the database.
+                originalId = getEventValue(db, rowId, Events.ORIGINAL_ID);
+            }
+            String recurrenceId;
+            if (originalId != null) {
+                // This event is an exception; set recurrenceId to the original.
+                recurrenceId = originalId;
+            } else {
+                // This event is a recurrence, so we just use the ID that was passed in.
+                recurrenceId = String.valueOf(rowId);
+            }
+
+            // Delete Instances entries for this Event (_id == recurrenceId) and for exceptions
+            // to this Event (originalId == recurrenceId).
             String where = SQL_WHERE_ID_FROM_INSTANCES_NOT_SYNCED;
-            db.delete(Tables.INSTANCES, where, new String[] {
-                "" + rowId
+            delCount = db.delete(Tables.INSTANCES, where, new String[] {
+                    recurrenceId, recurrenceId
             });
         } else {
-            // Creating or modifying a recurrence or exception.
-            // Delete instances for recurrence (_sync_id = recurrenceSyncId)
-            // and all exceptions (originalEvent = recurrenceSyncId)
+            // We're creating or updating a recurrence or exception that has been synced with
+            // the server.  Delete Instances entries for this Event (_sync_id == recurrenceSyncId)
+            // and for exceptions to this Event (originalSyncId == recurrenceSyncId).
             String where = SQL_WHERE_ID_FROM_INSTANCES_SYNCED;
-            db.delete(Tables.INSTANCES, where, new String[] {
+            delCount = db.delete(Tables.INSTANCES, where, new String[] {
                     recurrenceSyncId, recurrenceSyncId
             });
         }
 
+        //Log.d(TAG, "Recurrence: deleted " + delCount + " instances");
+        //dumpInstancesTable(db);
+
         // Now do instance expansion
+        // TODO: passing "rowId" is wrong if this is an exception - need originalId then
         Cursor entries = getRelevantRecurrenceEntries(recurrenceSyncId, rowId);
         try {
             performInstanceExpansion(fields.minInstance, fields.maxInstance,
@@ -738,7 +816,7 @@ public class CalendarInstancesHelper {
      * Determines the recurrence entries associated with a particular
      * recurrence. This set is the base recurrence and any exception. Normally
      * the entries are indicated by the sync id of the base recurrence (which is
-     * the originalEvent in the exceptions). However, a complication is that a
+     * the originalSyncId in the exceptions). However, a complication is that a
      * recurrence may not yet have a sync id. In that case, the recurrence is
      * specified by the rowId.
      *
@@ -826,4 +904,11 @@ public class CalendarInstancesHelper {
         values.put(Instances.END_MINUTE, endMinute);
     }
 
+    /**
+     * Dumps the contents of the Instances table to the log file.
+     */
+    private static void dumpInstancesTable(SQLiteDatabase db) {
+        Cursor cursor = db.query(Tables.INSTANCES, null, null, null, null, null, null);
+        DatabaseUtils.dumpCursor(cursor);
+    }
 }

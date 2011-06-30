@@ -93,13 +93,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Events._SYNC_ID,
             Events.RRULE,
             Events.RDATE,
+            Events.ORIGINAL_ID,
             Events.ORIGINAL_SYNC_ID,
     };
 
     private static final int EVENTS_SYNC_ID_INDEX = 0;
     private static final int EVENTS_RRULE_INDEX = 1;
     private static final int EVENTS_RDATE_INDEX = 2;
-    private static final int EVENTS_ORIGINAL_EVENT_INDEX = 3;
+    private static final int EVENTS_ORIGINAL_ID_INDEX = 3;
+    private static final int EVENTS_ORIGINAL_SYNC_ID_INDEX = 4;
 
     private static final String[] ID_PROJECTION = new String[] {
             Attendees._ID,
@@ -1362,10 +1364,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     }
 
-    public static boolean isRecurrenceEvent(String rrule, String rdate, String originalEvent) {
-        return (!TextUtils.isEmpty(rrule)||
-                !TextUtils.isEmpty(rdate)||
-                !TextUtils.isEmpty(originalEvent));
+    /**
+     * Determines if the event is recurrent, based on the provided values.
+     */
+    public static boolean isRecurrenceEvent(String rrule, String rdate, String originalId,
+            String originalSyncId) {
+        return (!TextUtils.isEmpty(rrule) ||
+                !TextUtils.isEmpty(rdate) ||
+                !TextUtils.isEmpty(originalId) ||
+                !TextUtils.isEmpty(originalSyncId));
     }
 
     /**
@@ -1652,6 +1659,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             ContentValues values = new ContentValues();
             DatabaseUtils.cursorRowToContentValues(cursor, values);
 
+            // TODO: if we're changing this to an all-day event, we should ensure that
+            //       hours/mins/secs on DTSTART are zeroed out (before computing DTEND).
+            //       See fixAllDayTime().
+
             boolean createNewEvent = true;
             if (createSingleException) {
                 /*
@@ -1803,6 +1814,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     Log.d(TAG, "RE: new ID is " + newEventId);
                 }
 
+                // TODO: do we need to do something like this?
+                //updateEventRawTimesLocked(id, updatedValues);
+
+                /*
+                 * Force re-computation of the Instances associated with the recurrence event.
+                 */
+                mInstancesHelper.updateInstancesLocked(values, newEventId, true, mDb);
+
                 /*
                  * Some of the other tables (Attendees, Reminders, ExtendedProperties) reference
                  * the Event ID.  We need to copy the entries from the old event, filling in the
@@ -1841,24 +1860,32 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         int count = mDb.update(Tables.ATTENDEES, attValues,
                                 Attendees.EVENT_ID + "=? AND " + Attendees.ATTENDEE_EMAIL + "=?",
                                 new String[] { String.valueOf(newEventId), accountName });
-                        if (count != 1) {
-                            Log.wtf(TAG, "Attendee status update touched " + count + " rows");
+                        if (count != 1 && count != 2) {
+                            // We're only expecting one matching entry.  We might briefly see
+                            // two during a server sync.
+                            Log.e(TAG, "Attendee status update on event=" + newEventId +
+                                    " name=" + accountName + " touched " + count + " rows");
+                            if (false) {
+                                // This dumps PII in the log, don't ship with it enabled.
+                                Cursor debugCursor = mDb.query(Tables.ATTENDEES, null,
+                                        Attendees.EVENT_ID + "=? AND " +
+                                            Attendees.ATTENDEE_EMAIL + "=?",
+                                        new String[] { String.valueOf(newEventId), accountName },
+                                        null, null, null);
+                                DatabaseUtils.dumpCursor(debugCursor);
+                            }
+                            throw new RuntimeException("Status update WTF");
                         }
                     }
                     cursor.close();
                 }
             } else {
+                /*
+                 * Update any Instances changed by the update to this Event.
+                 */
+                mInstancesHelper.updateInstancesLocked(values, originalEventId, false, mDb);
                 newEventId = originalEventId;
             }
-
-            /*
-             * The database keeps track of the range of dates for which the Instances table has
-             * been populated.  To ensure that the Instances are re-generated, we zero out
-             * these values.
-             * (TODO: this causes re-eval of instances for all events; is there a
-             * way to invalidate instances for a single event?)
-             */
-            mMetaData.clearInstanceRange();
 
             mDb.setTransactionSuccessful();
             return newEventId;
@@ -1983,9 +2010,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                             }
                         }
                     }
-                    // If this was a recurring event with a _sync_id update any
-                    // exceptions that may have been added prior to the original
-                    // event
+
+                    /*
+                     * The server might send exceptions before the event they refer to.  When
+                     * this happens, the originalId field will not have been set in the
+                     * exception events (it's the recurrence events' _id field, so it can't be
+                     * known until the recurrence event is created).  When we add a recurrence
+                     * event with a non-empty _sync_id field, we write that event's _id to the
+                     * originalId field of any events whose originalSyncId matches _sync_id.
+                     */
                     if (values.containsKey(Events._SYNC_ID) && values.containsKey(Events.RRULE)
                             && !TextUtils.isEmpty(values.getAsString(Events.RRULE))) {
                         String syncId = values.getAsString(Events._SYNC_ID);
@@ -2707,8 +2740,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // instances.
                 String rrule = cursor.getString(EVENTS_RRULE_INDEX);
                 String rdate = cursor.getString(EVENTS_RDATE_INDEX);
-                String origEvent = cursor.getString(EVENTS_ORIGINAL_EVENT_INDEX);
-                if (isRecurrenceEvent(rrule, rdate, origEvent)) {
+                String origId = cursor.getString(EVENTS_ORIGINAL_ID_INDEX);
+                String origSyncId = cursor.getString(EVENTS_ORIGINAL_SYNC_ID_INDEX);
+                if (isRecurrenceEvent(rrule, rdate, origId, origSyncId)) {
                     mMetaData.clearInstanceRange();
                 }
 
@@ -2875,23 +2909,18 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Cursor cursor = null;
             try {
                 cursor = getCursorForEventIdAndProjection(eventId,
-                        new String[] { Events.RRULE, Events.RDATE, Events.ORIGINAL_SYNC_ID });
+                        new String[] { Events.ORIGINAL_SYNC_ID });
                 if (!cursor.moveToFirst()) {
                     if (Log.isLoggable(TAG, Log.WARN)) {
                         Log.w(TAG, "Cannot find Event with id: " + eventId);
                     }
                     return false;
                 }
-                String rrule = cursor.getString(0);
-                String rdate = cursor.getString(1);
-                String originalEvent = cursor.getString(2);
+                String originalSyncId = cursor.getString(0);
 
-                boolean isRecurrenceException =
-                        isRecurrenceEvent(rrule, rdate, originalEvent) &&
-                        !TextUtils.isEmpty(originalEvent);
-
-                if (isRecurrenceException) {
-                    return doesEventExistForSyncId(originalEvent);
+                if (!TextUtils.isEmpty(originalSyncId)) {
+                    // This event is an exception.  See if the recurring event still exists.
+                    return doesEventExistForSyncId(originalSyncId);
                 }
             } finally {
                 cursor.close();

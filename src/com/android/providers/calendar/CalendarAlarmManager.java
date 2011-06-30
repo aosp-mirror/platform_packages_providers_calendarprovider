@@ -490,8 +490,8 @@ public class CalendarAlarmManager {
         if (Log.isLoggable(CalendarProvider2.TAG, Log.DEBUG)) {
             Log.d(CalendarProvider2.TAG, "removing scheduled alarms");
         }
-        db.delete(CalendarAlerts.TABLE_NAME, CalendarAlerts.STATE + "=" + CalendarAlerts.SCHEDULED,
-                null /* whereArgs */);
+        db.delete(CalendarAlerts.TABLE_NAME, CalendarAlerts.STATE + "="
+                + CalendarAlerts.STATE_SCHEDULED, null /* whereArgs */);
     }
 
     public void set(int type, long triggerAtTime, PendingIntent operation) {

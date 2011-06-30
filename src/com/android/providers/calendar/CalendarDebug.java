@@ -75,6 +75,7 @@ public class CalendarDebug extends ListActivity {
          * @param params Void
          * @return a Map for each calendar
          */
+        @Override
         protected List<Map<String, String>> doInBackground(Void... params) {
             Cursor cursor = null;
             // items is the list of items to display in the list.
@@ -96,8 +97,9 @@ public class CalendarDebug extends ListActivity {
 
                         // Compute number of events in the calendar
                         String where = CalendarContract.Events.CALENDAR_ID + "=" + id;
-                        Cursor eventCursor = CalendarContract.Events.query(mContentResolver,
-                                EVENTS_PROJECTION, where, null, null);
+                        Cursor eventCursor = mContentResolver.query(
+                                CalendarContract.Events.CONTENT_URI, EVENTS_PROJECTION, where,
+                                null, null);
                         try {
                             eventCount = eventCursor.getCount();
                         } finally {
@@ -107,8 +109,9 @@ public class CalendarDebug extends ListActivity {
                         // Compute number of dirty events in the calendar
                         String dirtyWhere = CalendarContract.Events.CALENDAR_ID + "=" + id
                                 + " AND " + CalendarContract.Events.DIRTY + "=1";
-                        Cursor dirtyCursor = CalendarContract.Events.query(mContentResolver,
-                                EVENTS_PROJECTION, dirtyWhere, null, null);
+                        Cursor dirtyCursor = mContentResolver.query(
+                                CalendarContract.Events.CONTENT_URI, EVENTS_PROJECTION, dirtyWhere,
+                                null, null);
                         try {
                             dirtyCount = dirtyCursor.getCount();
                         } finally {
@@ -163,6 +166,7 @@ public class CalendarDebug extends ListActivity {
         }
     }
 
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         requestWindowFeature(Window.FEATURE_INDETERMINATE_PROGRESS);

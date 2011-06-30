@@ -1088,7 +1088,7 @@ public class CalendarCts extends InstrumentationTestCase {
     private long createAndVerifyException(String account, long originalEventId,
             ContentValues values) {
         // Create the exception
-        Uri uri = Uri.withAppendedPath(Events.EXCEPTION_CONTENT_URI,
+        Uri uri = Uri.withAppendedPath(Events.CONTENT_EXCEPTION_URI,
                 String.valueOf(originalEventId));
         uri = asSyncAdapter(uri, account, CTS_TEST_TYPE);
         Uri resultUri = mContentResolver.insert(uri, values);
@@ -1106,7 +1106,7 @@ public class CalendarCts extends InstrumentationTestCase {
      * @return The number of rows deleted.
      */
     private int deleteException(String account, long eventId, long excepId) {
-        Uri uri = Uri.withAppendedPath(Events.EXCEPTION_CONTENT_URI,
+        Uri uri = Uri.withAppendedPath(Events.CONTENT_EXCEPTION_URI,
                 eventId + "/" + excepId);
         uri = asSyncAdapter(uri, account, CTS_TEST_TYPE);
         return mContentResolver.delete(uri, null, null);

@@ -2060,7 +2060,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
         alert.put(CalendarContract.CalendarAlerts.CREATION_TIME, now);
         alert.put(CalendarContract.CalendarAlerts.RECEIVED_TIME, now);
         alert.put(CalendarContract.CalendarAlerts.NOTIFY_TIME, now);
-        alert.put(CalendarContract.CalendarAlerts.STATE, CalendarContract.CalendarAlerts.SCHEDULED);
+        alert.put(CalendarContract.CalendarAlerts.STATE,
+                CalendarContract.CalendarAlerts.STATE_SCHEDULED);
         alert.put(CalendarContract.CalendarAlerts.MINUTES, 30);
         alert.put(CalendarContract.CalendarAlerts.EVENT_ID, eventId);
 
@@ -2098,7 +2099,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
         testQueryCount(CalendarContract.Attendees.CONTENT_URI, "event_id=" + eventId, 1);
 
         alert = new ContentValues();
-        alert.put(CalendarContract.CalendarAlerts.STATE, CalendarContract.CalendarAlerts.DISMISSED);
+        alert.put(CalendarContract.CalendarAlerts.STATE,
+                CalendarContract.CalendarAlerts.STATE_DISMISSED);
 
         assertEquals("update", 1, mResolver.update(
                 updatedUri(alertUri, syncAdapter, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE), alert,

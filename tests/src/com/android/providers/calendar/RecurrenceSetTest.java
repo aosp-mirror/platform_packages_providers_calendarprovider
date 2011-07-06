@@ -16,9 +16,10 @@
 
 package com.android.providers.calendar;
 
+import com.android.calendarcommon.ICalendar;
+import com.android.calendarcommon.RecurrenceSet;
+
 import android.content.ContentValues;
-import android.pim.ICalendar;
-import android.pim.RecurrenceSet;
 import android.provider.CalendarContract;
 import android.test.suitebuilder.annotation.SmallTest;
 import junit.framework.TestCase;

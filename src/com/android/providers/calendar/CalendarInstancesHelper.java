@@ -16,15 +16,16 @@
 
 package com.android.providers.calendar;
 
+import com.android.calendarcommon.EventRecurrence;
+import com.android.calendarcommon.RecurrenceSet;
 import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
+
 import android.content.ContentValues;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.os.Debug;
-import android.pim.EventRecurrence;
-import android.pim.RecurrenceSet;
 import android.provider.CalendarContract.Calendars;
 import android.provider.CalendarContract.Events;
 import android.provider.CalendarContract.Instances;

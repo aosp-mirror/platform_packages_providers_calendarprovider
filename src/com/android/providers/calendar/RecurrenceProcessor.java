@@ -17,8 +17,9 @@
 
 package com.android.providers.calendar;
 
-import android.pim.EventRecurrence;
-import android.pim.RecurrenceSet;
+import com.android.calendarcommon.EventRecurrence;
+import com.android.calendarcommon.RecurrenceSet;
+
 import android.text.format.Time;
 import android.util.Log;
 

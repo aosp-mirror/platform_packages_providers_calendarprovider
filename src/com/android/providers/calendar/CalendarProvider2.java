@@ -17,6 +17,8 @@
 
 package com.android.providers.calendar;
 
+import com.android.calendarcommon.EventRecurrence;
+import com.android.calendarcommon.RecurrenceSet;
 import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
 import com.android.providers.calendar.CalendarDatabaseHelper.Views;
 import com.google.common.annotations.VisibleForTesting;
@@ -41,8 +43,6 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Message;
 import android.os.Process;
-import android.pim.EventRecurrence;
-import android.pim.RecurrenceSet;
 import android.provider.BaseColumns;
 import android.provider.CalendarContract;
 import android.provider.CalendarContract.Attendees;

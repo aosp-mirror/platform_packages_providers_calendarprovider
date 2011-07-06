@@ -19,7 +19,8 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_TAGS := optional
 
 LOCAL_STATIC_JAVA_LIBRARIES := guava \
-        android-common
+        android-common \
+        calendar-common
 
 LOCAL_SRC_FILES := $(call all-java-files-under,src)
 LOCAL_SRC_FILES += \

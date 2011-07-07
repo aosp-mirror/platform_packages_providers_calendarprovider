@@ -1521,50 +1521,94 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     /**
-     * Prepares an update to a recurrent event so it will stop just before a new series
-     * begins.  This is useful when modifying "this and all future events".
+     * Splits a recurrent event at a specified instance.  This is useful when modifying "this
+     * and all future events".
+     *<p>
+     * If the recurrence rule has a COUNT specified, we need to split that at the point of the
+     * exception.  If the exception is instance N (0-based), the original COUNT is reduced
+     * to N, and the exception's COUNT is set to (COUNT - N).
+     *<p>
+     * If the recurrence doesn't have a COUNT, we need to update or introduce an UNTIL value,
+     * so that the original recurrence will end just before the exception instance.  (Note
+     * that UNTIL dates are inclusive.)
+     *<p>
+     * This should not be used to update the first instance ("update all events" action).
      *
-     * The "until" time is specified in the rrule in UTC.  If the original event was an "all day"
-     * event, we also need to convert the dtstart to UTC.
-     *
-     * @param values Event description; must include EVENT_TIMEZONE and DTSTART.
+     * @param values The original event values; must include EVENT_TIMEZONE and DTSTART.
+     *        The RRULE value may be modified (with the expectation that this will propagate
+     *        into the exception event).
      * @param endTimeMillis The time before which the event must end (i.e. the start time of the
      *        exception event instance).
-     * @return Values to apply to the existing event.
+     * @return Values to apply to the original event.
      */
     private static ContentValues setRecurrenceEnd(ContentValues values, long endTimeMillis) {
-        boolean allDay = values.getAsBoolean(Events.ALL_DAY);
-        String oldRrule = values.getAsString(Events.RRULE);
+        boolean origAllDay = values.getAsBoolean(Events.ALL_DAY);
+        String origRrule = values.getAsString(Events.RRULE);
 
-        EventRecurrence eventRecurrence = new EventRecurrence();
-        eventRecurrence.parse(oldRrule);
+        EventRecurrence origRecurrence = new EventRecurrence();
+        origRecurrence.parse(origRrule);
 
-        Time untilTime = new Time();
+        // Get the start time of the first instance in the original recurrence.
+        long startTimeMillis = values.getAsLong(Events.DTSTART);
         Time dtstart = new Time();
-
-        // The "until" time must be in UTC time in order for Google calendar
-        // to display it properly. For all-day events, the "until" time string
-        // must include just the date field, and not the time field. The
-        // repeating events repeat up to and including the "until" time.
-        untilTime.timezone = Time.TIMEZONE_UTC;
         dtstart.timezone = values.getAsString(Events.EVENT_TIMEZONE);
-        dtstart.set(values.getAsLong(Events.DTSTART));
-
-        // Subtract one second from the exception begin time to get the "until" time.
-        untilTime.set(endTimeMillis - 1000); // subtract one second (1000 millis)
-        if (allDay) {
-            untilTime.hour = untilTime.minute = untilTime.second = 0;
-            untilTime.allDay = true;
-            untilTime.normalize(false);
-
-            dtstart.hour = dtstart.minute = dtstart.second = 0;
-            dtstart.allDay = true;
-            dtstart.timezone = Time.TIMEZONE_UTC;
-        }
-        eventRecurrence.until = untilTime.format2445();
+        dtstart.set(startTimeMillis);
 
         ContentValues updateValues = new ContentValues();
-        updateValues.put(Events.RRULE, eventRecurrence.toString());
+
+        if (origRecurrence.count > 0) {
+            /*
+             * Generate the full set of instances for this recurrence, from the first to the
+             * one just before endTimeMillis.  The list should never be empty, because this method
+             * should not be called for the first instance.  All we're really interested in is
+             * the *number* of instances found.
+             */
+            RecurrenceSet recurSet = new RecurrenceSet(values);
+            RecurrenceProcessor recurProc = new RecurrenceProcessor();
+            long[] recurrences;
+            try {
+                recurrences = recurProc.expand(dtstart, recurSet, startTimeMillis, endTimeMillis);
+            } catch (DateException de) {
+                throw new RuntimeException(de);
+            }
+
+            if (recurrences.length == 0) {
+                throw new RuntimeException("can't use this method on first instance");
+            }
+
+            EventRecurrence excepRecurrence = new EventRecurrence();
+            excepRecurrence.parse(origRrule);  // TODO: add/use a copy constructor to EventRecurrence
+            excepRecurrence.count -= recurrences.length;
+            values.put(Events.RRULE, excepRecurrence.toString());
+
+            origRecurrence.count = recurrences.length;
+
+        } else {
+            Time untilTime = new Time();
+
+            // The "until" time must be in UTC time in order for Google calendar
+            // to display it properly. For all-day events, the "until" time string
+            // must include just the date field, and not the time field. The
+            // repeating events repeat up to and including the "until" time.
+            untilTime.timezone = Time.TIMEZONE_UTC;
+
+            // Subtract one second from the exception begin time to get the "until" time.
+            untilTime.set(endTimeMillis - 1000); // subtract one second (1000 millis)
+            if (origAllDay) {
+                untilTime.hour = untilTime.minute = untilTime.second = 0;
+                untilTime.allDay = true;
+                untilTime.normalize(false);
+
+                // This should no longer be necessary -- DTSTART should already be in the correct
+                // format for an all-day event.
+                dtstart.hour = dtstart.minute = dtstart.second = 0;
+                dtstart.allDay = true;
+                dtstart.timezone = Time.TIMEZONE_UTC;
+            }
+            origRecurrence.until = untilTime.format2445();
+        }
+
+        updateValues.put(Events.RRULE, origRecurrence.toString());
         updateValues.put(Events.DTSTART, dtstart.normalize(true));
         return updateValues;
     }
@@ -1779,14 +1823,19 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     }
 
                     /*
-                     * Cap the original event so it ends just before the target instance.
+                     * Cap the original event so it ends just before the target instance.  In
+                     * some cases (nonzero COUNT) this will also update the RRULE in "values",
+                     * so that the exception we're creating terminates appropriately.  If a
+                     * new RRULE was specified by the caller, the new rule will overwrite our
+                     * changes when we merge the new values in below (which is the desired
+                     * behavior).
                      */
                     ContentValues splitValues = setRecurrenceEnd(values, originalInstanceTime);
                     mDb.update(Tables.EVENTS, splitValues, SQL_WHERE_ID,
                             new String[] { Long.toString(originalEventId) });
 
                     /*
-                     * Create the new event.  We remove originalInstanceTime, because we're now
+                     * Prepare the new event.  We remove originalInstanceTime, because we're now
                      * creating a new event rather than an exception.
                      *
                      * We're always cloning a non-exception event (we tested to make sure the

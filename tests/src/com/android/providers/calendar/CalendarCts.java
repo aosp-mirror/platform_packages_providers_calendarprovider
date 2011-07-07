@@ -953,7 +953,6 @@ public class CalendarCts extends InstrumentationTestCase {
 
         long dtstartMillis = excepValues.getAsLong(Events.DTSTART);
         dtstartMillis += 24 * 60 * 60 * 1000;       // add one day -- use the second instance
-        Log.d("EXTRA", "inst " + dtstartMillis + " osync=" + excepValues.getAsString(Events.ORIGINAL_SYNC_ID));
         excepValues.put(Events.ORIGINAL_INSTANCE_TIME, dtstartMillis);
         dtstartMillis += 1800 * 1000;
         excepValues.put(Events.DTSTART, dtstartMillis);
@@ -1000,7 +999,7 @@ public class CalendarCts extends InstrumentationTestCase {
 
         // Create recurring event
         ContentValues eventValues = EventHelper.getNewRecurringEventValues(account, seed++,
-                calendarId, true, "1999-01-01T06:00:00", "PT1H", "FREQ=WEEKLY;WKST=SU;COUNT=100");
+                calendarId, true, "1999-01-01T06:00:00", "PT1H", "FREQ=WEEKLY;WKST=SU;COUNT=10");
         long eventId = createAndVerifyEvent(account, seed++, calendarId, true, eventValues);
 
         // Add some attendees and reminders.

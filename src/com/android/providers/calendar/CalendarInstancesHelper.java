@@ -16,7 +16,9 @@
 
 package com.android.providers.calendar;
 
+import com.android.calendarcommon.DateException;
 import com.android.calendarcommon.EventRecurrence;
+import com.android.calendarcommon.RecurrenceProcessor;
 import com.android.calendarcommon.RecurrenceSet;
 import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
 

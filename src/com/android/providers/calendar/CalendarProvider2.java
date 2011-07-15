@@ -1817,6 +1817,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     if (DEBUG_EXCEPTION) {
                         Log.d(TAG, "RE: updating full event");
                     }
+                    if (!validateRecurrenceRule(modValues)) {
+                        throw new IllegalArgumentException("Invalid recurrence rule: " +
+                                values.getAsString(Events.RRULE));
+                    }
                     modValues.remove(Events.ORIGINAL_INSTANCE_TIME);
                     mDb.update(Tables.EVENTS, modValues, SQL_WHERE_ID,
                             new String[] { Long.toString(originalEventId) });
@@ -2179,6 +2183,32 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     /**
+     * Validates the recurrence rule, if any.  Currently this just ensures that, if an RRULE is
+     * specified, it contains a valid single recurrence rule.
+     * <p>
+     * TODO: support RRULEs with multiple recurrences.  Validate RDATE, EXRULE, EXDATE (possibly
+     * passing in an indication of whether we believe we have the full set, so we can reject
+     * EXRULE when not accompanied by RRULE).
+     *
+     * @return A boolean indicating successful validation.
+     */
+    private boolean validateRecurrenceRule(ContentValues values) {
+        String rrule = values.getAsString(Events.RRULE);
+
+        if (!TextUtils.isEmpty(rrule)) {
+            EventRecurrence er = new EventRecurrence();
+            try {
+                er.parse(rrule);
+            } catch (EventRecurrence.InvalidFormatException ife) {
+                Log.w(TAG, "Invalid recurrence rule: " + rrule);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Do some validation on event data before inserting. In particular make
      * sure calendar_id exists and dtend, duration, etc make sense for the type
      * of event (regular, recurrence, exception). Remove any unexpected fields.
@@ -2201,10 +2231,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             // dtstart is start time of first event
             // dtend is null
             // duration is the duration of the event
-            // rrule is the recurrence rule
+            // rrule is a valid recurrence rule
             // lastDate is the end of the last event or null if it repeats forever
             // originalEvent is null
             // originalInstanceTime is null
+            if (!validateRecurrenceRule(values)) {
+                throw new IllegalArgumentException("Invalid recurrence rule: " +
+                        values.getAsString(Events.RRULE));
+            }
             if (hasDtend || !hasDuration || hasOriginalEvent || hasOriginalInstanceTime) {
                 if (Log.isLoggable(TAG, Log.DEBUG)) {
                     Log.e(TAG, "Invalid values for recurrence: " + values);
@@ -3097,6 +3131,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case EVENTS:
             case EVENTS_ID:
             {
+                if (!validateRecurrenceRule(values)) {
+                    throw new RuntimeException("Invalid recurrence rule: " +
+                            values.getAsString(Events.RRULE));
+                }
                 long id = 0;
                 if (match == EVENTS_ID) {
                     id = ContentUris.parseId(uri);

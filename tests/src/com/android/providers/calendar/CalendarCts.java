@@ -1133,6 +1133,34 @@ public class CalendarCts extends InstrumentationTestCase {
         removeAndVerifyCalendar(account, calendarId);
     }
 
+    /**
+     * Issue bad requests and expect them to get rejected.
+     */
+    @MediumTest
+    public void testBadRequests() {
+        String account = "neg_account";
+        int seed = 0;
+
+        // Clean up just in case
+        CalendarHelper.deleteCalendarByAccount(mContentResolver, account);
+
+        // Create calendar
+        long calendarId = createAndVerifyCalendar(account, seed++, null);
+
+        // Create recurring event
+        String rrule = "FREQ=OFTEN;WKST=MO";
+        ContentValues eventValues = EventHelper.getNewRecurringEventValues(account, seed++,
+                calendarId, true, "1997-08-29T02:14:00", "PT1H", rrule);
+        try {
+            createAndVerifyEvent(account, seed++, calendarId, true, eventValues);
+            fail("Bad recurrence rule should have been rejected");
+        } catch (IllegalArgumentException iae) {
+            // good
+        }
+
+        // delete the calendar
+        removeAndVerifyCalendar(account, calendarId);
+    }
 
     /**
      * Acquires the set of instances that appear between the specified start and end points.

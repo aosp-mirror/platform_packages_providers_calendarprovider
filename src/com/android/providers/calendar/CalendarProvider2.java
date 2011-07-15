@@ -165,7 +165,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     protected static final String SQL_WHERE_ID = Events._ID + "=?";
     private static final String SQL_WHERE_EVENT_ID = "event_id=?";
-    private static final String SQL_WHERE_ORIGINAL_EVENT = Events.ORIGINAL_SYNC_ID + "=?";
+    private static final String SQL_WHERE_ORIGINAL_ID = Events.ORIGINAL_ID + "=?";
+    private static final String SQL_WHERE_ORIGINAL_ID_NO_SYNC_ID = Events.ORIGINAL_ID +
+            "=? AND " + Events._SYNC_ID + " IS NULL";
     private static final String SQL_WHERE_ATTENDEES_ID =
             Tables.ATTENDEES + "." + Attendees._ID + "=? AND " +
             Tables.EVENTS + "." + Events._ID + "=" + Tables.ATTENDEES + "." + Attendees.EVENT_ID;
@@ -2796,6 +2798,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 if (isRecurrenceEvent(rrule, rdate, origId, origSyncId)) {
                     mMetaData.clearInstanceRange();
                 }
+                boolean isRecurrence = !TextUtils.isEmpty(rrule) || !TextUtils.isEmpty(rdate);
 
                 // we clean the Events and Attendees table if the caller is CalendarSyncAdapter
                 // or if the event is local (no syncId)
@@ -2804,6 +2807,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // (Attendees, Instances, Reminders, etc).
                 if (callerIsSyncAdapter || emptySyncId) {
                     mDb.delete(Tables.EVENTS, SQL_WHERE_ID, selectionArgs);
+
+                    // If this is a recurrence, and the event was never synced with the server,
+                    // we want to delete any exceptions as well.  (If it has been to the server,
+                    // we'll let the sync adapter delete the events explicitly.)  We assume that,
+                    // if the recurrence hasn't been synced, the exceptions haven't either.
+                    if (isRecurrence && emptySyncId) {
+                        mDb.delete(Tables.EVENTS, SQL_WHERE_ORIGINAL_ID, selectionArgs);
+                    }
                 } else {
                     // Event is on the server, so we "soft delete", i.e. mark as deleted so that
                     // the sync adapter has a chance to tell the server about the deletion.  After
@@ -2813,6 +2824,22 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     values.put(Events.DELETED, 1);
                     values.put(Events.DIRTY, 1);
                     mDb.update(Tables.EVENTS, values, SQL_WHERE_ID, selectionArgs);
+
+                    // Exceptions that have been synced shouldn't be deleted -- the sync
+                    // adapter will take care of that -- but we want to "soft delete" them so
+                    // that they will be removed from the instances list.
+                    // TODO: this seems to confuse the sync adapter, and leaves you with an
+                    //       invisible "ghost" event after the server sync.  Maybe we can fix
+                    //       this by making instance generation smarter?  Not vital, since the
+                    //       exception instances disappear after the server sync.
+                    //mDb.update(Tables.EVENTS, values, SQL_WHERE_ORIGINAL_ID_HAS_SYNC_ID,
+                    //        selectionArgs);
+
+                    // It's possible for the original event to be on the server but have
+                    // exceptions that aren't.  We want to remove all events with a matching
+                    // original_id and an empty _sync_id.
+                    mDb.delete(Tables.EVENTS, SQL_WHERE_ORIGINAL_ID_NO_SYNC_ID,
+                            selectionArgs);
 
                     // Delete associated data; attendees, however, are deleted with the actual event
                     //  so that the sync adapter is able to notify attendees of the cancellation.

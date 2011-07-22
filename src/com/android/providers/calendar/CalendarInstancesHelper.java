@@ -665,7 +665,10 @@ public class CalendarInstancesHelper {
             boolean affectsWindow = originalInstanceTime != null
                     && originalInstanceTime <= fields.maxInstance
                     && originalInstanceTime >= fields.minInstance - MAX_ASSUMED_DURATION;
-            //Log.d(TAG, "Recurrence: inside=" + insideWindow + ", affects=" + affectsWindow);
+            if (CalendarProvider2.DEBUG_INSTANCES) {
+                Log.d(TAG + "-i", "Recurrence: inside=" + insideWindow +
+                        ", affects=" + affectsWindow);
+            }
             if (insideWindow || affectsWindow) {
                 updateRecurrenceInstancesLocked(values, rowId, db);
             }

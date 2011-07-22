@@ -45,6 +45,9 @@ public class CalendarCts extends InstrumentationTestCase {
             "Pacific/Auckland", };
     // @formatter:on
 
+    private static final String SQL_WHERE_ID = Events._ID + "=?";
+    private static final String SQL_WHERE_CALENDAR_ID = Events.CALENDAR_ID + "=?";
+
     private ContentResolver mContentResolver;
 
     /** If set, log verbose instance info when running recurrence tests. */
@@ -284,7 +287,8 @@ public class CalendarCts extends InstrumentationTestCase {
                 values.put(Events.DIRTY, 0);
                 values.put(Events.SYNC_DATA8, "0");
             } else {
-                values.put(Events.DIRTY, 1);
+                // only the sync adapter can set the DIRTY flag
+                //values.put(Events.DIRTY, 1);
             }
             // values.put(Events.SYNC1, "SYNC1:" + seedString);
             // values.put(Events.SYNC2, "SYNC2:" + seedString);
@@ -375,9 +379,9 @@ public class CalendarCts extends InstrumentationTestCase {
                 values.put(Events._SYNC_ID, "SYNC_ID:" + seedString);
                 values.put(Events.SYNC_DATA4, "SYNC_V:" + seedString);
                 values.put(Events.SYNC_DATA5, "SYNC_TIME:" + seedString);
+                values.put(Events.DIRTY, 0);
             }
             original.putAll(values);
-            original.put(Events.DIRTY, asSyncAdapter ? 0 : 1);
             return values;
         }
 
@@ -549,26 +553,28 @@ public class CalendarCts extends InstrumentationTestCase {
 
     @MediumTest
     public void testEventUpdateAsApp() {
-
         String account = "em1_account";
         int seed = 0;
 
         // Clean up just in case
         CalendarHelper.deleteCalendarByAccount(mContentResolver, account);
 
-        // Create calendar and event
+        // Create calendar
         long calendarId = createAndVerifyCalendar(account, seed++, null);
 
+        // Create event as sync adapter
         ContentValues eventValues = EventHelper
                 .getNewEventValues(account, seed++, calendarId, true);
         long eventId = createAndVerifyEvent(account, seed, calendarId, true, eventValues);
 
+        // Update event as app
         Uri eventUri = ContentUris.withAppendedId(Events.CONTENT_URI, eventId);
 
-        ContentValues updateVals = EventHelper.getUpdateEventValuesWithOriginal(eventValues,
+        ContentValues updateValues = EventHelper.getUpdateEventValuesWithOriginal(eventValues,
                 seed++, false);
-        assertEquals(1, mContentResolver.update(eventUri, updateVals, null, null));
-        verifyEvent(eventValues, eventId);
+        assertEquals(1, mContentResolver.update(eventUri, updateValues, null, null));
+        updateValues.put(Events.DIRTY, 1);      // provider should have marked as dirty
+        verifyEvent(updateValues, eventId);
 
         removeAndVerifyEvent(eventUri, eventValues, account);
 
@@ -576,7 +582,49 @@ public class CalendarCts extends InstrumentationTestCase {
         removeAndVerifyCalendar(account, calendarId);
     }
 
-    // TODO test modifying an event as sync adapter
+    /**
+     * Tests update of multiple events with a single update call.
+     */
+    @MediumTest
+    public void testBulkUpdate() {
+        String account = "bup_account";
+        int seed = 0;
+
+        // Clean up just in case
+        CalendarHelper.deleteCalendarByAccount(mContentResolver, account);
+
+        // Create calendar
+        long calendarId = createAndVerifyCalendar(account, seed++, null);
+        String calendarIdStr = String.valueOf(calendarId);
+
+        // Create events
+        ContentValues eventValues;
+        eventValues = EventHelper.getNewEventValues(account, seed++, calendarId, true);
+        long eventId1 = createAndVerifyEvent(account, seed, calendarId, true, eventValues);
+
+        eventValues = EventHelper.getNewEventValues(account, seed++, calendarId, true);
+        long eventId2 = createAndVerifyEvent(account, seed, calendarId, true, eventValues);
+
+        // Update the "description" field in all events in this calendar.
+        String newDescription = "bulk edit";
+        ContentValues updateValues = new ContentValues();
+        updateValues.put(Events.DESCRIPTION, newDescription);
+
+        // Must be sync adapter to do a bulk update.
+        Uri uri = asSyncAdapter(Events.CONTENT_URI, account, CTS_TEST_TYPE);
+        int count = mContentResolver.update(uri, updateValues, SQL_WHERE_CALENDAR_ID,
+                new String[] { calendarIdStr });
+
+        // Check to see if the changes went through.
+        Uri eventUri = Events.CONTENT_URI;
+        Cursor c = mContentResolver.query(eventUri, new String[] { Events.DESCRIPTION },
+                SQL_WHERE_CALENDAR_ID, new String[] { calendarIdStr }, null);
+        assertEquals(2, c.getCount());
+        while (c.moveToNext()) {
+            assertEquals(newDescription, c.getString(0));
+        }
+        c.close();
+    }
 
     /**
      * Tests the content provider's enforcement of restrictions on who is allowed to modify
@@ -588,6 +636,8 @@ public class CalendarCts extends InstrumentationTestCase {
     @MediumTest
     public void testSyncOnlyInsertEnforcement() {
         // These operations should not succeed, so there should be nothing to clean up after.
+        // TODO: this should be a new event augmented with an illegal column, not a single
+        //       column.  Otherwise we might be tripping over a "DTSTART must exist" test.
         ContentValues vals = new ContentValues();
         for (int i = 0; i < Calendars.SYNC_WRITABLE_COLUMNS.length; i++) {
             boolean threw = false;
@@ -609,7 +659,7 @@ public class CalendarCts extends InstrumentationTestCase {
      * This (and the other recurrence tests) uses dates well in the past to reduce the likelihood
      * of encountering non-test recurring events.  (Ideally we would select events associated
      * with a specific calendar.)  With dates well in the past, it's also important to have a
-     * fixed maximum count or end date; otherwise, ifthe metadata min/max instance values are
+     * fixed maximum count or end date; otherwise, if the metadata min/max instance values are
      * large enough, the recurrence recalculation processor could get triggered on an insert or
      * update and bump up against the 2000-instance limit.
      *
@@ -645,6 +695,48 @@ public class CalendarCts extends InstrumentationTestCase {
         assertEquals("recurrence instance count", 4, instanceCount);
 
         // delete the calendar
+        removeAndVerifyCalendar(account, calendarId);
+    }
+
+    /**
+     * Tests conversion of a regular event to a recurring event.
+     */
+    @MediumTest
+    public void testConversionToRecurring() {
+        String account = "reconv_account";
+        int seed = 0;
+
+        // Clean up just in case
+        CalendarHelper.deleteCalendarByAccount(mContentResolver, account);
+
+        // Create calendar and event
+        long calendarId = createAndVerifyCalendar(account, seed++, null);
+
+        ContentValues eventValues = EventHelper
+                .getNewEventValues(account, seed++, calendarId, true);
+        long eventId = createAndVerifyEvent(account, seed, calendarId, true, eventValues);
+
+        long dtstart = eventValues.getAsLong(Events.DTSTART);
+        long dtend = eventValues.getAsLong(Events.DTEND);
+        long durationSecs = (dtend - dtstart) / 1000;
+
+        ContentValues updateValues = new ContentValues();
+        updateValues.put(Events.RRULE, "FREQ=WEEKLY");   // recurs forever
+        updateValues.put(Events.DURATION, "P" + durationSecs + "S");
+        updateValues.putNull(Events.DTEND);
+
+        // Issue update; do it as app instead of sync adapter to exercise that path.
+        updateAndVerifyEvent(account, calendarId, eventId, false, updateValues);
+
+        // Make sure LAST_DATE got nulled out by our infinitely repeating sequence.
+        Uri eventUri = ContentUris.withAppendedId(Events.CONTENT_URI, eventId);
+        Cursor c = mContentResolver.query(eventUri, new String[] { Events.LAST_DATE },
+                null, null, null);
+        assertEquals(1, c.getCount());
+        assertTrue(c.moveToFirst());
+        assertNull(c.getString(0));
+        c.close();
+
         removeAndVerifyCalendar(account, calendarId);
     }
 
@@ -1260,10 +1352,13 @@ public class CalendarCts extends InstrumentationTestCase {
             boolean asSyncAdapter, ContentValues values) {
         // Create an event
         if (values == null) {
-            values = EventHelper.getNewEventValues(account, seed, calendarId, true /* as sync*/);
+            values = EventHelper.getNewEventValues(account, seed, calendarId, asSyncAdapter);
         }
-        Uri syncUri = asSyncAdapter(Events.CONTENT_URI, account, CTS_TEST_TYPE);
-        Uri uri = mContentResolver.insert(syncUri, values);
+        Uri insertUri = Events.CONTENT_URI;
+        if (asSyncAdapter) {
+            insertUri = asSyncAdapter(insertUri, account, CTS_TEST_TYPE);
+        }
+        Uri uri = mContentResolver.insert(insertUri, values);
 
         // Verify
         EventHelper.addDefaultReadOnlyValues(values, account, asSyncAdapter);
@@ -1272,6 +1367,22 @@ public class CalendarCts extends InstrumentationTestCase {
 
         verifyEvent(values, eventId);
         return eventId;
+    }
+
+    /**
+     * Updates an event, and verifies that the updates took.
+     */
+    private void updateAndVerifyEvent(String account, long calendarId, long eventId,
+            boolean asSyncAdapter, ContentValues updateValues) {
+        Uri uri = Uri.withAppendedPath(Events.CONTENT_URI, String.valueOf(eventId));
+        if (asSyncAdapter) {
+            uri = asSyncAdapter(uri, account, CTS_TEST_TYPE);
+        }
+        int count = mContentResolver.update(uri, updateValues, null, null);
+
+        // Verify
+        assertEquals(1, count);
+        verifyEvent(updateValues, eventId);
     }
 
     /**

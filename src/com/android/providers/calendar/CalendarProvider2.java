@@ -80,6 +80,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
 
     protected static final String TAG = "CalendarProvider2";
+    static final boolean DEBUG_INSTANCES = false;
 
     private static final String TIMEZONE_GMT = "GMT";
     private static final String ACCOUNT_SELECTION_PREFIX = Calendars.ACCOUNT_NAME + "=? AND "
@@ -1236,6 +1237,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         long expandBegin = begin;
         long expandEnd = end;
 
+        if (DEBUG_INSTANCES) {
+            Log.d(TAG + "-i", "acquireInstanceRange begin=" + begin + " end=" + end +
+                    " useMin=" + useMinimumExpansionWindow + " force=" + forceExpansion);
+        }
+
         if (instancesTimezone == null) {
             Log.e(TAG, "Cannot run acquireInstanceRangeLocked() because instancesTimezone is null");
             return;
@@ -1274,6 +1280,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // if "home", then timezoneChanged only if current != previous
         // if "auto", then timezoneChanged, if !instancesTimezone.equals(localTimezone);
         if (maxInstance == 0 || timezoneChanged || forceExpansion) {
+            if (DEBUG_INSTANCES) {
+                Log.d(TAG + "-i", "Wiping instances and expanding from scratch");
+            }
+
             // Empty the Instances table and expand from scratch.
             mDb.execSQL("DELETE FROM " + Tables.INSTANCES + ";");
             if (Log.isLoggable(TAG, Log.VERBOSE)) {
@@ -1312,6 +1322,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // always be expanding because there would always be one more day
         // or week that hasn't been expanded.
         if ((begin >= minInstance) && (end <= maxInstance)) {
+            if (DEBUG_INSTANCES) {
+                Log.d(TAG + "-i", "instances are already expanded");
+            }
             if (Log.isLoggable(TAG, Log.VERBOSE)) {
                 Log.v(TAG, "Canceled instance query (" + expandBegin + ", " + expandEnd
                         + ") falls within previously expanded range.");
@@ -1381,130 +1394,70 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     /**
      * Takes an event and corrects the hrs, mins, secs if it is an allDay event.
-     *
+     * <p>
      * AllDay events should have hrs, mins, secs set to zero. This checks if this is true and
-     * corrects the fields DTSTART, DTEND, and DURATION if necessary. Also checks to ensure that
-     * either both DTSTART and DTEND or DTSTART and DURATION are set for each event.
+     * corrects the fields DTSTART, DTEND, and DURATION if necessary.
      *
-     * @param updatedValues The values to check and correct
+     * @param values The values to check and correct
+     * @param modValues Any updates will be stored here.  This may be the same object as
+     *   <strong>values</strong>.
      * @return Returns true if a correction was necessary, false otherwise
      */
-    private boolean fixAllDayTime(Uri uri, ContentValues updatedValues) {
-        boolean neededCorrection = false;
-        if (updatedValues.containsKey(Events.ALL_DAY)
-                && updatedValues.getAsInteger(Events.ALL_DAY).intValue() == 1) {
-            Long dtstart = updatedValues.getAsLong(Events.DTSTART);
-            Long dtend = updatedValues.getAsLong(Events.DTEND);
-            String duration = updatedValues.getAsString(Events.DURATION);
-            Time time = new Time();
-            Cursor currentTimesCursor = null;
-            String tempValue;
-            // If a complete set of time fields doesn't exist query the db for them. A complete set
-            // is dtstart and dtend for non-recurring events or dtstart and duration for recurring
-            // events.
-            if(dtstart == null || (dtend == null && duration == null)) {
-                // Make sure we have an id to search for, if not this is probably a new event
-                if (uri.getPathSegments().size() == 2) {
-                    currentTimesCursor = query(uri,
-                            ALLDAY_TIME_PROJECTION,
-                            null /* selection */,
-                            null /* selectionArgs */,
-                            null /* sort */);
-                    if (currentTimesCursor != null) {
-                        if (!currentTimesCursor.moveToFirst() ||
-                                currentTimesCursor.getCount() != 1) {
-                            // Either this is a new event or the query is too general to get data
-                            // from the db. In either case don't try to use the query and catch
-                            // errors when trying to update the time fields.
-                            currentTimesCursor.close();
-                            currentTimesCursor = null;
-                        }
-                    }
-                }
-            }
+    private boolean fixAllDayTime(ContentValues values, ContentValues modValues) {
+        if (values.getAsInteger(Events.ALL_DAY).intValue() == 0) {
+            return false;
+        }
 
-            // Ensure dtstart exists for this event (always required) and set so h,m,s are 0 if
-            // necessary.
-            // TODO Move this somewhere to check all events, not just allDay events.
-            if (dtstart == null) {
-                if (currentTimesCursor != null) {
-                    // getLong returns 0 for empty fields, we'd like to know if a field is empty
-                    // so getString is used instead.
-                    tempValue = currentTimesCursor.getString(ALLDAY_DTSTART_INDEX);
-                    try {
-                        dtstart = Long.valueOf(tempValue);
-                    } catch (NumberFormatException e) {
-                        currentTimesCursor.close();
-                        throw new IllegalArgumentException("Event has no DTSTART field, the db " +
-                            "may be damaged. Set DTSTART for this event to fix.");
-                    }
-                } else {
-                    throw new IllegalArgumentException("DTSTART cannot be empty for new events.");
-                }
-            }
+        boolean neededCorrection = false;
+
+        Long dtstart = values.getAsLong(Events.DTSTART);
+        Long dtend = values.getAsLong(Events.DTEND);
+        String duration = values.getAsString(Events.DURATION);
+        Time time = new Time();
+        String tempValue;
+
+        // Change dtstart so h,m,s are 0 if necessary.
+        time.clear(Time.TIMEZONE_UTC);
+        time.set(dtstart.longValue());
+        if (time.hour != 0 || time.minute != 0 || time.second != 0) {
+            time.hour = 0;
+            time.minute = 0;
+            time.second = 0;
+            modValues.put(Events.DTSTART, time.toMillis(true));
+            neededCorrection = true;
+        }
+
+        // If dtend exists for this event make sure it's h,m,s are 0.
+        if (dtend != null) {
             time.clear(Time.TIMEZONE_UTC);
-            time.set(dtstart.longValue());
+            time.set(dtend.longValue());
             if (time.hour != 0 || time.minute != 0 || time.second != 0) {
                 time.hour = 0;
                 time.minute = 0;
                 time.second = 0;
-                updatedValues.put(Events.DTSTART, time.toMillis(true));
+                dtend = time.toMillis(true);
+                modValues.put(Events.DTEND, dtend);
                 neededCorrection = true;
             }
+        }
 
-            // If dtend exists for this event make sure it's h,m,s are 0.
-            if (dtend == null && currentTimesCursor != null) {
-                // getLong returns 0 for empty fields. We'd like to know if a field is empty
-                // so getString is used instead.
-                tempValue = currentTimesCursor.getString(ALLDAY_DTEND_INDEX);
-                try {
-                    dtend = Long.valueOf(tempValue);
-                } catch (NumberFormatException e) {
-                    dtend = null;
-                }
-            }
-            if (dtend != null) {
-                time.clear(Time.TIMEZONE_UTC);
-                time.set(dtend.longValue());
-                if (time.hour != 0 || time.minute != 0 || time.second != 0) {
-                    time.hour = 0;
-                    time.minute = 0;
-                    time.second = 0;
-                    dtend = time.toMillis(true);
-                    updatedValues.put(Events.DTEND, dtend);
-                    neededCorrection = true;
-                }
-            }
-
-            if (currentTimesCursor != null) {
-                if (duration == null) {
-                    duration = currentTimesCursor.getString(ALLDAY_DURATION_INDEX);
-                }
-                currentTimesCursor.close();
-            }
-
-            if (duration != null) {
-                int len = duration.length();
-                /* duration is stored as either "P<seconds>S" or "P<days>D". This checks if it's
-                 * in the seconds format, and if so converts it to days.
-                 */
-                if (len == 0) {
-                    duration = null;
-                } else if (duration.charAt(0) == 'P' &&
-                        duration.charAt(len - 1) == 'S') {
-                    int seconds = Integer.parseInt(duration.substring(1, len - 1));
-                    int days = (seconds + DAY_IN_SECONDS - 1) / DAY_IN_SECONDS;
-                    duration = "P" + days + "D";
-                    updatedValues.put(Events.DURATION, duration);
-                    neededCorrection = true;
-                }
-            }
-
-            if (duration == null && dtend == null) {
-                throw new IllegalArgumentException("DTEND and DURATION cannot both be null for " +
-                        "an event.");
+        if (duration != null) {
+            int len = duration.length();
+            /* duration is stored as either "P<seconds>S" or "P<days>D". This checks if it's
+             * in the seconds format, and if so converts it to days.
+             */
+            if (len == 0) {
+                duration = null;
+            } else if (duration.charAt(0) == 'P' &&
+                    duration.charAt(len - 1) == 'S') {
+                int seconds = Integer.parseInt(duration.substring(1, len - 1));
+                int days = (seconds + DAY_IN_SECONDS - 1) / DAY_IN_SECONDS;
+                duration = "P" + days + "D";
+                modValues.put(Events.DURATION, duration);
+                neededCorrection = true;
             }
         }
+
         return neededCorrection;
     }
 
@@ -1859,6 +1812,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             long newEventId;
             if (createNewEvent) {
                 values.remove(Events._ID);      // don't try to set this explicitly
+                scrubEventData(values);
                 validateEventData(values);
 
                 newEventId = mDb.insert(Tables.EVENTS, null, values);
@@ -1978,6 +1932,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 // TODO: do we really need to make a copy?
                 ContentValues updatedValues = new ContentValues(values);
+                scrubEventData(updatedValues);
                 validateEventData(updatedValues);
                 // updateLastDate must be after validation, to ensure proper last date computation
                 updatedValues = updateLastDate(updatedValues);
@@ -2012,7 +1967,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         updatedValues.put(Events.ORIGINAL_SYNC_ID, originalSyncId);
                     }
                 }
-                if (fixAllDayTime(uri, updatedValues)) {
+                if (fixAllDayTime(updatedValues, updatedValues)) {
                     if (Log.isLoggable(TAG, Log.WARN)) {
                         Log.w(TAG, "insertInTransaction: " +
                                 "allDay is true but sec, min, hour were not 0.");
@@ -2209,23 +2164,19 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     /**
-     * Do some validation on event data before inserting. In particular make
+     * Do some scrubbing on event data before inserting. In particular make
      * sure calendar_id exists and dtend, duration, etc make sense for the type
      * of event (regular, recurrence, exception). Remove any unexpected fields.
      *
      * @param values the ContentValues to insert
      */
-    private void validateEventData(ContentValues values) {
+    private void scrubEventData(ContentValues values) {
         boolean hasDtend = values.getAsLong(Events.DTEND) != null;
         boolean hasDuration = !TextUtils.isEmpty(values.getAsString(Events.DURATION));
         boolean hasRrule = !TextUtils.isEmpty(values.getAsString(Events.RRULE));
         boolean hasRdate = !TextUtils.isEmpty(values.getAsString(Events.RDATE));
-        boolean hasCalId = !TextUtils.isEmpty(values.getAsString(Events.CALENDAR_ID));
         boolean hasOriginalEvent = !TextUtils.isEmpty(values.getAsString(Events.ORIGINAL_SYNC_ID));
         boolean hasOriginalInstanceTime = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME) != null;
-        if (!hasCalId) {
-            throw new IllegalArgumentException("New events must include a calendar_id.");
-        }
         if (hasRrule || hasRdate) {
             // Recurrence:
             // dtstart is start time of first event
@@ -2277,6 +2228,42 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 values.remove(Events.DURATION);
             }
+        }
+    }
+
+    /**
+     * Validates event data.  Pass in the full set of values for the event (i.e. not just
+     * a part that's being updated).
+     *
+     * @param values Event data.
+     * @throws IllegalArgumentException if bad data is found.
+     */
+    private void validateEventData(ContentValues values) {
+        boolean hasDtstart = values.getAsLong(Events.DTSTART) != null;
+        boolean hasDtend = values.getAsLong(Events.DTEND) != null;
+        boolean hasDuration = !TextUtils.isEmpty(values.getAsString(Events.DURATION));
+        boolean hasRrule = !TextUtils.isEmpty(values.getAsString(Events.RRULE));
+        boolean hasRdate = !TextUtils.isEmpty(values.getAsString(Events.RDATE));
+        boolean hasCalId = !TextUtils.isEmpty(values.getAsString(Events.CALENDAR_ID));
+        if (!hasCalId) {
+            throw new IllegalArgumentException("New events must include a calendar_id.");
+        }
+        if (hasRrule || hasRdate) {
+            if (!validateRecurrenceRule(values)) {
+                throw new IllegalArgumentException("Invalid recurrence rule: " +
+                        values.getAsString(Events.RRULE));
+            }
+        }
+
+        if (!hasDtstart) {
+            throw new IllegalArgumentException("DTSTART cannot be empty.");
+        }
+        if (!hasDuration && !hasDtend) {
+            throw new IllegalArgumentException("DTEND and DURATION cannot both be null for " +
+                    "an event.");
+        }
+        if (hasDuration && hasDtend) {
+            throw new IllegalArgumentException("Cannot have both DTEND and DURATION in an event");
         }
     }
 
@@ -2480,6 +2467,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 new String[] {String.valueOf(eventId)});
     }
 
+    /**
+     * Calculates the "last date" of the event.  For a regular event this is the start time
+     * plus the duration.  For a recurring event this is the start date of the last event in
+     * the recurrence, plus the duration.  The event recurs forever, this returns -1.  If
+     * the recurrence rule can't be parsed, this returns -1.
+     *
+     * @param values
+     * @return the date, in milliseconds, since the start of the epoch (UTC), or -1 if an
+     *   exceptional condition exists.
+     * @throws DateException
+     */
     long calculateLastDate(ContentValues values)
             throws DateException {
         // Allow updates to some event fields like the title or hasAlarm
@@ -2522,6 +2520,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     Log.w(TAG, "Could not parse RRULE recurrence string: " +
                             values.get(CalendarContract.Events.RRULE), e);
                 }
+                // TODO: this should throw an exception or return a distinct error code
                 return lastMillis; // -1
             }
 
@@ -2542,6 +2541,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 RecurrenceProcessor rp = new RecurrenceProcessor();
                 lastMillis = rp.getLastOccurence(dtstartLocal, recur);
                 if (lastMillis == -1) {
+                    // repeats forever
                     return lastMillis;  // -1
                 }
             } else {
@@ -2577,6 +2577,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     }
 
+    /**
+     * Creates or updates an entry in the EventsRawTimes table.
+     *
+     * @param eventId The ID of the event that was just created or is being updated.
+     * @param values For a new event, the full set of event values; for an updated event,
+     *   the set of values that are being changed.
+     */
     private void updateEventRawTimesLocked(long eventId, ContentValues values) {
         ContentValues rawValues = new ContentValues();
 
@@ -2982,16 +2989,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         return mDb.delete(Tables.CALENDARS, selection, selectionArgs);
     }
 
-    private Cursor getCursorForEventIdAndProjection(String eventId, String[] projection) {
-        return mDb.query(Tables.EVENTS,
-                projection,
-                SQL_WHERE_ID,
-                new String[] { eventId },
-                null /* group by */,
-                null /* having */,
-                null /* order by*/);
-    }
-
     private boolean doesEventExistForSyncId(String syncId) {
         if (syncId == null) {
             if (Log.isLoggable(TAG, Log.WARN)) {
@@ -3014,35 +3011,171 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     // This is due to the Server semantics that generate STATUS_CANCELED for both creation
     // and deletion of a recurrence exception
     // See bug #3218104
-    private boolean doesStatusCancelUpdateMeanUpdate(String eventId, ContentValues values) {
-        boolean isStatusCanceled = values.containsKey(Events.STATUS) &&
-                (values.getAsInteger(Events.STATUS) == Events.STATUS_CANCELED);
+    private boolean doesStatusCancelUpdateMeanUpdate(ContentValues values,
+            ContentValues modValues) {
+        boolean isStatusCanceled = modValues.containsKey(Events.STATUS) &&
+                (modValues.getAsInteger(Events.STATUS) == Events.STATUS_CANCELED);
         if (isStatusCanceled) {
-            Cursor cursor = null;
-            try {
-                cursor = getCursorForEventIdAndProjection(eventId,
-                        new String[] { Events.ORIGINAL_SYNC_ID });
-                if (!cursor.moveToFirst()) {
-                    if (Log.isLoggable(TAG, Log.WARN)) {
-                        Log.w(TAG, "Cannot find Event with id: " + eventId);
-                    }
-                    return false;
-                }
-                String originalSyncId = cursor.getString(0);
+            String originalSyncId = values.getAsString(Events.ORIGINAL_SYNC_ID);
 
-                if (!TextUtils.isEmpty(originalSyncId)) {
-                    // This event is an exception.  See if the recurring event still exists.
-                    return doesEventExistForSyncId(originalSyncId);
-                }
-            } finally {
-                cursor.close();
+            if (!TextUtils.isEmpty(originalSyncId)) {
+                // This event is an exception.  See if the recurring event still exists.
+                return doesEventExistForSyncId(originalSyncId);
             }
         }
         // This is the normal case, we just want an UPDATE
         return true;
     }
 
-    // TODO: call calculateLastDate()!
+
+    /**
+     * Handles a request to update one or more events.
+     * <p>
+     * The original event(s) will be loaded from the database, merged with the new values,
+     * and the result checked for validity.  In some cases this will alter the supplied
+     * arguments (e.g. zeroing out the times on all-day events), change additional fields (e.g.
+     * update LAST_DATE when DTSTART changes), or cause modifications to other tables (e.g. reset
+     * Instances when a recurrence rule changes).
+     *
+     * @param cursor The set of events to update.
+     * @param modValues The changes to apply to each event.
+     * @param callerIsSyncAdapter Indicates if the request comes from the sync adapter.
+     * @return the number of rows updated
+     */
+    private int handleUpdateEvents(Cursor cursor, ContentValues modValues,
+            boolean callerIsSyncAdapter) {
+        /*
+         * For a single event, we can just load the event, merge modValues in, perform any
+         * fix-ups (putting changes into modValues), check validity, and then update().  We have
+         * to be careful that our fix-ups don't confuse the sync adapter.
+         *
+         * For multiple events, we need to load, merge, and validate each event individually.
+         * If no single-event-specific changes need to be made, we could just issue the original
+         * bulk update, which would be more efficient than a series of individual updates.
+         * However, doing so would prevent us from taking advantage of the partial-update
+         * mechanism.
+         */
+        if (cursor.getCount() > 1) {
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "Performing update on " + cursor.getCount() + " events");
+            }
+        }
+        while (cursor.moveToNext()) {
+            // Load the event into a ContentValues object, and merge the modifications in.
+            ContentValues values = new ContentValues();
+            DatabaseUtils.cursorRowToContentValues(cursor, values);
+            values.putAll(modValues);
+
+            // Validate the combined event.
+            validateEventData(values);
+
+            // Look for any updates that could affect LAST_DATE.  It's defined as the end of
+            // the last meeting, so we need to pay attention to DURATION.
+            if (modValues.containsKey(Events.DTSTART) ||
+                    modValues.containsKey(Events.DTEND) ||
+                    modValues.containsKey(Events.DURATION) ||
+                    modValues.containsKey(Events.EVENT_TIMEZONE) ||
+                    modValues.containsKey(Events.RRULE) ||
+                    modValues.containsKey(Events.RDATE) ||
+                    modValues.containsKey(Events.EXRULE) ||
+                    modValues.containsKey(Events.EXDATE)) {
+                long newLastDate;
+                try {
+                    newLastDate = calculateLastDate(values);
+                } catch (DateException de) {
+                    throw new IllegalArgumentException("Unable to compute LAST_DATE", de);
+                }
+                Long oldLastDateObj = values.getAsLong(Events.LAST_DATE);
+                long oldLastDate = (oldLastDateObj == null) ? -1 : oldLastDateObj;
+                if (oldLastDate != newLastDate) {
+                    // This overwrites any caller-supplied LAST_DATE.  This is okay, because the
+                    // caller isn't supposed to be messing with the LAST_DATE field.
+                    if (newLastDate < 0) {
+                        modValues.putNull(Events.LAST_DATE);
+                    } else {
+                        modValues.put(Events.LAST_DATE, newLastDate);
+                    }
+                }
+            }
+
+            if (!callerIsSyncAdapter) {
+                modValues.put(Events.DIRTY, 1);
+            }
+
+            // Disallow updating the attendee status in the Events
+            // table.  In the future, we could support this but we
+            // would have to query and update the attendees table
+            // to keep the values consistent.
+            if (modValues.containsKey(Events.SELF_ATTENDEE_STATUS)) {
+                throw new IllegalArgumentException("Updating "
+                        + Events.SELF_ATTENDEE_STATUS
+                        + " in Events table is not allowed.");
+            }
+
+            if (fixAllDayTime(values, modValues)) {
+                if (Log.isLoggable(TAG, Log.WARN)) {
+                    Log.w(TAG, "handleUpdateEvents: " +
+                            "allDay is true but sec, min, hour were not 0.");
+                }
+            }
+
+            // For taking care about recurrences exceptions cancelations, check if this needs
+            //  to be an UPDATE or a DELETE
+            boolean isUpdate = doesStatusCancelUpdateMeanUpdate(values, modValues);
+
+            long id = values.getAsLong(Events._ID);
+
+            if (isUpdate) {
+                // If a user made a change, possibly duplicate the event so we can do a partial
+                // update. If a sync adapter made a change and that change marks an event as
+                // un-dirty, remove any duplicates that may have been created earlier.
+                if (!callerIsSyncAdapter) {
+                    mDbHelper.duplicateEvent(id);
+                } else {
+                    if (modValues.containsKey(Events.DIRTY)
+                            && modValues.getAsInteger(Events.DIRTY) == 0) {
+                        mDbHelper.removeDuplicateEvent(id);
+                    }
+                }
+                int result = mDb.update(Tables.EVENTS, modValues, SQL_WHERE_ID,
+                        new String[] { String.valueOf(id) });
+                if (result > 0) {
+                    updateEventRawTimesLocked(id, modValues);
+                    mInstancesHelper.updateInstancesLocked(modValues, id,
+                            false /* not a new event */, mDb);
+
+                    // XXX: should we also be doing this when RRULE changes (e.g. instances
+                    //      are introduced or removed?)
+                    if (modValues.containsKey(Events.DTSTART) ||
+                            modValues.containsKey(Events.STATUS)) {
+                        // If this is a cancellation knock it out
+                        // of the instances table
+                        if (modValues.containsKey(Events.STATUS) &&
+                                modValues.getAsInteger(Events.STATUS) == Events.STATUS_CANCELED) {
+                            String[] args = new String[] {String.valueOf(id)};
+                            mDb.delete(Tables.INSTANCES, SQL_WHERE_EVENT_ID, args);
+                        }
+
+                        // The start time or status of the event changed, so run the
+                        // event alarm scheduler.
+                        if (Log.isLoggable(TAG, Log.DEBUG)) {
+                            Log.d(TAG, "updateInternal() changing event");
+                        }
+                        mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
+                    }
+
+                    sendUpdateNotification(id, callerIsSyncAdapter);
+                }
+            } else {
+                deleteEventInternal(id, callerIsSyncAdapter, true /* isBatch */);
+                mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
+                sendUpdateNotification(callerIsSyncAdapter);
+            }
+        }
+
+        return cursor.getCount();
+    }
+
     @Override
     protected int updateInTransaction(Uri uri, ContentValues values, String selection,
             String[] selectionArgs, boolean callerIsSyncAdapter) {
@@ -3131,123 +3264,43 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case EVENTS:
             case EVENTS_ID:
             {
-                if (!validateRecurrenceRule(values)) {
-                    throw new RuntimeException("Invalid recurrence rule: " +
-                            values.getAsString(Events.RRULE));
-                }
-                long id = 0;
-                if (match == EVENTS_ID) {
-                    id = ContentUris.parseId(uri);
-                } else if (callerIsSyncAdapter) {
-                    // TODO: same remark as for CALENDARS/CALENDARS_ID case as this is not
-                    // sufficient to deal with all the "_id" case in selection
-                    if (selection != null && selection.startsWith("_id=?")) {
-                        id = Long.parseLong(selectionArgs[0]);
-                    } else if (selection != null && selection.startsWith("_id=")) {
-                        // The ContentProviderOperation generates an _id=n string instead of
-                        // adding the id to the URL, so parse that out here.
-                        id = Long.parseLong(selection.substring(4));
+                Cursor events = null;
+
+                // Grab the full set of columns for each selected event.
+                // TODO: define a projection with just the data we need (e.g. we don't need to
+                //       validate the SYNC_* columns)
+
+                try {
+                    if (match == EVENTS_ID) {
+                        // Single event, identified by ID.
+                        long id = ContentUris.parseId(uri);
+                        events = mDb.query(Tables.EVENTS, null /* columns */,
+                                SQL_WHERE_ID, new String[] { String.valueOf(id) },
+                                null /* groupBy */, null /* having */, null /* sortOrder */);
                     } else {
-                        // Sync adapter Events operation affects just Events table, not associated
-                        // tables.
-                        if (fixAllDayTime(uri, values)) {
-                            if (Log.isLoggable(TAG, Log.WARN)) {
-                                Log.w(TAG, "updateInTransaction: Caller is sync adapter. " +
-                                        "allDay is true but sec, min, hour were not 0.");
-                            }
-                        }
-                        return mDb.update("Events", values, selection, selectionArgs);
-                    }
-                } else {
-                    throw new IllegalArgumentException("Unknown URL " + uri);
-                }
-                if (!callerIsSyncAdapter) {
-                    values.put(Events.DIRTY, 1);
-                }
-                // Disallow updating the attendee status in the Events
-                // table.  In the future, we could support this but we
-                // would have to query and update the attendees table
-                // to keep the values consistent.
-                if (values.containsKey(Events.SELF_ATTENDEE_STATUS)) {
-                    throw new IllegalArgumentException("Updating "
-                            + Events.SELF_ATTENDEE_STATUS
-                            + " in Events table is not allowed.");
-                }
-                String strId = String.valueOf(id);
-                // For taking care about recurrences exceptions cancelations, check if this needs
-                //  to be an UPDATE or a DELETE
-                boolean isUpdate = doesStatusCancelUpdateMeanUpdate(strId, values);
-                ContentValues updatedValues = new ContentValues(values);
-                // TODO: should extend validateEventData to work with updates and call it here
-                updatedValues = updateLastDate(updatedValues);
-                if (updatedValues == null) {
-                    if (Log.isLoggable(TAG, Log.WARN)) {
-                        Log.w(TAG, "Could not update event.");
-                    }
-                    return 0;
-                }
-                // Make sure we pass in a uri with the id appended to fixAllDayTime
-                Uri allDayUri;
-                if (uri.getPathSegments().size() == 1) {
-                    allDayUri = ContentUris.withAppendedId(uri, id);
-                } else {
-                    allDayUri = uri;
-                }
-                if (fixAllDayTime(allDayUri, updatedValues)) {
-                    if (Log.isLoggable(TAG, Log.WARN)) {
-                        Log.w(TAG, "updateInTransaction: " +
-                                "allDay is true but sec, min, hour were not 0.");
-                    }
-                }
-
-                int result;
-
-                if (isUpdate) {
-                    // If a user made a change, possibly duplicate the event so we can do a partial
-                    // update. If a sync adapter made a change and that change marks an event as
-                    // un-dirty, remove any duplicates that may have been created earlier.
-                    if (!callerIsSyncAdapter) {
-                        mDbHelper.duplicateEvent(id);
-                    } else {
-                        if (values.containsKey(Events.DIRTY)
-                                && values.getAsInteger(Events.DIRTY) == 0) {
-                            mDbHelper.removeDuplicateEvent(id);
-                        }
-                    }
-                    result = mDb.update(Tables.EVENTS, updatedValues, SQL_WHERE_ID,
-                            new String[] { strId });
-                    if (result > 0) {
-                        updateEventRawTimesLocked(id, updatedValues);
-                        mInstancesHelper.updateInstancesLocked(updatedValues, id,
-                                false /* not a new event */, mDb);
-
-                        if (values.containsKey(Events.DTSTART) ||
-                                values.containsKey(Events.STATUS)) {
-                            // If this is a cancellation knock it out
-                            // of the instances table
-                            if (values.containsKey(Events.STATUS) &&
-                                    values.getAsInteger(Events.STATUS) == Events.STATUS_CANCELED) {
-                                String[] args = new String[] {String.valueOf(id)};
-                                mDb.delete(Tables.INSTANCES, SQL_WHERE_EVENT_ID, args);
-                            }
-
-                            // The start time of the event changed, so run the
-                            // event alarm scheduler.
-                            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                                Log.d(TAG, "updateInternal() changing event");
-                            }
-                            mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
+                        // One or more events, identified by the selection / selectionArgs.
+                        if (!callerIsSyncAdapter) {
+                            // Only the sync adapter can use this URI.
+                            throw new IllegalArgumentException("Invalid URI: " + uri);
                         }
 
-                        sendUpdateNotification(id, callerIsSyncAdapter);
+                        events = mDb.query(Tables.EVENTS, null /* columns */,
+                                selection, selectionArgs,
+                                null /* groupBy */, null /* having */, null /* sortOrder */);
                     }
-                } else {
-                    result = deleteEventInternal(id, callerIsSyncAdapter, true /* isBatch */);
-                    mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
-                    sendUpdateNotification(callerIsSyncAdapter);
-                }
 
-                return result;
+                    if (events.getCount() == 0) {
+                        Log.w(TAG, "No events to update: uri=" + uri + " selection=" + selection +
+                                " selectionArgs=" + Arrays.toString(selectionArgs));
+                        return 0;
+                    }
+
+                    return handleUpdateEvents(events, values, callerIsSyncAdapter);
+                } finally {
+                    if (events != null) {
+                        events.close();
+                    }
+                }
             }
             case ATTENDEES_ID: {
                 if (selection != null) {

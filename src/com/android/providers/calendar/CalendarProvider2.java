@@ -168,13 +168,20 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final String SQL_WHERE_ORIGINAL_ID = Events.ORIGINAL_ID + "=?";
     private static final String SQL_WHERE_ORIGINAL_ID_NO_SYNC_ID = Events.ORIGINAL_ID +
             "=? AND " + Events._SYNC_ID + " IS NULL";
+
+    private static final String SQL_WHERE_ATTENDEE_BASE =
+            Tables.EVENTS + "." + Events._ID + "=" + Tables.ATTENDEES + "." + Attendees.EVENT_ID
+            + " AND " +
+            Tables.EVENTS + "." + Events.CALENDAR_ID + "=" + Tables.CALENDARS + "." + Calendars._ID;
+
     private static final String SQL_WHERE_ATTENDEES_ID =
-            Tables.ATTENDEES + "." + Attendees._ID + "=? AND " +
-            Tables.EVENTS + "." + Events._ID + "=" + Tables.ATTENDEES + "." + Attendees.EVENT_ID;
+            Tables.ATTENDEES + "." + Attendees._ID + "=? AND " + SQL_WHERE_ATTENDEE_BASE;
 
     private static final String SQL_WHERE_REMINDERS_ID =
             Tables.REMINDERS + "." + Reminders._ID + "=? AND " +
-            Tables.EVENTS + "." + Events._ID + "=" + Tables.REMINDERS + "." + Reminders.EVENT_ID;
+            Tables.EVENTS + "." + Events._ID + "=" + Tables.REMINDERS + "." + Reminders.EVENT_ID +
+            " AND " +
+            Tables.EVENTS + "." + Events.CALENDAR_ID + "=" + Tables.CALENDARS + "." + Calendars._ID;
 
     private static final String SQL_WHERE_CALENDAR_ALERT =
             Views.EVENTS + "." + Events._ID + "=" +
@@ -857,8 +864,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case ATTENDEES:
                 qb.setTables(Tables.ATTENDEES + ", " + Tables.EVENTS + ", " + Tables.CALENDARS);
                 qb.setProjectionMap(sAttendeesProjectionMap);
-                qb.appendWhere(Tables.EVENTS + "." + Events._ID + "="
-                        + Tables.ATTENDEES + "." + Attendees.EVENT_ID);
+                qb.appendWhere(SQL_WHERE_ATTENDEE_BASE);
                 break;
             case ATTENDEES_ID:
                 qb.setTables(Tables.ATTENDEES + ", " + Tables.EVENTS + ", " + Tables.CALENDARS);

@@ -1812,7 +1812,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             long newEventId;
             if (createNewEvent) {
                 values.remove(Events._ID);      // don't try to set this explicitly
-                scrubEventData(values);
+                scrubEventData(values, null);
                 validateEventData(values);
 
                 newEventId = mDb.insert(Tables.EVENTS, null, values);
@@ -1932,7 +1932,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 // TODO: do we really need to make a copy?
                 ContentValues updatedValues = new ContentValues(values);
-                scrubEventData(updatedValues);
+                scrubEventData(updatedValues, null);
                 validateEventData(updatedValues);
                 // updateLastDate must be after validation, to ensure proper last date computation
                 updatedValues = updateLastDate(updatedValues);
@@ -2164,13 +2164,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     /**
-     * Do some scrubbing on event data before inserting. In particular make
-     * sure calendar_id exists and dtend, duration, etc make sense for the type
-     * of event (regular, recurrence, exception). Remove any unexpected fields.
+     * Do some scrubbing on event data before inserting or updating. In particular make
+     * dtend, duration, etc make sense for the type of event (regular, recurrence, exception).
+     * Remove any unexpected fields.
      *
-     * @param values the ContentValues to insert
+     * @param values the ContentValues to insert.
+     * @param modValues if non-null, explicit null entries will be added here whenever something
+     *   is removed from <strong>values</strong>.
      */
-    private void scrubEventData(ContentValues values) {
+    private void scrubEventData(ContentValues values, ContentValues modValues) {
         boolean hasDtend = values.getAsLong(Events.DTEND) != null;
         boolean hasDuration = !TextUtils.isEmpty(values.getAsString(Events.DURATION));
         boolean hasRrule = !TextUtils.isEmpty(values.getAsString(Events.RRULE));
@@ -2191,12 +2193,18 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         values.getAsString(Events.RRULE));
             }
             if (hasDtend || !hasDuration || hasOriginalEvent || hasOriginalInstanceTime) {
+                Log.d(TAG, "Scrubbing DTEND, ORIGINAL_SYNC_ID, ORIGINAL_INSTANCE_TIME");
                 if (Log.isLoggable(TAG, Log.DEBUG)) {
-                    Log.e(TAG, "Invalid values for recurrence: " + values);
+                    Log.d(TAG, "Invalid values for recurrence: " + values);
                 }
                 values.remove(Events.DTEND);
                 values.remove(Events.ORIGINAL_SYNC_ID);
                 values.remove(Events.ORIGINAL_INSTANCE_TIME);
+                if (modValues != null) {
+                    modValues.putNull(Events.DTEND);
+                    modValues.putNull(Events.ORIGINAL_SYNC_ID);
+                    modValues.putNull(Events.ORIGINAL_INSTANCE_TIME);
+                }
             }
         } else if (hasOriginalEvent || hasOriginalInstanceTime) {
             // Recurrence exception
@@ -2208,10 +2216,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             // originalEvent is the _sync_id of the recurrence
             // originalInstanceTime is the start time of the event being replaced
             if (!hasDtend || hasDuration || !hasOriginalEvent || !hasOriginalInstanceTime) {
+                Log.d(TAG, "Scrubbing DURATION");
                 if (Log.isLoggable(TAG, Log.DEBUG)) {
-                    Log.e(TAG, "Invalid values for recurrence exception: " + values);
+                    Log.d(TAG, "Invalid values for recurrence exception: " + values);
                 }
                 values.remove(Events.DURATION);
+                if (modValues != null) {
+                    modValues.putNull(Events.DURATION);
+                }
             }
         } else {
             // Regular event
@@ -2223,10 +2235,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             // originalEvent is null
             // originalInstanceTime is null
             if (!hasDtend || hasDuration) {
+                Log.d(TAG, "Scrubbing DURATION");
                 if (Log.isLoggable(TAG, Log.DEBUG)) {
-                    Log.e(TAG, "Invalid values for event: " + values);
+                    Log.d(TAG, "Invalid values for event: " + values);
                 }
                 values.remove(Events.DURATION);
+                if (modValues != null) {
+                    modValues.putNull(Events.DURATION);
+                }
             }
         }
     }
@@ -3067,6 +3083,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             values.putAll(modValues);
 
             // Validate the combined event.
+            scrubEventData(values, modValues);
             validateEventData(values);
 
             // Look for any updates that could affect LAST_DATE.  It's defined as the end of

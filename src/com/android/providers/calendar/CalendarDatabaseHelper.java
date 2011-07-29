@@ -60,7 +60,7 @@ import java.util.TimeZone;
     // Versions under 100 cover through Froyo, 1xx version are for Gingerbread,
     // 2xx for Honeycomb, and 3xx for ICS. For future versions bump this to the
     // next hundred at each major release.
-    static final int DATABASE_VERSION = 306;
+    static final int DATABASE_VERSION = 307;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -178,6 +178,19 @@ import java.util.TimeZone;
     private static final String CALENDAR_CLEANUP_TRIGGER_SQL = "DELETE FROM " + Tables.EVENTS +
             " WHERE " + CalendarContract.Events.CALENDAR_ID + "=" +
                 "old." + CalendarContract.Events._ID + ";";
+
+    /** Selects rows from Attendees for which the event_id refers to a nonexistent Event */
+    private static final String WHERE_ATTENDEES_ORPHANS =
+            Attendees.EVENT_ID + " IN (SELECT " + Attendees.EVENT_ID + " FROM " +
+            Tables.ATTENDEES + " LEFT OUTER JOIN " + Tables.EVENTS + " ON " +
+            Attendees.EVENT_ID + "=" + Tables.EVENTS + "." + Events._ID +
+            " WHERE " + Tables.EVENTS + "." + Events._ID + " IS NULL)";
+    /** Selects rows from Reminders for which the event_id refers to a nonexistent Event */
+    private static final String WHERE_REMINDERS_ORPHANS =
+            Reminders.EVENT_ID + " IN (SELECT " + Reminders.EVENT_ID + " FROM " +
+            Tables.REMINDERS + " LEFT OUTER JOIN " + Tables.EVENTS + " ON " +
+            Reminders.EVENT_ID + "=" + Tables.EVENTS + "." + Events._ID +
+            " WHERE " + Tables.EVENTS + "." + Events._ID + " IS NULL)";
 
     private static final String SCHEMA_HTTPS = "https://";
     private static final String SCHEMA_HTTP = "http://";
@@ -442,7 +455,7 @@ import java.util.TimeZone;
         // TODO: do we need both dtend and duration?
         // **When updating this be sure to also update LAST_SYNCED_EVENT_COLUMNS
         db.execSQL("CREATE TABLE " + Tables.EVENTS + " (" +
-                CalendarContract.Events._ID + " INTEGER PRIMARY KEY," +
+                CalendarContract.Events._ID + " INTEGER PRIMARY KEY AUTOINCREMENT," +
                 CalendarContract.Events._SYNC_ID + " TEXT," +
                 CalendarContract.Events.DIRTY + " INTEGER," +
                 CalendarContract.Events.LAST_SYNCED + " INTEGER DEFAULT 0," +
@@ -907,6 +920,62 @@ import java.util.TimeZone;
                 ");");
     }
 
+    /**
+     * Removes orphaned data from the database.  Specifically:
+     * <ul>
+     * <li>Attendees with an event_id for a nonexistent Event
+     * <li>Reminders with an event_id for a nonexistent Event
+     * </ul>
+     */
+    static void removeOrphans(SQLiteDatabase db) {
+        if (false) {        // debug mode
+            String SELECT_ATTENDEES_ORPHANS = "SELECT " +
+                    Attendees._ID + ", " + Attendees.EVENT_ID + " FROM " + Tables.ATTENDEES +
+                    " WHERE " + WHERE_ATTENDEES_ORPHANS;
+
+            Cursor cursor = null;
+            try {
+                Log.i(TAG, "Attendees orphans:");
+                cursor = db.rawQuery(SELECT_ATTENDEES_ORPHANS, null);
+                DatabaseUtils.dumpCursor(cursor);
+            } finally {
+                if (cursor != null) {
+                    cursor.close();
+                }
+            }
+
+            String SELECT_REMINDERS_ORPHANS = "SELECT " +
+                    Attendees._ID + ", " + Reminders.EVENT_ID + " FROM " + Tables.REMINDERS +
+                    " WHERE " + WHERE_REMINDERS_ORPHANS;
+            cursor = null;
+            try {
+                Log.i(TAG, "Reminders orphans:");
+                cursor = db.rawQuery(SELECT_REMINDERS_ORPHANS, null);
+                DatabaseUtils.dumpCursor(cursor);
+            } finally {
+                if (cursor != null) {
+                    cursor.close();
+                }
+            }
+
+            return;
+        }
+
+        Log.d(TAG, "Checking for orphaned entries");
+        int count;
+
+        count = db.delete(Tables.ATTENDEES, WHERE_ATTENDEES_ORPHANS, null);
+        if (count != 0) {
+            Log.i(TAG, "Deleted " + count + " orphaned Attendees");
+        }
+
+        count = db.delete(Tables.REMINDERS, WHERE_REMINDERS_ORPHANS, null);
+        if (count != 0) {
+            Log.i(TAG, "Deleted " + count + " orphaned Reminders");
+        }
+    }
+
+
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         Log.i(TAG, "Upgrading DB from version " + oldVersion
@@ -1089,6 +1158,10 @@ import java.util.TimeZone;
                 scheduleSync(null /* all accounts */, false, null);
                 oldVersion++;
             }
+            if (oldVersion == 306) {
+                upgradeToVersion307(db);
+                oldVersion++;
+            }
             if (createEventsView) {
                 createEventsView(db);
             }
@@ -1098,6 +1171,8 @@ import java.util.TimeZone;
                 dropTables(db);
                 bootstrapDB(db);
                 oldVersion = DATABASE_VERSION;
+            } else {
+                removeOrphans(db);
             }
         } catch (SQLiteException e) {
             Log.e(TAG, "onUpgrade: SQLiteException, recreating db. " + e);
@@ -1136,6 +1211,81 @@ import java.util.TimeZone;
             return true;
         }
         return false;
+    }
+
+    @VisibleForTesting
+    void upgradeToVersion307(SQLiteDatabase db) {
+        /*
+         * Changes from version 306 to 307:
+         * - Changed _id field to AUTOINCREMENT
+         */
+        db.execSQL("ALTER TABLE Events RENAME TO Events_Backup;");
+        db.execSQL("DROP TRIGGER IF EXISTS events_cleanup_delete");
+        db.execSQL("DROP TRIGGER IF EXISTS original_sync_update");
+        db.execSQL("DROP INDEX IF EXISTS eventsCalendarIdIndex");
+        createEventsTable(db);
+
+        String FIELD_LIST =
+            "_id, " +
+            "_sync_id, " +
+            "dirty, " +
+            "lastSynced," +
+            "calendar_id, " +
+            "title, " +
+            "eventLocation, " +
+            "description, " +
+            "eventColor, " +
+            "eventStatus, " +
+            "selfAttendeeStatus, " +
+            "dtstart, " +
+            "dtend, " +
+            "eventTimezone, " +
+            "duration, " +
+            "allDay, " +
+            "accessLevel, " +
+            "availability, " +
+            "hasAlarm, " +
+            "hasExtendedProperties, " +
+            "rrule, " +
+            "rdate, " +
+            "exrule, " +
+            "exdate, " +
+            "original_id," +
+            "original_sync_id, " +
+            "originalInstanceTime, " +
+            "originalAllDay, " +
+            "lastDate, " +
+            "hasAttendeeData, " +
+            "guestsCanModify, " +
+            "guestsCanInviteOthers, " +
+            "guestsCanSeeGuests, " +
+            "organizer, " +
+            "deleted, " +
+            "eventEndTimezone, " +
+            "sync_data1," +
+            "sync_data2," +
+            "sync_data3," +
+            "sync_data4," +
+            "sync_data5," +
+            "sync_data6," +
+            "sync_data7," +
+            "sync_data8," +
+            "sync_data9," +
+            "sync_data10 ";
+
+        // copy fields from old to new
+        db.execSQL("INSERT INTO Events (" + FIELD_LIST + ") SELECT " + FIELD_LIST +
+                "FROM Events_Backup;");
+
+        db.execSQL("DROP TABLE Events_Backup;");
+
+        // Trigger to remove data tied to an event when we delete that event.
+        db.execSQL("CREATE TRIGGER events_cleanup_delete DELETE ON " + Tables.EVENTS + " " +
+                "BEGIN " + EVENTS_CLEANUP_TRIGGER_SQL + "END");
+
+        // Trigger to update exceptions when an original event updates its
+        // _sync_id
+        db.execSQL(CREATE_SYNC_ID_UPDATE_TRIGGER);
     }
 
     @VisibleForTesting
@@ -1253,6 +1403,10 @@ import java.util.TimeZone;
         db.execSQL("ALTER TABLE Events RENAME TO Events_Backup;");
         db.execSQL("DROP TRIGGER IF EXISTS events_cleanup_delete");
         db.execSQL("DROP INDEX IF EXISTS eventsCalendarIdIndex");
+        // 305 and 307 can share the same createEventsTable implementation, because the
+        // addition of "autoincrement" to _ID doesn't affect the upgrade path.  (Note that
+        // much older databases may also already have autoincrement set because the change
+        // was back-ported.)
         createEventsTable(db);
 
         // copy fields from old to new

@@ -1410,7 +1410,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * @return Returns true if a correction was necessary, false otherwise
      */
     private boolean fixAllDayTime(ContentValues values, ContentValues modValues) {
-        if (values.getAsInteger(Events.ALL_DAY).intValue() == 0) {
+        Integer allDayObj = values.getAsInteger(Events.ALL_DAY);
+        if (allDayObj == null || allDayObj == 0) {
             return false;
         }
 

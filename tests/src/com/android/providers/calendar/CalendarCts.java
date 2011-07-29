@@ -267,8 +267,11 @@ public class CalendarCts extends InstrumentationTestCase {
             values.put(Events.EVENT_TIMEZONE, TIME_ZONES[seed % TIME_ZONES.length]);
             // values.put(Events.EVENT_TIMEZONE2, TIME_ZONES[(seed +1) %
             // TIME_ZONES.length]);
-            values.put(Events.ALL_DAY, 0); // must be 0 or dtstart/dtend will
-                                           // get adjusted
+            if ((seed % 2) == 0) {
+                // Either set to zero, or leave unset to get default zero.
+                // Must be 0 or dtstart/dtend will get adjusted.
+                values.put(Events.ALL_DAY, 0);
+            }
             values.put(Events.ACCESS_LEVEL, seed % 4);
             values.put(Events.AVAILABILITY, seed % 2);
             values.put(Events.HAS_ALARM, seed % 2);

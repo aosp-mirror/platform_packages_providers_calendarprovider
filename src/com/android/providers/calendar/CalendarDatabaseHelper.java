@@ -978,8 +978,9 @@ import java.util.TimeZone;
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        Log.i(TAG, "Upgrading DB from version " + oldVersion
-                + " to " + newVersion);
+        Log.i(TAG, "Upgrading DB from version " + oldVersion + " to " + newVersion);
+        long startWhen = System.nanoTime();
+
         if (oldVersion < 49) {
             dropTables(db);
             mSyncState.createDatabase(db);
@@ -1090,13 +1091,17 @@ import java.util.TimeZone;
                 oldVersion = 200;
             }
             if (oldVersion == 100) {
+                // note we skip past v101 and v102
                 upgradeToVersion200(db);
                 oldVersion = 200;
             }
             boolean need203Update = true;
-            if (oldVersion == 101) {
+            if (oldVersion == 101 || oldVersion == 102) {
+                // v101 is v100 plus updateCalendarCacheTableTo203().
+                // v102 is v101 with Event._id changed to autoincrement.
+                // Upgrade to 200 and skip the 203 update.
+                upgradeToVersion200(db);
                 oldVersion = 200;
-                // Gingerbread version 101 is similar to Honeycomb version 203
                 need203Update = false;
             }
             if (oldVersion == 200) {
@@ -1108,13 +1113,20 @@ import java.util.TimeZone;
                 createEventsView = true;
                 oldVersion += 1;
             }
-            if (oldVersion == 202 && need203Update) {
-                upgradeToVersion203(db);
+            if (oldVersion == 202) {
+                if (need203Update) {
+                    upgradeToVersion203(db);
+                }
                 oldVersion += 1;
             }
             if (oldVersion == 203) {
                 createEventsView = true;
                 oldVersion += 1;
+            }
+            if (oldVersion == 206) {
+                // v206 exists only in HC (change Event._id to autoincrement).  Otherwise
+                // identical to v204, so back it up and let the upgrade path continue.
+                oldVersion -= 2;
             }
             if (oldVersion == 204) {
                 // This is an ICS update, all following use 300+ versions.
@@ -1175,11 +1187,15 @@ import java.util.TimeZone;
                 removeOrphans(db);
             }
         } catch (SQLiteException e) {
-            Log.e(TAG, "onUpgrade: SQLiteException, recreating db. " + e);
+            Log.e(TAG, "onUpgrade: SQLiteException, recreating db. ", e);
+            Log.e(TAG, "(oldVersion was " + oldVersion + ")");
             dropTables(db);
             bootstrapDB(db);
             return; // this was lossy
         }
+
+        long endWhen = System.nanoTime();
+        Log.d(TAG, "Calendar upgrade took " + ((endWhen - startWhen) / 1000000) + "ms");
 
         /**
          * db versions < 100 correspond to Froyo and earlier. Gingerbread bumped

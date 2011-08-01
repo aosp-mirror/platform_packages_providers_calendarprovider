@@ -1819,8 +1819,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             long newEventId;
             if (createNewEvent) {
                 values.remove(Events._ID);      // don't try to set this explicitly
-                scrubEventData(values, null);
-                validateEventData(values);
+                if (callerIsSyncAdapter) {
+                    scrubEventData(values, null);
+                } else {
+                    validateEventData(values);
+                }
 
                 newEventId = mDb.insert(Tables.EVENTS, null, values);
                 if (newEventId < 0) {
@@ -1939,8 +1942,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 // TODO: do we really need to make a copy?
                 ContentValues updatedValues = new ContentValues(values);
-                scrubEventData(updatedValues, null);
-                validateEventData(updatedValues);
+                if (callerIsSyncAdapter) {
+                    scrubEventData(updatedValues, null);
+                } else {
+                    validateEventData(updatedValues);
+                }
                 // updateLastDate must be after validation, to ensure proper last date computation
                 updatedValues = updateLastDate(updatedValues);
                 if (updatedValues == null) {
@@ -3090,8 +3096,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             values.putAll(modValues);
 
             // Validate the combined event.
-            scrubEventData(values, modValues);
-            validateEventData(values);
+            if (callerIsSyncAdapter) {
+                scrubEventData(values, modValues);
+            } else {
+                validateEventData(values);
+            }
 
             // Look for any updates that could affect LAST_DATE.  It's defined as the end of
             // the last meeting, so we need to pay attention to DURATION.

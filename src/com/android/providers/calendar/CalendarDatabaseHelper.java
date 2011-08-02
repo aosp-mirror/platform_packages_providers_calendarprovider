@@ -59,7 +59,7 @@ import java.util.TimeZone;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    static final int DATABASE_VERSION = 101;
+    static final int DATABASE_VERSION = 102;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -67,6 +67,17 @@ import java.util.TimeZone;
     private static final String SYNC_STATE_TABLE = "_sync_state";
     private static final String SYNC_STATE_META_TABLE = "_sync_state_metadata";
     private static final String SYNC_STATE_META_VERSION_COLUMN = "version";
+
+    /** Selects rows from Attendees for which the event_id refers to a nonexistent Event */
+    private static final String WHERE_ATTENDEES_ORPHANS =
+            "event_id IN (SELECT event_id FROM Attendees " +
+            "LEFT OUTER JOIN Events ON event_id=Events._id " +
+            "WHERE Events._id IS NULL)";
+    /** Selects rows from Reminders for which the event_id refers to a nonexistent Event */
+    private static final String WHERE_REMINDERS_ORPHANS =
+            "event_id IN (SELECT event_id FROM Reminders " +
+            "LEFT OUTER JOIN Events ON event_id=Events._id " +
+            "WHERE Events._id IS NULL)";
 
     private final Context mContext;
     private final SyncStateContentProviderHelper mSyncState;
@@ -241,7 +252,7 @@ import java.util.TimeZone;
 
         // TODO: do we need both dtend and duration?
         db.execSQL("CREATE TABLE Events (" +
-                "_id INTEGER PRIMARY KEY," +
+                "_id INTEGER PRIMARY KEY AUTOINCREMENT," +
                 ACCOUNT_NAME + " TEXT," +
                 ACCOUNT_TYPE + " TEXT," +
                 "_sync_id TEXT," +
@@ -470,6 +481,28 @@ import java.util.TimeZone;
                 ");");
     }
 
+    /**
+     * Removes orphaned data from the database.  Specifically:
+     * <ul>
+     * <li>Attendees with an event_id for a nonexistent Event
+     * <li>Reminders with an event_id for a nonexistent Event
+     * </ul>
+     */
+    static void removeOrphans(SQLiteDatabase db) {
+        Log.d(TAG, "Checking for orphaned entries");
+        int count;
+
+        count = db.delete("Attendees", WHERE_ATTENDEES_ORPHANS, null);
+        if (count != 0) {
+            Log.i(TAG, "Deleted " + count + " orphaned Attendees");
+        }
+
+        count = db.delete("Reminders", WHERE_REMINDERS_ORPHANS, null);
+        if (count != 0) {
+            Log.i(TAG, "Deleted " + count + " orphaned Reminders");
+        }
+    }
+
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         Log.i(TAG, "Upgrading DB from version " + oldVersion
@@ -580,6 +613,11 @@ import java.util.TimeZone;
                 upgradeToVersion101(db);
                 oldVersion = 101;
             }
+            if(oldVersion == 101) {
+                upgradeToVersion102(db);
+                oldVersion = 102;
+            }
+            removeOrphans(db);
         } catch (SQLiteException e) {
             Log.e(TAG, "onUpgrade: SQLiteException, recreating db. " + e);
             dropTables(db);
@@ -611,6 +649,149 @@ import java.util.TimeZone;
         }
         return false;
     }
+
+    @VisibleForTesting
+    void upgradeToVersion102(SQLiteDatabase db) {
+        /*
+         * Changes from version 101 to 102:
+         * - Changed _id field to AUTOINCREMENT
+         */
+        db.execSQL("ALTER TABLE Events RENAME TO Events_Backup;");
+        db.execSQL("DROP TRIGGER IF EXISTS events_cleanup_delete");
+        db.execSQL("DROP TRIGGER IF EXISTS events_insert");
+        db.execSQL("DROP INDEX IF EXISTS eventSyncAccountAndIdIndex");
+        db.execSQL("DROP INDEX IF EXISTS eventsCalendarIdIndex");
+
+        // copy & pasted from bootstrapDB
+        db.execSQL("CREATE TABLE Events (" +
+                "_id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                ACCOUNT_NAME + " TEXT," +
+                ACCOUNT_TYPE + " TEXT," +
+                "_sync_id TEXT," +
+                "_sync_version TEXT," +
+                "_sync_time TEXT," +            // UTC
+                "_sync_local_id INTEGER," +
+                "_sync_dirty INTEGER," +
+                "_sync_mark INTEGER," + // To filter out new rows
+                "calendar_id INTEGER NOT NULL," +
+                "htmlUri TEXT," +
+                "title TEXT," +
+                "eventLocation TEXT," +
+                "description TEXT," +
+                "eventStatus INTEGER," +
+                "selfAttendeeStatus INTEGER NOT NULL DEFAULT 0," +
+                "commentsUri TEXT," +
+                "dtstart INTEGER," +               // millis since epoch
+                "dtend INTEGER," +                 // millis since epoch
+                "eventTimezone TEXT," +         // timezone for event
+                "duration TEXT," +
+                "allDay INTEGER NOT NULL DEFAULT 0," +
+                "visibility INTEGER NOT NULL DEFAULT 0," +
+                "transparency INTEGER NOT NULL DEFAULT 0," +
+                "hasAlarm INTEGER NOT NULL DEFAULT 0," +
+                "hasExtendedProperties INTEGER NOT NULL DEFAULT 0," +
+                "rrule TEXT," +
+                "rdate TEXT," +
+                "exrule TEXT," +
+                "exdate TEXT," +
+                "originalEvent TEXT," +  // _sync_id of recurring event
+                "originalInstanceTime INTEGER," +  // millis since epoch
+                "originalAllDay INTEGER," +
+                "lastDate INTEGER," +               // millis since epoch
+                "hasAttendeeData INTEGER NOT NULL DEFAULT 0," +
+                "guestsCanModify INTEGER NOT NULL DEFAULT 0," +
+                "guestsCanInviteOthers INTEGER NOT NULL DEFAULT 1," +
+                "guestsCanSeeGuests INTEGER NOT NULL DEFAULT 1," +
+                "organizer STRING," +
+                "deleted INTEGER NOT NULL DEFAULT 0," +
+                "dtstart2 INTEGER," + //millis since epoch, allDay events in local timezone
+                "dtend2 INTEGER," + //millis since epoch, allDay events in local timezone
+                "eventTimezone2 TEXT," + //timezone for event with allDay events in local timezone
+                "syncAdapterData TEXT" + //available for use by sync adapters
+                ");");
+
+        db.execSQL("CREATE INDEX eventSyncAccountAndIdIndex ON Events ("
+                + Calendar.Events._SYNC_ACCOUNT_TYPE + ", " + Calendar.Events._SYNC_ACCOUNT + ", "
+                + Calendar.Events._SYNC_ID + ");");
+
+        db.execSQL("CREATE INDEX eventsCalendarIdIndex ON Events (" +
+                Calendar.Events.CALENDAR_ID +
+                ");");
+
+        String FIELD_LIST =
+                "_id, " +
+                "_sync_account, " +
+                "_sync_account_type, " +
+                "_sync_id, " +
+                "_sync_version, " +
+                "_sync_time, " +
+                "_sync_local_id, " +
+                "_sync_dirty, " +
+                "_sync_mark, " +
+                "calendar_id, " +
+                "htmlUri, " +
+                "title, " +
+                "eventLocation, " +
+                "description, " +
+                "eventStatus, " +
+                "selfAttendeeStatus, " +
+                "commentsUri, " +
+                "dtstart, " +
+                "dtend, " +
+                "eventTimezone, " +
+                "duration, " +
+                "allDay, " +
+                "visibility, " +
+                "transparency, " +
+                "hasAlarm, " +
+                "hasExtendedProperties, " +
+                "rrule, " +
+                "rdate, " +
+                "exrule, " +
+                "exdate, " +
+                "originalEvent, " +
+                "originalInstanceTime, " +
+                "originalAllDay, " +
+                "lastDate, " +
+                "hasAttendeeData, " +
+                "guestsCanModify, " +
+                "guestsCanInviteOthers, " +
+                "guestsCanSeeGuests, " +
+                "organizer, " +
+                "deleted, " +
+                "dtstart2, " +
+                "dtend2, " +
+                "eventTimezone2, " +
+                "syncAdapterData";
+
+        // copy fields from old to new
+        db.execSQL("INSERT INTO Events (" + FIELD_LIST + ") SELECT " + FIELD_LIST +
+                " FROM Events_Backup;");
+
+        db.execSQL("DROP TABLE Events_Backup;");
+
+        // Trigger to set event's sync_account
+        db.execSQL("CREATE TRIGGER events_insert AFTER INSERT ON Events " +
+                "BEGIN " +
+                "UPDATE Events SET _sync_account=" +
+                "(SELECT _sync_account FROM Calendars WHERE Calendars._id=new.calendar_id)," +
+                "_sync_account_type=" +
+                "(SELECT _sync_account_type FROM Calendars WHERE Calendars._id=new.calendar_id) " +
+                "WHERE Events._id=new._id;" +
+                "END");
+
+        // Trigger to remove data tied to an event when we delete that event.
+        db.execSQL("CREATE TRIGGER events_cleanup_delete DELETE ON Events " +
+                "BEGIN " +
+                "DELETE FROM Instances WHERE event_id = old._id;" +
+                "DELETE FROM EventsRawTimes WHERE event_id = old._id;" +
+                "DELETE FROM Attendees WHERE event_id = old._id;" +
+                "DELETE FROM Reminders WHERE event_id = old._id;" +
+                "DELETE FROM CalendarAlerts WHERE event_id = old._id;" +
+                "DELETE FROM ExtendedProperties WHERE event_id = old._id;" +
+                "END");
+    }
+
 
     @VisibleForTesting
     void upgradeToVersion101(SQLiteDatabase db) {

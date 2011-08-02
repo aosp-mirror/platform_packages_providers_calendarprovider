@@ -3067,11 +3067,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * Instances when a recurrence rule changes).
      *
      * @param cursor The set of events to update.
-     * @param modValues The changes to apply to each event.
+     * @param updateValues The changes to apply to each event.
      * @param callerIsSyncAdapter Indicates if the request comes from the sync adapter.
      * @return the number of rows updated
      */
-    private int handleUpdateEvents(Cursor cursor, ContentValues modValues,
+    private int handleUpdateEvents(Cursor cursor, ContentValues updateValues,
             boolean callerIsSyncAdapter) {
         /*
          * For a single event, we can just load the event, merge modValues in, perform any
@@ -3091,6 +3091,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
         while (cursor.moveToNext()) {
             // Load the event into a ContentValues object, and merge the modifications in.
+            ContentValues modValues = new ContentValues(updateValues);
             ContentValues values = new ContentValues();
             DatabaseUtils.cursorRowToContentValues(cursor, values);
             values.putAll(modValues);

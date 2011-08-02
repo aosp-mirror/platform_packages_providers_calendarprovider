@@ -2151,12 +2151,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     /**
-     * Validates the recurrence rule, if any.  Currently this just ensures that, if an RRULE is
-     * specified, it contains a valid single recurrence rule.
+     * Validates the recurrence rule, if any.  We allow single- and multi-rule RRULEs.
      * <p>
-     * TODO: support RRULEs with multiple recurrences.  Validate RDATE, EXRULE, EXDATE (possibly
-     * passing in an indication of whether we believe we have the full set, so we can reject
-     * EXRULE when not accompanied by RRULE).
+     * TODO: Validate RDATE, EXRULE, EXDATE (possibly passing in an indication of whether we
+     * believe we have the full set, so we can reject EXRULE when not accompanied by RRULE).
      *
      * @return A boolean indicating successful validation.
      */
@@ -2164,12 +2162,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         String rrule = values.getAsString(Events.RRULE);
 
         if (!TextUtils.isEmpty(rrule)) {
-            EventRecurrence er = new EventRecurrence();
-            try {
-                er.parse(rrule);
-            } catch (EventRecurrence.InvalidFormatException ife) {
-                Log.w(TAG, "Invalid recurrence rule: " + rrule);
-                return false;
+            String[] ruleList = rrule.split("\n");
+            for (String recur : ruleList) {
+                EventRecurrence er = new EventRecurrence();
+                try {
+                    er.parse(recur);
+                } catch (EventRecurrence.InvalidFormatException ife) {
+                    Log.w(TAG, "Invalid recurrence rule: " + recur);
+                    return false;
+                }
             }
         }
 

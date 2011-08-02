@@ -1228,6 +1228,29 @@ public class CalendarCts extends InstrumentationTestCase {
         removeAndVerifyCalendar(account, calendarId);
     }
 
+    @MediumTest
+    public void testMultiRuleRecurrence() {
+        String account = "multirule_account";
+        int seed = 0;
+
+        // Clean up just in case
+        CalendarHelper.deleteCalendarByAccount(mContentResolver, account);
+
+        // Create calendar
+        long calendarId = createAndVerifyCalendar(account, seed++, null);
+
+        // Create recurring event
+        String rrule = "FREQ=DAILY;WKST=MO;COUNT=5\nFREQ=WEEKLY;WKST=SU;COUNT=5";
+        ContentValues eventValues = EventHelper.getNewRecurringEventValues(account, seed++,
+                calendarId, true, "1997-08-29T02:14:00", "PT1H", rrule);
+        long eventId = createAndVerifyEvent(account, seed++, calendarId, true, eventValues);
+
+        // TODO: once multi-rule RRULEs are fully supported, verify that they work
+
+        // delete the calendar
+        removeAndVerifyCalendar(account, calendarId);
+    }
+
     /**
      * Issue bad requests and expect them to get rejected.
      */

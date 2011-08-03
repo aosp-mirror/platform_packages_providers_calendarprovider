@@ -793,21 +793,21 @@ public class CalendarCts extends InstrumentationTestCase {
         startMillis = instances.getLong(0);
         excepValues = EventHelper.getNewExceptionValues(startMillis);
         excepValues.put(Events.DTSTART, startMillis + 3600*1000);
-        long excepEventId2 = createAndVerifyException(account, eventId, excepValues);
+        long excepEventId2 = createAndVerifyException(account, eventId, excepValues, true);
         instances.moveToNext();
 
         // Advance the start time of the 3rd instance.
         startMillis = instances.getLong(0);
         excepValues = EventHelper.getNewExceptionValues(startMillis);
         excepValues.put(Events.DTSTART, startMillis + 3600*1000*2);
-        long excepEventId3 = createAndVerifyException(account, eventId, excepValues);
+        long excepEventId3 = createAndVerifyException(account, eventId, excepValues, true);
         instances.moveToNext();
 
         // Cancel the 4th instance.
         startMillis = instances.getLong(0);
         excepValues = EventHelper.getNewExceptionValues(startMillis);
         excepValues.put(Events.STATUS, Events.STATUS_CANCELED);
-        long excepEventId4 = createAndVerifyException(account, eventId, excepValues);
+        long excepEventId4 = createAndVerifyException(account, eventId, excepValues, true);
         instances.moveToNext();
 
         // TODO: try to modify a non-existent instance.
@@ -877,7 +877,7 @@ public class CalendarCts extends InstrumentationTestCase {
         startMillis = instances.getLong(0);
         excepValues = EventHelper.getNewExceptionValues(startMillis);
         excepValues.put(Events.DURATION, "P" + 3600*2 + "S");
-        excepEventId2 = createAndVerifyException(account, eventId, excepValues);
+        excepEventId2 = createAndVerifyException(account, eventId, excepValues, true);
         instances.moveToNext();
 
         // Advance the end time of the 3rd instance, and change the self-attendee status.
@@ -885,14 +885,14 @@ public class CalendarCts extends InstrumentationTestCase {
         excepValues = EventHelper.getNewExceptionValues(startMillis);
         excepValues.put(Events.DURATION, "P" + 3600*3 + "S");
         excepValues.put(Events.SELF_ATTENDEE_STATUS, Attendees.ATTENDEE_STATUS_DECLINED);
-        excepEventId3 = createAndVerifyException(account, eventId, excepValues);
+        excepEventId3 = createAndVerifyException(account, eventId, excepValues, true);
         instances.moveToNext();
 
         // Advance the start time of the 4th instance, which will also advance the end time.
         startMillis = instances.getLong(0);
         excepValues = EventHelper.getNewExceptionValues(startMillis);
         excepValues.put(Events.DTSTART, startMillis + 3600*1000);
-        excepEventId4 = createAndVerifyException(account, eventId, excepValues);
+        excepEventId4 = createAndVerifyException(account, eventId, excepValues, true);
         instances.moveToNext();
 
         instances.close();
@@ -982,7 +982,7 @@ public class CalendarCts extends InstrumentationTestCase {
         startMillis = instances.getLong(0);
         excepValues = EventHelper.getNewExceptionValues(startMillis);
         excepValues.put(Events.SELF_ATTENDEE_STATUS, Attendees.ATTENDEE_STATUS_DECLINED);
-        long excepEventId2 = createAndVerifyException(account, eventId, excepValues);
+        long excepEventId2 = createAndVerifyException(account, eventId, excepValues, false);
         instances.moveToNext();
 
         instances.close();
@@ -1126,7 +1126,7 @@ public class CalendarCts extends InstrumentationTestCase {
         excepValues = EventHelper.getNewExceptionValues(startMillis);
         excepValues.put(Events.DTSTART, startMillis + 3600*1000);
         excepValues.put(Events.RRULE, "FREQ=WEEKLY;COUNT=2;WKST=SU");
-        long excepEventId = createAndVerifyException(account, eventId, excepValues);
+        long excepEventId = createAndVerifyException(account, eventId, excepValues, true);
         instances.close();
 
 
@@ -1212,7 +1212,7 @@ public class CalendarCts extends InstrumentationTestCase {
         ContentValues excepValues = EventHelper.getNewExceptionValues(startMillis);
         excepValues.put(Events.RRULE, rrule);   // identifies this as an "all future events" excep
         excepValues.put(Events.EVENT_LOCATION, newLocation);
-        long excepEventId = createAndVerifyException(account, eventId, excepValues);
+        long excepEventId = createAndVerifyException(account, eventId, excepValues, true);
         instances.close();
 
         // Check results.
@@ -1419,11 +1419,13 @@ public class CalendarCts extends InstrumentationTestCase {
      * @return The _id for the new event.
      */
     private long createAndVerifyException(String account, long originalEventId,
-            ContentValues values) {
+            ContentValues values, boolean asSyncAdapter) {
         // Create the exception
         Uri uri = Uri.withAppendedPath(Events.CONTENT_EXCEPTION_URI,
                 String.valueOf(originalEventId));
-        uri = asSyncAdapter(uri, account, CTS_TEST_TYPE);
+        if (asSyncAdapter) {
+            uri = asSyncAdapter(uri, account, CTS_TEST_TYPE);
+        }
         Uri resultUri = mContentResolver.insert(uri, values);
         assertNotNull(resultUri);
         long eventId = ContentUris.parseId(resultUri);

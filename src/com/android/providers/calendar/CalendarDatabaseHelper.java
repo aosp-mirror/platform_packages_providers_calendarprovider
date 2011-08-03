@@ -594,7 +594,7 @@ import java.util.TimeZone;
                 "canOrganizerRespond INTEGER NOT NULL DEFAULT 1," +
                 "canModifyTimeZone INTEGER DEFAULT 1," +
                 "maxReminders INTEGER DEFAULT 5," +
-                "allowedReminders TEXT DEFAULT '0,1,2,3'," +
+                "allowedReminders TEXT DEFAULT '0,1'," +
                 "deleted INTEGER NOT NULL DEFAULT 0," +
                 "cal_sync1 TEXT," +
                 "cal_sync2 TEXT," +
@@ -631,7 +631,7 @@ import java.util.TimeZone;
                 CalendarContract.Calendars.CAN_MODIFY_TIME_ZONE + " INTEGER DEFAULT 1," +
                 CalendarContract.Calendars.CAN_PARTIALLY_UPDATE + " INTEGER DEFAULT 0," +
                 CalendarContract.Calendars.MAX_REMINDERS + " INTEGER DEFAULT 5," +
-                CalendarContract.Calendars.ALLOWED_REMINDERS + " TEXT DEFAULT '0,1,2'," +
+                CalendarContract.Calendars.ALLOWED_REMINDERS + " TEXT DEFAULT '0,1'," +
                 CalendarContract.Calendars.DELETED + " INTEGER NOT NULL DEFAULT 0," +
                 CalendarContract.Calendars.CAL_SYNC1 + " TEXT," +
                 CalendarContract.Calendars.CAL_SYNC2 + " TEXT," +
@@ -1742,6 +1742,10 @@ import java.util.TimeZone;
                 "sync6 " +
                 "FROM Calendars_Backup;"
         );
+
+        /* expand the set of allowed reminders for Google calendars to include email */
+        db.execSQL("UPDATE Calendars SET allowedReminders = '0,1,2' " +
+                "WHERE account_type = 'com.google'");
 
         // drop the old table
         db.execSQL("DROP TABLE Calendars_Backup;");

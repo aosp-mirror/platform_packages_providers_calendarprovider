@@ -1751,6 +1751,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                             ", duration=" + duration.getMillis() +
                             ", generated DTEND=" + values.getAsLong(Events.DTEND));
                 }
+                values.remove(Events.DURATION);
             } else {
                 /*
                  * We're going to "split" the recurring event, making the old one stop before

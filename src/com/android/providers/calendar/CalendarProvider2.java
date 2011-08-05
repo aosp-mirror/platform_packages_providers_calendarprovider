@@ -4086,6 +4086,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sRemindersProjectionMap.put(Reminders._ID, "Reminders._id AS _id");
         sRemindersProjectionMap.put(Reminders.MINUTES, "minutes");
         sRemindersProjectionMap.put(Reminders.METHOD, "method");
+        sRemindersProjectionMap.put(Events.DELETED, "Events.deleted AS deleted");
+        sRemindersProjectionMap.put(Events._SYNC_ID, "Events._sync_id AS _sync_id");
 
         // CalendarAlerts columns
         sCalendarAlertsProjectionMap.put(CalendarAlerts.EVENT_ID, "event_id");

@@ -480,6 +480,66 @@ public class CalendarCts extends InstrumentationTestCase {
         removeAndVerifyCalendar(account, id);
     }
 
+    /**
+     * Tests whether the default projections work.  We don't need to have any data in
+     * the calendar, since it's testing the database schema.
+     */
+    @MediumTest
+    public void testDefaultProjections() {
+        String account = "dproj_account";
+        int seed = 0;
+
+        // Clean up just in case
+        CalendarHelper.deleteCalendarByAccount(mContentResolver, account);
+        long id = createAndVerifyCalendar(account, seed++, null);
+
+        Cursor c;
+        Uri uri;
+        // Calendars
+        c = mContentResolver.query(Calendars.CONTENT_URI, null, null, null, null);
+        c.close();
+        // Events
+        c = mContentResolver.query(Events.CONTENT_URI, null, null, null, null);
+        c.close();
+        // Instances
+        uri = Uri.withAppendedPath(Instances.CONTENT_URI, "0/1");
+        c = mContentResolver.query(uri, null, null, null, null);
+        c.close();
+        // Attendees
+        c = mContentResolver.query(Attendees.CONTENT_URI, null, null, null, null);
+        c.close();
+        // Reminders (only REMINDERS_ID currently uses default projection)
+        uri = ContentUris.withAppendedId(Reminders.CONTENT_URI, 0);
+        c = mContentResolver.query(uri, null, null, null, null);
+        c.close();
+        // CalendarAlerts
+        c = mContentResolver.query(CalendarContract.CalendarAlerts.CONTENT_URI,
+                null, null, null, null);
+        c.close();
+        // CalendarCache
+        c = mContentResolver.query(CalendarContract.CalendarCache.URI,
+                null, null, null, null);
+        c.close();
+        // CalendarEntity
+        c = mContentResolver.query(CalendarContract.CalendarEntity.CONTENT_URI,
+                null, null, null, null);
+        c.close();
+        // EventEntities
+        c = mContentResolver.query(CalendarContract.EventsEntity.CONTENT_URI,
+                null, null, null, null);
+        c.close();
+        // EventDays
+        uri = Uri.withAppendedPath(CalendarContract.EventDays.CONTENT_URI, "1/2");
+        c = mContentResolver.query(uri, null, null, null, null);
+        c.close();
+        // ExtendedProperties
+        c = mContentResolver.query(CalendarContract.ExtendedProperties.CONTENT_URI,
+                null, null, null, null);
+        c.close();
+
+        removeAndVerifyCalendar(account, id);
+    }
+
     @MediumTest
     public void testCalendarUpdateAsApp() {
         String account = "cu1_account";

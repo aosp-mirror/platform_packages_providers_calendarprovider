@@ -1919,6 +1919,41 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     }
 
+    /**
+     * Fills in the originalId column for previously-created exceptions to this event.  If
+     * this event is not recurring or does not have a _sync_id, this does nothing.
+     * <p>
+     * The server might send exceptions before the event they refer to.  When
+     * this happens, the originalId field will not have been set in the
+     * exception events (it's the recurrence events' _id field, so it can't be
+     * known until the recurrence event is created).  When we add a recurrence
+     * event with a non-empty _sync_id field, we write that event's _id to the
+     * originalId field of any events whose originalSyncId matches _sync_id.
+     * <p>
+     * Note _sync_id is only expected to be unique within a particular calendar.
+     *
+     * @param id The ID of the Event
+     * @param values Values for the Event being inserted
+     */
+    private void backfillExceptionOriginalIds(long id, ContentValues values) {
+        String syncId = values.getAsString(Events._SYNC_ID);
+        String rrule = values.getAsString(Events.RRULE);
+        String rdate = values.getAsString(Events.RDATE);
+        String calendarId = values.getAsString(Events.CALENDAR_ID);
+
+        if (TextUtils.isEmpty(syncId) || TextUtils.isEmpty(calendarId) ||
+                (TextUtils.isEmpty(rrule) && TextUtils.isEmpty(rdate))) {
+            // Not a recurring event, or doesn't have a server-provided sync ID.
+            return;
+        }
+
+        ContentValues originalValues = new ContentValues();
+        originalValues.put(Events.ORIGINAL_ID, id);
+        mDb.update(Tables.EVENTS, originalValues,
+                Events.ORIGINAL_SYNC_ID + "=? AND " + Events.CALENDAR_ID + "=?",
+                new String[] { syncId, calendarId });
+    }
+
     @Override
     protected Uri insertInTransaction(Uri uri, ContentValues values, boolean callerIsSyncAdapter) {
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
@@ -2037,25 +2072,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         }
                     }
 
-                    /*
-                     * The server might send exceptions before the event they refer to.  When
-                     * this happens, the originalId field will not have been set in the
-                     * exception events (it's the recurrence events' _id field, so it can't be
-                     * known until the recurrence event is created).  When we add a recurrence
-                     * event with a non-empty _sync_id field, we write that event's _id to the
-                     * originalId field of any events whose originalSyncId matches _sync_id.
-                     */
-                    if (values.containsKey(Events._SYNC_ID) && values.containsKey(Events.RRULE)
-                            && !TextUtils.isEmpty(values.getAsString(Events.RRULE))) {
-                        String syncId = values.getAsString(Events._SYNC_ID);
-                        if (TextUtils.isEmpty(syncId)) {
-                            break;
-                        }
-                        ContentValues originalValues = new ContentValues();
-                        originalValues.put(Events.ORIGINAL_ID, id);
-                        mDb.update(Tables.EVENTS, originalValues, Events.ORIGINAL_SYNC_ID + "=?",
-                                new String[] {syncId});
-                    }
+                    backfillExceptionOriginalIds(id, values);
+
                     sendUpdateNotification(id, callerIsSyncAdapter);
                 }
                 break;

@@ -3110,16 +3110,35 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
         }
         while (cursor.moveToNext()) {
-            // Load the event into a ContentValues object, and merge the modifications in.
+            // Make a copy of updateValues so we can make some local changes.
             ContentValues modValues = new ContentValues(updateValues);
+
+            // Load the event into a ContentValues object.
             ContentValues values = new ContentValues();
             DatabaseUtils.cursorRowToContentValues(cursor, values);
+            boolean doValidate = false;
+            if (!callerIsSyncAdapter) {
+                try {
+                    // Check to see if the data in the database is valid.  If not, we will skip
+                    // validation of the update, so that we don't blow up on attempts to
+                    // modify existing badly-formed events.
+                    validateEventData(values);
+                    doValidate = true;
+                } catch (IllegalArgumentException iae) {
+                    Log.d(TAG, "Event " + values.getAsString(Events._ID) +
+                            " malformed, not validating update (" +
+                            iae.getMessage() + ")");
+                }
+            }
+
+            // Merge the modifications in.
             values.putAll(modValues);
 
-            // Validate the combined event.
+            // Scrub and/or validate the combined event.
             if (callerIsSyncAdapter) {
                 scrubEventData(values, modValues);
-            } else {
+            }
+            if (doValidate) {
                 validateEventData(values);
             }
 

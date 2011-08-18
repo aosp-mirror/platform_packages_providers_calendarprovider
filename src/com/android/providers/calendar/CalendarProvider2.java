@@ -61,7 +61,9 @@ import android.util.Log;
 import android.util.TimeFormatException;
 import android.util.TimeUtils;
 
+import java.io.File;
 import java.lang.reflect.Array;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -2149,6 +2151,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 id = mDbHelper.extendedPropertiesInsert(values);
                 break;
+            case EMMA:
+                // Special target used during code-coverage evaluation.
+                handleEmmaRequest(values);
+                break;
             case EVENTS_ID:
             case REMINDERS_ID:
             case CALENDAR_ALERTS_ID:
@@ -2167,6 +2173,44 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
 
         return ContentUris.withAppendedId(uri, id);
+    }
+
+    /**
+     * Handles special commands related to EMMA code-coverage testing.
+     *
+     * @param values Parameters from the caller.
+     */
+    private static void handleEmmaRequest(ContentValues values) {
+        /*
+         * This is not part of the public API, so we can't share constants with the CTS
+         * test code.
+         *
+         * Bad requests, or attempting to request EMMA coverage data when the coverage libs
+         * aren't linked in, will cause an exception.
+         */
+        String cmd = values.getAsString("cmd");
+        if (cmd.equals("start")) {
+            // We'd like to reset the coverage data, but according to FAQ item 3.14 at
+            // http://emma.sourceforge.net/faq.html, this isn't possible in 2.0.
+            Log.d(TAG, "Emma coverage testing started");
+        } else if (cmd.equals("stop")) {
+            // Call com.vladium.emma.rt.RT.dumpCoverageData() to cause a data dump.  We
+            // may not have been built with EMMA, so we need to do this through reflection.
+            String filename = values.getAsString("outputFileName");
+
+            File coverageFile = new File(filename);
+            try {
+                Class<?> emmaRTClass = Class.forName("com.vladium.emma.rt.RT");
+                Method dumpCoverageMethod = emmaRTClass.getMethod("dumpCoverageData",
+                        coverageFile.getClass(), boolean.class, boolean.class);
+
+                dumpCoverageMethod.invoke(null, coverageFile, false /*merge*/,
+                        false /*stopDataCollection*/);
+                Log.d(TAG, "Emma coverage data written to " + filename);
+            } catch (Exception e) {
+                throw new RuntimeException("Emma coverage dump failed", e);
+            }
+        }
     }
 
     /**
@@ -3898,6 +3942,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final int PROVIDER_PROPERTIES = 28;
     private static final int EXCEPTION_ID = 29;
     private static final int EXCEPTION_ID2 = 30;
+    private static final int EMMA = 31;
 
     private static final UriMatcher sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
     private static final HashMap<String, String> sInstancesProjectionMap;
@@ -3946,6 +3991,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sUriMatcher.addURI(CalendarContract.AUTHORITY, "properties", PROVIDER_PROPERTIES);
         sUriMatcher.addURI(CalendarContract.AUTHORITY, "exception/#", EXCEPTION_ID);
         sUriMatcher.addURI(CalendarContract.AUTHORITY, "exception/#/#", EXCEPTION_ID2);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "emma", EMMA);
 
         /** Contains just BaseColumns._COUNT */
         sCountProjectionMap = new HashMap<String, String>();

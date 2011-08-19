@@ -429,11 +429,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     };
 
-    protected void verifyAccounts() {
-        AccountManager.get(getContext()).addOnAccountsUpdatedListener(this, null, false);
-        onAccountsUpdated(AccountManager.get(getContext()).getAccounts());
-    }
-
     /* Visible for testing */
     @Override
     protected CalendarDatabaseHelper getDatabaseHelper(final Context context) {
@@ -528,6 +523,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             doUpdateTimezoneDependentFields();
         }
     }
+
+    private void verifyAccounts() {
+        AccountManager.get(getContext()).addOnAccountsUpdatedListener(this, null, false);
+        removeStaleAccounts(AccountManager.get(getContext()).getAccounts());
+    }
+
 
     /**
      * This creates a background thread to check the timezone and update
@@ -4187,15 +4188,46 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sCalendarCacheProjectionMap.put(CalendarCache.COLUMN_NAME_VALUE, "value");
     }
 
+
     /**
-     * Make sure that there are no entries for accounts that no longer
-     * exist. We are overriding this since we need to delete from the
+     * This is called by AccountManager when the set of accounts is updated.
+     * <p>
+     * We are overriding this since we need to delete from the
      * Calendars table, which is not syncable, which has triggers that
      * will delete from the Events and  tables, which are
      * syncable.  TODO: update comment, make sure deletes don't get synced.
+     *
+     * @param accounts The list of currently active accounts.
      */
     @Override
     public void onAccountsUpdated(Account[] accounts) {
+        Thread thread = new AccountsUpdatedThread(accounts);
+        thread.start();
+    }
+
+    private class AccountsUpdatedThread extends Thread {
+        private Account[] mAccounts;
+
+        AccountsUpdatedThread(Account[] accounts) {
+            mAccounts = accounts;
+        }
+
+        @Override
+        public void run() {
+            // The process could be killed while the thread runs.  Right now that isn't a problem,
+            // because we'll just call removeStaleAccounts() again when the provider restarts, but
+            // if we want to do additional actions we may need to use a service (e.g. start
+            // EmptyService in onAccountsUpdated() and stop it when we finish here).
+
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+            removeStaleAccounts(mAccounts);
+        }
+    }
+
+    /**
+     * Makes sure there are no entries for accounts that no longer exist.
+     */
+    private void removeStaleAccounts(Account[] accounts) {
         if (mDb == null) {
             mDb = mDbHelper.getWritableDatabase();
         }

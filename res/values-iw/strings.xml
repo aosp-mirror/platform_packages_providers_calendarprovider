@@ -20,7 +20,7 @@
     <string name="calendar_default_name" msgid="6924293766625167275">"ברירת מחדל"</string>
     <string name="calendar_info" msgid="6687678621418059281">"פרטי לוח שנה"</string>
     <string name="calendar_info_error" msgid="5575162446528419982">"שגיאה"</string>
-    <string name="calendar_info_no_calendars" msgid="4287534468186704433">"אין לוחות שנה"</string>
+    <string name="calendar_info_no_calendars" msgid="4287534468186704433">"אין יומנים"</string>
     <string name="calendar_info_events" msgid="1805502308105103803">"אירועים: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
     <string name="calendar_info_events_dirty" msgid="8879392112564499515">"אירועים: <xliff:g id="EVENTS_0">%1$d</xliff:g>, לא שמורים: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
     <string name="provider_label" msgid="2306513350843464739">"לוח שנה"</string>

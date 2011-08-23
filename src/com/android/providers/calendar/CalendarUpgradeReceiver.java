@@ -16,12 +16,14 @@
 
 package com.android.providers.calendar;
 
+import android.app.ActivityManagerNative;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.os.RemoteException;
 import android.util.EventLog;
 import android.util.Log;
 
@@ -62,9 +64,16 @@ public class CalendarUpgradeReceiver extends BroadcastReceiver {
                 // Ask for a reference to the database to force the helper to either
                 // create the database or open it up, performing any necessary upgrades
                 // in the process.
-                Log.i(TAG, "Creating or opening calendar database");
                 CalendarDatabaseHelper helper = CalendarDatabaseHelper.getInstance(context);
-                helper.getWritableDatabase();
+                if (context.getDatabasePath(helper.getDatabaseName()).exists()) {
+                    Log.i(TAG, "Creating or opening calendar database");
+                    try {
+                        ActivityManagerNative.getDefault().showBootMessage(
+                                context.getText(R.string.upgrade_msg), true);
+                    } catch (RemoteException e) {
+                    }
+                    helper.getWritableDatabase();
+                }
                 helper.close();
 
                 // Log the total time taken for the receiver to perform the operation

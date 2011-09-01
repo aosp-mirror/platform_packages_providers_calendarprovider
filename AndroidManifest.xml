@@ -51,7 +51,8 @@
              intent broadcasts. -->
         <service android:name=".EmptyService" />
 
-        <activity android:name="CalendarContentProviderTests" android:label="Calendar Content Provider">
+        <activity android:name="CalendarContentProviderTests" android:label="Calendar Content Provider"
+                android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.UNIT_TEST" />

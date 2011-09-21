@@ -10,7 +10,7 @@
 # /system/framework/emma.jar in BOOTCLASSPATH.  Basic steps:
 # - edit system/core/rootdir/init.rc
 # - insert "/system/framework/emma.jar" right before framework.jar
-# - mm -j8 external/emma
+# - mmm -j8 external/emma
 # - make -j8
 # - adb reboot-bootloader
 # - fastboot flashall

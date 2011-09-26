@@ -1083,7 +1083,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      *      OR eventLocation LIKE "%meeting%")
      * </code>
      * This "product of clauses" is a bit ugly, but produced a fairly good
-     * approximation of full-text search across multiple columns.
+     * approximation of full-text search across multiple columns.  The set
+     * of columns is specified by the SEARCH_COLUMNS constant.
+     * <p>
+     * Note the "WHERE" token isn't part of the returned string.  The value
+     * may be passed into a query as the "HAVING" clause.
      */
     @VisibleForTesting
     String constructSearchWhere(String[] tokens) {
@@ -1180,7 +1184,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
 
         return qb.query(mDb, projection, selection, selectionArgs,
-                Instances._ID /* groupBy */, searchWhere /* having */, sort);
+                Tables.EVENTS + "." + Instances._ID /* groupBy */,
+                searchWhere /* having */, sort);
     }
 
     private Cursor handleEventDayQuery(SQLiteQueryBuilder qb, int begin, int end,

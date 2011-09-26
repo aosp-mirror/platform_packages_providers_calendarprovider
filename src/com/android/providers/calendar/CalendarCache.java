@@ -159,7 +159,7 @@ public class CalendarCache {
     }
 
     /**
-     * Write a (key, value) pair in the database used by the cache. This call should be called into
+     * Write a (key, value) pair in the database used by the cache. This method should be called in
      * a transaction.
      *
      * @param db the database (must not be null)
@@ -176,6 +176,12 @@ public class CalendarCache {
             throw new CacheException("Cannot use null key for write");
         }
 
+        /*
+         * Storing the hash code of a String into the _id column carries a (very) small risk
+         * of weird behavior, because we're using it as a unique key, but hash codes aren't
+         * guaranteed to be unique.  CalendarCache has a small set of keys that are known
+         * ahead of time, so we should be okay.
+         */
         ContentValues values = new ContentValues();
         values.put(COLUMN_NAME_ID, key.hashCode());
         values.put(COLUMN_NAME_KEY, key);

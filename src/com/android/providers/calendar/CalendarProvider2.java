@@ -3669,9 +3669,20 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      */
     private void verifyTransactionAllowed(int type, Uri uri, ContentValues values,
             boolean isSyncAdapter, int uriMatch, String selection, String[] selectionArgs) {
+        // Queries are never restricted to app- or sync-adapter-only, and we don't
+        // restrict the set of columns that may be accessed.
+        if (type == TRANSACTION_QUERY) {
+            return;
+        }
+
+        // Only the sync adapter can use these to make changes.
+        if (uriMatch == SYNCSTATE || uriMatch == EXTENDED_PROPERTIES) {
+            if (!isSyncAdapter) {
+                throw new IllegalArgumentException("Only sync adapters may use " + uri);
+            }
+        }
+
         switch (type) {
-            case TRANSACTION_QUERY:
-                return;
             case TRANSACTION_INSERT:
                 if (uriMatch == INSTANCES) {
                     throw new UnsupportedOperationException(

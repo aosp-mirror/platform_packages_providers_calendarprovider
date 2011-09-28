@@ -1083,11 +1083,13 @@ public class CalendarProvider2Test extends AndroidTestCase {
         if (event.mRrule == null || mForceDtend) {
             // This is a normal event
             m.put(Events.DTEND, event.mDtend);
+            m.remove(Events.DURATION);
         }
         if (event.mRrule != null) {
             // This is a repeating event
             m.put(Events.RRULE, event.mRrule);
             m.put(Events.DURATION, event.mDuration);
+            m.remove(Events.DTEND);
         }
 
         if (event.mDescription != null) {
@@ -1990,11 +1992,24 @@ public class CalendarProvider2Test extends AndroidTestCase {
         extended.put(CalendarContract.ExtendedProperties.VALUE, "bar");
         extended.put(CalendarContract.ExtendedProperties.EVENT_ID, eventId);
 
-        Uri extendedUri = mResolver.insert(
-                updatedUri(CalendarContract.ExtendedProperties.CONTENT_URI, syncAdapter,
-                        DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE), extended);
-        testAndClearDirty(eventId, syncAdapter ? 0 : 1);
-        testQueryCount(CalendarContract.ExtendedProperties.CONTENT_URI, "event_id=" + eventId, 2);
+        Uri extendedUri = null;
+        if (syncAdapter) {
+            // Only the sync adapter is allowed to modify ExtendedProperties.
+            extendedUri = mResolver.insert(
+                    updatedUri(CalendarContract.ExtendedProperties.CONTENT_URI, syncAdapter,
+                            DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE), extended);
+            testAndClearDirty(eventId, syncAdapter ? 0 : 1);
+            testQueryCount(CalendarContract.ExtendedProperties.CONTENT_URI,
+                    "event_id=" + eventId, 2);
+        } else {
+            // Confirm that inserting as app fails.
+            try {
+                extendedUri = mResolver.insert(
+                        updatedUri(CalendarContract.ExtendedProperties.CONTENT_URI, syncAdapter,
+                                DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE), extended);
+                fail("Only sync adapter should be allowed to insert into ExtendedProperties");
+            } catch (IllegalArgumentException iae) {}
+        }
 
         // Now test updates
 
@@ -2025,12 +2040,15 @@ public class CalendarProvider2Test extends AndroidTestCase {
         extended = new ContentValues();
         extended.put(CalendarContract.ExtendedProperties.VALUE, "baz");
 
-        assertEquals("update", 1, mResolver.update(
-                updatedUri(extendedUri, syncAdapter, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
-                extended,
-                null /* where */, null /* selectionArgs */));
-        testAndClearDirty(eventId, syncAdapter ? 0 : 1);
-        testQueryCount(CalendarContract.ExtendedProperties.CONTENT_URI, "event_id=" + eventId, 2);
+        if (syncAdapter) {
+            assertEquals("update", 1, mResolver.update(
+                    updatedUri(extendedUri, syncAdapter, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
+                    extended,
+                    null /* where */, null /* selectionArgs */));
+            testAndClearDirty(eventId, syncAdapter ? 0 : 1);
+            testQueryCount(CalendarContract.ExtendedProperties.CONTENT_URI,
+                    "event_id=" + eventId, 2);
+        }
 
         // Now test deletes
 
@@ -2055,12 +2073,14 @@ public class CalendarProvider2Test extends AndroidTestCase {
         testAndClearDirty(eventId, 0);
         testQueryCount(CalendarContract.CalendarAlerts.CONTENT_URI, "event_id=" + eventId, 0);
 
-        assertEquals("delete", 1, mResolver.delete(
-                updatedUri(extendedUri, syncAdapter, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
-                null /* where */, null /* selectionArgs */));
+        if (syncAdapter) {
+            assertEquals("delete", 1, mResolver.delete(
+                    updatedUri(extendedUri, syncAdapter, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),
+                    null /* where */, null /* selectionArgs */));
 
-        testAndClearDirty(eventId, syncAdapter ? 0 : 1);
-        testQueryCount(CalendarContract.ExtendedProperties.CONTENT_URI, "event_id=" + eventId, 1);
+            testAndClearDirty(eventId, syncAdapter ? 0 : 1);
+            testQueryCount(CalendarContract.ExtendedProperties.CONTENT_URI, "event_id=" + eventId, 1);
+        }
     }
 
     /**
@@ -2665,7 +2685,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             assertEquals(1, cursor.getCount());
 
             if (cursor.moveToFirst()) {
-                long id = cursor.getLong(0);
+                long id = cursor.getLong(1);
                 assertEquals(id, eventId);
 
                 assertEquals(CalendarProvider2.EXT_PROP_ORIGINAL_TIMEZONE, cursor.getString(2));

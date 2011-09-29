@@ -767,8 +767,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         final int match = sUriMatcher.match(uri);
         switch (match) {
             case SYNCSTATE:
-                return mDbHelper.getSyncState().query(db, projection, selection,  selectionArgs,
+                return mDbHelper.getSyncState().query(db, projection, selection, selectionArgs,
                         sortOrder);
+            case SYNCSTATE_ID:
+                String selectionWithId = (SyncState._ID + "=?")
+                    + (selection == null ? "" : " AND (" + selection + ")");
+                // Prepend id to selectionArgs
+                selectionArgs = insertSelectionArg(selectionArgs,
+                        String.valueOf(ContentUris.parseId(uri)));
+                return mDbHelper.getSyncState().query(db, projection, selectionWithId,
+                        selectionArgs, sortOrder);
 
             case EVENTS:
                 qb.setTables(CalendarDatabaseHelper.Views.EVENTS);
@@ -3044,7 +3052,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private int updateInTable(String table, ContentValues values, Uri uri, String selection,
             String[] selectionArgs) {
         // Note that the query will return data according to the access restrictions,
-        // so we don't need to worry about deleting data we don't have permission to read.
+        // so we don't need to worry about updating data we don't have permission to read.
         final Cursor c = query(uri, ID_PROJECTION, selection, selectionArgs, null);
         final ContentValues dirtyValues = new ContentValues();
         dirtyValues.put(Events.DIRTY, "1");

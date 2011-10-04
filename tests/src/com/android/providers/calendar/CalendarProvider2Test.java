@@ -1040,7 +1040,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         ContentValues m = new ContentValues();
         m.put(Calendars.NAME, name);
         m.put(Calendars.CALENDAR_DISPLAY_NAME, name);
-        m.put(Calendars.CALENDAR_COLOR, "0xff123456");
+        m.put(Calendars.CALENDAR_COLOR, 0xff123456);
         m.put(Calendars.CALENDAR_TIME_ZONE, timezone);
         m.put(Calendars.VISIBLE, 1);
         m.put(Calendars.CAL_SYNC1, CALENDAR_URL);
@@ -2015,8 +2015,6 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
         attendee = new ContentValues();
         attendee.put(CalendarContract.Attendees.ATTENDEE_NAME, "Sam");
-        // Need to include EVENT_ID with attendee update.  Is that desired?
-        attendee.put(CalendarContract.Attendees.EVENT_ID, eventId);
 
         assertEquals("update", 1, mResolver.update(
                 updatedUri(attendeeUri, syncAdapter, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE),

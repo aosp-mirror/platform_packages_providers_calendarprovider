@@ -166,8 +166,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             " SET " + Events.DIRTY + "=1" +
             " WHERE " + Events._ID + "=?";
 
-    protected static final String SQL_WHERE_ID = Events._ID + "=?";
-    private static final String SQL_WHERE_EVENT_ID = "event_id=?";
+    // many tables have _id and event_id; pick a representative version to use as our generic
+    private static final String GENERIC_ID = Events._ID;
+    private static final String GENERIC_EVENT_ID = Attendees.EVENT_ID;
+
+    protected static final String SQL_WHERE_ID = GENERIC_ID + "=?";
+    private static final String SQL_WHERE_EVENT_ID = GENERIC_EVENT_ID + "=?";
     private static final String SQL_WHERE_ORIGINAL_ID = Events.ORIGINAL_ID + "=?";
     private static final String SQL_WHERE_ORIGINAL_ID_NO_SYNC_ID = Events.ORIGINAL_ID +
             "=? AND " + Events._SYNC_ID + " IS NULL";
@@ -2486,12 +2490,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * the value in the Attendees table.
      *
      * @param db the database
-     * @param attendeeValues the column values for one row in the Attendees
-     * table.
+     * @param attendeeValues the column values for one row in the Attendees table.
      */
     private void updateEventAttendeeStatus(SQLiteDatabase db, ContentValues attendeeValues) {
         // Get the event id for this attendee
-        long eventId = attendeeValues.getAsLong(Attendees.EVENT_ID);
+        Long eventIdObj = attendeeValues.getAsLong(Attendees.EVENT_ID);
+        if (eventIdObj == null) {
+            Log.w(TAG, "Attendee update values don't include an event_id");
+            return;
+        }
+        long eventId = eventIdObj;
 
         if (MULTIPLE_ATTENDEES_PER_EVENT) {
             // Get the calendar id for this event
@@ -2556,16 +2564,20 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
         }
 
+        // Select a default value for "status" based on the relationship.
         int status = Attendees.ATTENDEE_STATUS_NONE;
-        if (attendeeValues.containsKey(Attendees.ATTENDEE_RELATIONSHIP)) {
-            int rel = attendeeValues.getAsInteger(Attendees.ATTENDEE_RELATIONSHIP);
+        Integer relationObj = attendeeValues.getAsInteger(Attendees.ATTENDEE_RELATIONSHIP);
+        if (relationObj != null) {
+            int rel = relationObj;
             if (rel == Attendees.RELATIONSHIP_ORGANIZER) {
                 status = Attendees.ATTENDEE_STATUS_ACCEPTED;
             }
         }
 
-        if (attendeeValues.containsKey(Attendees.ATTENDEE_STATUS)) {
-            status = attendeeValues.getAsInteger(Attendees.ATTENDEE_STATUS);
+        // If the status is specified, use that.
+        Integer statusObj = attendeeValues.getAsInteger(Attendees.ATTENDEE_STATUS);
+        if (statusObj != null) {
+            status = statusObj;
         }
 
         ContentValues values = new ContentValues();
@@ -2907,7 +2919,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     selectionSb.append(')');
                 }
                 selection = selectionSb.toString();
-                // fall through to CALENDARS for the actual delete
+                // $FALL-THROUGH$ - fall through to CALENDARS for the actual delete
             case CALENDARS:
                 selection = appendAccountToSelection(uri, selection);
                 return deleteMatchingCalendars(selection, selectionArgs);
@@ -3042,30 +3054,115 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     /**
-     * Update rows in a table and mark corresponding events as dirty.
-     * @param table The table to delete from
-     * @param values The values to update
-     * @param uri The URI specifying the rows
-     * @param selection for the query
-     * @param selectionArgs for the query
+     * Update rows in a table and, if this is a non-sync-adapter update, mark the corresponding
+     * events as dirty.
+     * <p>
+     * This only works for tables that are associated with an event.  It is assumed that the
+     * link to the Event row is a numeric identifier in a column called "event_id".
+     *
+     * @param uri The original request URI.
+     * @param byId Set to true if the URI is expected to include an ID.
+     * @param updateValues The new values to apply.  Not all columns need be represented.
+     * @param selection For non-by-ID operations, the "where" clause to use.
+     * @param selectionArgs For non-by-ID operations, arguments to apply to the "where" clause.
+     * @param callerIsSyncAdapter Set to true if the caller is a sync adapter.
+     * @return The number of rows updated.
      */
-    private int updateInTable(String table, ContentValues values, Uri uri, String selection,
-            String[] selectionArgs) {
-        // Note that the query will return data according to the access restrictions,
-        // so we don't need to worry about updating data we don't have permission to read.
-        final Cursor c = query(uri, ID_PROJECTION, selection, selectionArgs, null);
-        final ContentValues dirtyValues = new ContentValues();
-        dirtyValues.put(Events.DIRTY, "1");
+    private int updateEventRelatedTable(Uri uri, String table, boolean byId,
+            ContentValues updateValues, String selection, String[] selectionArgs,
+            boolean callerIsSyncAdapter)
+    {
+        /*
+         * Confirm that the request has either an ID or a selection, but not both.  It's not
+         * actually "wrong" to have both, but it's not useful, and having neither is likely
+         * a mistake.
+         *
+         * If they provided an ID in the URI, convert it to an ID selection.
+         */
+        if (byId) {
+            if (!TextUtils.isEmpty(selection)) {
+                throw new UnsupportedOperationException("Selection not allowed for " + uri);
+            }
+            long rowId = ContentUris.parseId(uri);
+            if (rowId < 0) {
+                throw new IllegalArgumentException("ID expected but not found in " + uri);
+            }
+            selection = SQL_WHERE_ID;
+            selectionArgs = new String[] { String.valueOf(rowId) };
+        } else {
+            if (TextUtils.isEmpty(selection)) {
+                throw new UnsupportedOperationException("Selection is required for " + uri);
+            }
+        }
+
+        /*
+         * Query the events to update.  We want all the columns from the table, so we us a
+         * null projection.
+         */
+        Cursor c = mDb.query(table, null /*projection*/, selection, selectionArgs,
+                null, null, null);
         int count = 0;
         try {
-            while(c.moveToNext()) {
-                final long id = c.getLong(ID_INDEX);
-                final long event_id = c.getLong(EVENT_ID_INDEX);
-                mDbHelper.duplicateEvent(event_id);
-                mDb.update(table, values, SQL_WHERE_ID, new String[] {String.valueOf(id)});
-                mDb.update(Tables.EVENTS, dirtyValues, SQL_WHERE_ID,
-                        new String[] {String.valueOf(event_id)});
+            if (c.getCount() == 0) {
+                Log.d(TAG, "No query results for " + uri + ", selection=" + selection +
+                        " selectionArgs=" + Arrays.toString(selectionArgs));
+                return 0;
+            }
+
+            ContentValues dirtyValues = null;
+            if (!callerIsSyncAdapter) {
+                dirtyValues = new ContentValues();
+                dirtyValues.put(Events.DIRTY, "1");
+            }
+
+            final int idIndex = c.getColumnIndex(GENERIC_ID);
+            final int eventIdIndex = c.getColumnIndex(GENERIC_EVENT_ID);
+            if (idIndex < 0 || eventIdIndex < 0) {
+                throw new RuntimeException("Lookup on _id/event_id failed for " + uri);
+            }
+
+            /*
+             * For each row found:
+             * - merge original values with update values
+             * - update database
+             * - if not sync adapter, set "dirty" flag in corresponding event to 1
+             * - update Event attendee status
+             */
+            while (c.moveToNext()) {
+                /* copy the original values into a ContentValues, then merge the changes in */
+                ContentValues values = new ContentValues();
+                DatabaseUtils.cursorRowToContentValues(c, values);
+                values.putAll(updateValues);
+
+                long id = c.getLong(idIndex);
+                long eventId = c.getLong(eventIdIndex);
+                if (!callerIsSyncAdapter) {
+                    // Make a copy of the original, so partial-update code can see diff.
+                    mDbHelper.duplicateEvent(eventId);
+                }
+                mDb.update(table, values, SQL_WHERE_ID, new String[] { String.valueOf(id) });
+                if (!callerIsSyncAdapter) {
+                    mDb.update(Tables.EVENTS, dirtyValues, SQL_WHERE_ID,
+                            new String[] { String.valueOf(eventId) });
+                }
                 count++;
+
+                /*
+                 * The Events table has a "selfAttendeeStatus" field that usually mirrors the
+                 * "attendeeStatus" column of one row in the Attendees table.  It's the provider's
+                 * job to keep these in sync, so we have to check for changes here.  (We have
+                 * to do it way down here because this is the only point where we have the
+                 * merged Attendees values.)
+                 *
+                 * It's possible, but not expected, to have multiple Attendees entries with
+                 * matching attendeeEmail.  The behavior in this case is not defined.
+                 *
+                 * We could do this more efficiently for "bulk" updates by caching the Calendar
+                 * owner email and checking it here.
+                 */
+                if (table.equals(Tables.ATTENDEES)) {
+                    updateEventAttendeeStatus(mDb, values);
+                }
             }
         } finally {
             c.close();
@@ -3317,12 +3414,30 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         verifyTransactionAllowed(TRANSACTION_UPDATE, uri, values, callerIsSyncAdapter, match,
                 selection, selectionArgs);
 
-        int count = 0;
-
-        // TODO: remove this restriction
-        if (!TextUtils.isEmpty(selection) && match != CALENDAR_ALERTS
-                && match != EVENTS && match != CALENDARS && match != PROVIDER_PROPERTIES) {
-            throw new IllegalArgumentException("WHERE based updates not supported");
+        if (!TextUtils.isEmpty(selection)) {
+            // Only allow selections for the URIs that can reasonably use them.
+            switch (match) {
+                case CALENDARS:
+                case EVENTS:
+                case ATTENDEES:
+                case CALENDAR_ALERTS:
+                case REMINDERS:
+                case PROVIDER_PROPERTIES:
+                    break;
+                default:
+                    throw new IllegalArgumentException("Selection not permitted for " + uri);
+            }
+        } else {
+            // Disallow empty selections for some URIs.
+            switch (match) {
+                case EVENTS:
+                case ATTENDEES:
+                case REMINDERS:
+                case PROVIDER_PROPERTIES:
+                    throw new IllegalArgumentException("Selection must be specified for " + uri);
+                default:
+                    break;
+            }
         }
 
         switch (match) {
@@ -3345,10 +3460,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             {
                 long id;
                 if (match == CALENDARS_ID) {
-                    if (selection != null) {
-                        throw new UnsupportedOperationException("Selection not permitted for "
-                                + uri);
-                    }
                     id = ContentUris.parseId(uri);
                 } else {
                     // TODO: for supporting other sync adapters, we will need to
@@ -3410,18 +3521,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                                 null /* groupBy */, null /* having */, null /* sortOrder */);
                     } else {
                         // One or more events, identified by the selection / selectionArgs.
-                        if (!callerIsSyncAdapter) {
-                            // Only the sync adapter can use this URI.
-                            throw new IllegalArgumentException("Invalid URI: " + uri);
-                        }
-
                         events = mDb.query(Tables.EVENTS, null /* columns */,
                                 selection, selectionArgs,
                                 null /* groupBy */, null /* having */, null /* sortOrder */);
                     }
 
                     if (events.getCount() == 0) {
-                        Log.w(TAG, "No events to update: uri=" + uri + " selection=" + selection +
+                        Log.i(TAG, "No events to update: uri=" + uri + " selection=" + selection +
                                 " selectionArgs=" + Arrays.toString(selectionArgs));
                         return 0;
                     }
@@ -3433,26 +3539,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     }
                 }
             }
-            case ATTENDEES_ID: {
-                if (selection != null) {
-                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
-                }
-                // Copy the attendee status value to the Events table.
-                updateEventAttendeeStatus(mDb, values);
+            case ATTENDEES:
+                return updateEventRelatedTable(uri, Tables.ATTENDEES, false, values, selection,
+                        selectionArgs, callerIsSyncAdapter);
+            case ATTENDEES_ID:
+                return updateEventRelatedTable(uri, Tables.ATTENDEES, true, values, null, null,
+                        callerIsSyncAdapter);
 
-                if (callerIsSyncAdapter) {
-                    long id = ContentUris.parseId(uri);
-                    return mDb.update(Tables.ATTENDEES, values, SQL_WHERE_ID,
-                            new String[] {String.valueOf(id)});
-                } else {
-                    return updateInTable(Tables.ATTENDEES, values, uri, null /* selection */,
-                            null /* selectionArgs */);
-                }
-            }
             case CALENDAR_ALERTS_ID: {
-                if (selection != null) {
-                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
-                }
                 // Note: dirty bit is not set for Alerts because it is not synced.
                 // It is generated from Reminders, which is synced.
                 long id = ContentUris.parseId(uri);
@@ -3464,18 +3558,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // It is generated from Reminders, which is synced.
                 return mDb.update(Tables.CALENDAR_ALERTS, values, selection, selectionArgs);
             }
+
+            case REMINDERS:
+                return updateEventRelatedTable(uri, Tables.REMINDERS, false, values, selection,
+                        selectionArgs, callerIsSyncAdapter);
             case REMINDERS_ID: {
-                if (selection != null) {
-                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
-                }
-                if (callerIsSyncAdapter) {
-                    long id = ContentUris.parseId(uri);
-                    count = mDb.update(Tables.REMINDERS, values, SQL_WHERE_ID,
-                            new String[] {String.valueOf(id)});
-                } else {
-                    count = updateInTable(Tables.REMINDERS, values, uri, null /* selection */,
-                            null /* selectionArgs */);
-                }
+                int count = updateEventRelatedTable(uri, Tables.REMINDERS, true, values, null, null,
+                        callerIsSyncAdapter);
 
                 // Reschedule the event alarms because the
                 // "minutes" field may have changed.
@@ -3485,19 +3574,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
                 return count;
             }
-            case EXTENDED_PROPERTIES_ID: {
-                if (selection != null) {
-                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
-                }
-                if (callerIsSyncAdapter) {
-                    long id = ContentUris.parseId(uri);
-                    return mDb.update(Tables.EXTENDED_PROPERTIES, values, SQL_WHERE_ID,
-                            new String[] {String.valueOf(id)});
-                } else {
-                    return updateInTable(Tables.EXTENDED_PROPERTIES, values, uri,
-                            null /* selection */, null /* selectionArgs */);
-                }
-            }
+
+            case EXTENDED_PROPERTIES_ID:
+                return updateEventRelatedTable(uri, Tables.EXTENDED_PROPERTIES, true, values,
+                        null, null, callerIsSyncAdapter);
+
             // TODO: replace the SCHEDULE_ALARM private URIs with a
             // service
             case SCHEDULE_ALARM: {
@@ -3510,9 +3591,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
 
             case PROVIDER_PROPERTIES: {
-                if (selection == null) {
-                    throw new UnsupportedOperationException("Selection cannot be null for " + uri);
-                }
                 if (!selection.equals("key=?")) {
                     throw new UnsupportedOperationException("Selection should be key=? for " + uri);
                 }

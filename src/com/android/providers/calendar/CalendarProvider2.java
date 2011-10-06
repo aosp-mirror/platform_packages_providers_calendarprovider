@@ -2807,11 +2807,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case EVENTS_ID:
             {
                 long id = ContentUris.parseId(uri);
-                if (selection != null) {
-                    throw new UnsupportedOperationException("CalendarProvider2 "
-                            + "doesn't support selection based deletion for type "
-                            + match);
-                }
                 return deleteEventInternal(id, callerIsSyncAdapter, false /* isBatch */);
             }
             case EXCEPTION_ID2:
@@ -2834,9 +2829,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
             case ATTENDEES_ID:
             {
-                if (selection != null) {
-                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
-                }
                 if (callerIsSyncAdapter) {
                     long id = ContentUris.parseId(uri);
                     return mDb.delete(Tables.ATTENDEES, SQL_WHERE_ID,
@@ -2856,9 +2848,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
             case REMINDERS_ID:
             {
-                if (selection != null) {
-                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
-                }
                 if (callerIsSyncAdapter) {
                     long id = ContentUris.parseId(uri);
                     return mDb.delete(Tables.REMINDERS, SQL_WHERE_ID,
@@ -2879,9 +2868,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
             case EXTENDED_PROPERTIES_ID:
             {
-                if (selection != null) {
-                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
-                }
                 if (callerIsSyncAdapter) {
                     long id = ContentUris.parseId(uri);
                     return mDb.delete(Tables.EXTENDED_PROPERTIES, SQL_WHERE_ID,
@@ -2901,9 +2887,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
             case CALENDAR_ALERTS_ID:
             {
-                if (selection != null) {
-                    throw new UnsupportedOperationException("Selection not permitted for " + uri);
-                }
                 // Note: dirty bit is not set for Alerts because it is not synced.
                 // It is generated from Reminders, which is synced.
                 long id = ContentUris.parseId(uri);
@@ -3414,32 +3397,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         verifyTransactionAllowed(TRANSACTION_UPDATE, uri, values, callerIsSyncAdapter, match,
                 selection, selectionArgs);
 
-        if (!TextUtils.isEmpty(selection)) {
-            // Only allow selections for the URIs that can reasonably use them.
-            switch (match) {
-                case CALENDARS:
-                case EVENTS:
-                case ATTENDEES:
-                case CALENDAR_ALERTS:
-                case REMINDERS:
-                case PROVIDER_PROPERTIES:
-                    break;
-                default:
-                    throw new IllegalArgumentException("Selection not permitted for " + uri);
-            }
-        } else {
-            // Disallow empty selections for some URIs.
-            switch (match) {
-                case EVENTS:
-                case ATTENDEES:
-                case REMINDERS:
-                case PROVIDER_PROPERTIES:
-                    throw new IllegalArgumentException("Selection must be specified for " + uri);
-                default:
-                    break;
-            }
-        }
-
         switch (match) {
             case SYNCSTATE:
                 return mDbHelper.getSyncState().update(mDb, values,
@@ -3745,6 +3702,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     /**
      * Verifies that the operation is allowed and throws an exception if it
      * isn't. This defines the limits of a sync adapter call vs an app call.
+     * <p>
+     * Also rejects calls that have a selection but shouldn't, or that don't have a selection
+     * but should.
      *
      * @param type The type of call, {@link #TRANSACTION_QUERY},
      *            {@link #TRANSACTION_INSERT}, {@link #TRANSACTION_UPDATE}, or
@@ -3759,6 +3719,37 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // restrict the set of columns that may be accessed.
         if (type == TRANSACTION_QUERY) {
             return;
+        }
+
+        if (type == TRANSACTION_UPDATE || type == TRANSACTION_DELETE) {
+            if (!TextUtils.isEmpty(selection)) {
+                // Only allow selections for the URIs that can reasonably use them.
+                switch (uriMatch) {
+                    case SYNCSTATE:
+                    case CALENDARS:
+                    case EVENTS:
+                    case ATTENDEES:
+                    case CALENDAR_ALERTS:
+                    case REMINDERS:
+                    case EXTENDED_PROPERTIES:
+                    case PROVIDER_PROPERTIES:
+                        break;
+                    default:
+                        throw new IllegalArgumentException("Selection not permitted for " + uri);
+                }
+            } else {
+                // Disallow empty selections for some URIs.
+                switch (uriMatch) {
+                    case EVENTS:
+                    case ATTENDEES:
+                    case REMINDERS:
+                    case PROVIDER_PROPERTIES:
+                        throw new IllegalArgumentException("Selection must be specified for "
+                                + uri);
+                    default:
+                        break;
+                }
+            }
         }
 
         // Only the sync adapter can use these to make changes.

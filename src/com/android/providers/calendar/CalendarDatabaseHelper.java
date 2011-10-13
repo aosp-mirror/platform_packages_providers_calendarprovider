@@ -2951,6 +2951,14 @@ import java.util.TimeZone;
         return SCHEMA_HTTPS + url.substring(SCHEMA_HTTP.length());
     }
 
+    /**
+     * Duplicates an event and its associated tables (Attendees, Reminders, ExtendedProperties).
+     * <p>
+     * Does not create a duplicate if the Calendar's "canPartiallyUpdate" is 0 or the Event's
+     * "dirty" is 1 (so we don't create more than one duplicate).
+     *
+     * @param id The _id of the event to duplicate.
+     */
     protected void duplicateEvent(final long id) {
         final SQLiteDatabase db = getWritableDatabase();
         final long canPartiallyUpdate = DatabaseUtils.longForQuery(db, "SELECT "
@@ -2985,6 +2993,14 @@ import java.util.TimeZone;
         copyEventRelatedTables(db, newId, id);
     }
 
+    /**
+     * Makes a copy of the Attendees, Reminders, and ExtendedProperties rows associated with
+     * a specific event.
+     *
+     * @param db The database.
+     * @param newId The ID of the new event.
+     * @param id The ID of the old event.
+     */
     static void copyEventRelatedTables(SQLiteDatabase db, long newId, long id) {
         db.execSQL("INSERT INTO " + Tables.REMINDERS
                 + " ( "  + CalendarContract.Reminders.EVENT_ID + ", "

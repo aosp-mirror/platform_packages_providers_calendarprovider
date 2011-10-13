@@ -68,6 +68,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.TimeZone;
@@ -108,9 +109,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final int EVENTS_ORIGINAL_ID_INDEX = 3;
     private static final int EVENTS_ORIGINAL_SYNC_ID_INDEX = 4;
 
+    // many tables have _id and event_id; pick a representative version to use as our generic
+    private static final String GENERIC_ID = Attendees._ID;
+    private static final String GENERIC_EVENT_ID = Attendees.EVENT_ID;
+
     private static final String[] ID_PROJECTION = new String[] {
-            Attendees._ID,
-            Attendees.EVENT_ID, // Assume these are the same for each table
+            GENERIC_ID,
+            GENERIC_EVENT_ID,
     };
     private static final int ID_INDEX = 0;
     private static final int EVENT_ID_INDEX = 1;
@@ -165,10 +170,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Tables.EVENTS +
             " SET " + Events.DIRTY + "=1" +
             " WHERE " + Events._ID + "=?";
-
-    // many tables have _id and event_id; pick a representative version to use as our generic
-    private static final String GENERIC_ID = Events._ID;
-    private static final String GENERIC_EVENT_ID = Attendees.EVENT_ID;
 
     protected static final String SQL_WHERE_ID = GENERIC_ID + "=?";
     private static final String SQL_WHERE_EVENT_ID = GENERIC_EVENT_ID + "=?";
@@ -1561,7 +1562,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
 
             EventRecurrence excepRecurrence = new EventRecurrence();
-            excepRecurrence.parse(origRrule);  // TODO: add/use a copy constructor to EventRecurrence
+            excepRecurrence.parse(origRrule); // TODO: add/use a copy constructor to EventRecurrence
             excepRecurrence.count -= recurrences.length;
             values.put(Events.RRULE, excepRecurrence.toString());
 
@@ -2042,6 +2043,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                                 "allDay is true but sec, min, hour were not 0.");
                     }
                 }
+                updatedValues.remove(Events.HAS_ALARM);     // should not be set by caller
                 // Insert the row
                 id = mDbHelper.eventsInsert(updatedValues);
                 if (id != -1) {
@@ -2130,16 +2132,20 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 updateEventAttendeeStatus(mDb, values);
                 break;
             case REMINDERS:
-                if (!values.containsKey(Reminders.EVENT_ID)) {
+            {
+                Long eventIdObj = values.getAsLong(Reminders.EVENT_ID);
+                if (eventIdObj == null) {
                     throw new IllegalArgumentException("Reminders values must "
-                            + "contain an event_id");
+                            + "contain a numeric event_id");
                 }
                 if (!callerIsSyncAdapter) {
-                    final Long eventId = values.getAsLong(Reminders.EVENT_ID);
-                    mDbHelper.duplicateEvent(eventId);
-                    setEventDirty(eventId);
+                    mDbHelper.duplicateEvent(eventIdObj);
+                    setEventDirty(eventIdObj);
                 }
                 id = mDbHelper.remindersInsert(values);
+
+                // We know this event has at least one reminder, so make sure "hasAlarm" is 1.
+                setHasAlarm(eventIdObj, 1);
 
                 // Schedule another event alarm, if necessary
                 if (Log.isLoggable(TAG, Log.DEBUG)) {
@@ -2147,6 +2153,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
                 break;
+            }
             case CALENDAR_ALERTS:
                 if (!values.containsKey(CalendarAlerts.EVENT_ID)) {
                     throw new IllegalArgumentException("CalendarAlerts values must "
@@ -2587,6 +2594,23 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     /**
+     * Set the "hasAlarm" column in the database.
+     *
+     * @param eventId The _id of the Event to update.
+     * @param val The value to set it to (0 or 1).
+     */
+    private void setHasAlarm(long eventId, int val) {
+        ContentValues values = new ContentValues();
+        values.put(Events.HAS_ALARM, val);
+        int count = mDb.update(Tables.EVENTS, values, SQL_WHERE_ID,
+                new String[] { String.valueOf(eventId) });
+        if (count != 1) {
+            Log.w(TAG, "setHasAlarm on event " + eventId + " updated " + count +
+                    " rows (expected 1)");
+        }
+    }
+
+    /**
      * Calculates the "last date" of the event.  For a regular event this is the start time
      * plus the duration.  For a recurring event this is the start date of the last event in
      * the recurrence, plus the duration.  The event recurs forever, this returns -1.  If
@@ -2824,7 +2848,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 if (callerIsSyncAdapter) {
                     return mDb.delete(Tables.ATTENDEES, selection, selectionArgs);
                 } else {
-                    return deleteFromTable(Tables.ATTENDEES, uri, selection, selectionArgs);
+                    return deleteFromEventRelatedTable(Tables.ATTENDEES, uri, selection,
+                            selectionArgs);
                 }
             }
             case ATTENDEES_ID:
@@ -2834,35 +2859,25 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     return mDb.delete(Tables.ATTENDEES, SQL_WHERE_ID,
                             new String[] {String.valueOf(id)});
                 } else {
-                    return deleteFromTable(Tables.ATTENDEES, uri, null /* selection */,
+                    return deleteFromEventRelatedTable(Tables.ATTENDEES, uri, null /* selection */,
                                            null /* selectionArgs */);
                 }
             }
             case REMINDERS:
             {
-                if (callerIsSyncAdapter) {
-                    return mDb.delete(Tables.REMINDERS, selection, selectionArgs);
-                } else {
-                    return deleteFromTable(Tables.REMINDERS, uri, selection, selectionArgs);
-                }
+                return deleteReminders(uri, false, selection, selectionArgs, callerIsSyncAdapter);
             }
             case REMINDERS_ID:
             {
-                if (callerIsSyncAdapter) {
-                    long id = ContentUris.parseId(uri);
-                    return mDb.delete(Tables.REMINDERS, SQL_WHERE_ID,
-                            new String[] {String.valueOf(id)});
-                } else {
-                    return deleteFromTable(Tables.REMINDERS, uri, null /* selection */,
-                                           null /* selectionArgs */);
-                }
+                return deleteReminders(uri, true, null /*selection*/, null /*selectionArgs*/,
+                        callerIsSyncAdapter);
             }
             case EXTENDED_PROPERTIES:
             {
                 if (callerIsSyncAdapter) {
                     return mDb.delete(Tables.EXTENDED_PROPERTIES, selection, selectionArgs);
                 } else {
-                    return deleteFromTable(Tables.EXTENDED_PROPERTIES, uri, selection,
+                    return deleteFromEventRelatedTable(Tables.EXTENDED_PROPERTIES, uri, selection,
                             selectionArgs);
                 }
             }
@@ -2873,8 +2888,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     return mDb.delete(Tables.EXTENDED_PROPERTIES, SQL_WHERE_ID,
                             new String[] {String.valueOf(id)});
                 } else {
-                    return deleteFromTable(Tables.EXTENDED_PROPERTIES, uri, null /* selection */,
-                                           null /* selectionArgs */);
+                    return deleteFromEventRelatedTable(Tables.EXTENDED_PROPERTIES, uri,
+                            null /* selection */, null /* selectionArgs */);
                 }
             }
             case CALENDAR_ALERTS:
@@ -2882,7 +2897,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 if (callerIsSyncAdapter) {
                     return mDb.delete(Tables.CALENDAR_ALERTS, selection, selectionArgs);
                 } else {
-                    return deleteFromTable(Tables.CALENDAR_ALERTS, uri, selection, selectionArgs);
+                    return deleteFromEventRelatedTable(Tables.CALENDAR_ALERTS, uri, selection,
+                            selectionArgs);
                 }
             }
             case CALENDAR_ALERTS_ID:
@@ -3007,33 +3023,152 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     /**
-     * Delete rows from a table and mark corresponding events as dirty.
+     * Delete rows from an Event-related table (e.g. Attendees) and mark corresponding events
+     * as dirty.
+     *
      * @param table The table to delete from
      * @param uri The URI specifying the rows
      * @param selection for the query
      * @param selectionArgs for the query
      */
-    private int deleteFromTable(String table, Uri uri, String selection, String[] selectionArgs) {
-        // Note that the query will return data according to the access restrictions,
-        // so we don't need to worry about deleting data we don't have permission to read.
-        final Cursor c = query(uri, ID_PROJECTION, selection, selectionArgs, null);
-        final ContentValues values = new ContentValues();
-        values.put(Events.DIRTY, "1");
+    private int deleteFromEventRelatedTable(String table, Uri uri, String selection,
+            String[] selectionArgs) {
+        if (table.equals(Tables.EVENTS)) {
+            throw new IllegalArgumentException("Don't delete Events with this method "
+                    + "(use deleteEventInternal)");
+        }
+
+        ContentValues dirtyValues = new ContentValues();
+        dirtyValues.put(Events.DIRTY, "1");
+
+        /*
+         * Re-issue the delete URI as a query.  Note that, if this is a by-ID request, the ID
+         * will be in the URI, not selection/selectionArgs.
+         *
+         * Note that the query will return data according to the access restrictions,
+         * so we don't need to worry about deleting data we don't have permission to read.
+         */
+        Cursor c = query(uri, ID_PROJECTION, selection, selectionArgs, GENERIC_EVENT_ID);
         int count = 0;
         try {
-            while(c.moveToNext()) {
-                final long id = c.getLong(ID_INDEX);
-                final long event_id = c.getLong(EVENT_ID_INDEX);
-                mDbHelper.duplicateEvent(event_id);
+            long prevEventId = -1;
+            while (c.moveToNext()) {
+                long id = c.getLong(ID_INDEX);
+                long eventId = c.getLong(EVENT_ID_INDEX);
+                // Duplicate the event.  As a minor optimization, don't try to duplicate an
+                // event that we just duplicated on the previous iteration.
+                if (eventId != prevEventId) {
+                    mDbHelper.duplicateEvent(eventId);
+                    prevEventId = eventId;
+                }
                 mDb.delete(table, SQL_WHERE_ID, new String[]{String.valueOf(id)});
-                mDb.update(Tables.EVENTS, values, SQL_WHERE_ID,
-                        new String[] {String.valueOf(event_id)});
+                if (eventId != prevEventId) {
+                    mDb.update(Tables.EVENTS, dirtyValues, SQL_WHERE_ID,
+                            new String[] { String.valueOf(eventId)} );
+                }
                 count++;
             }
         } finally {
             c.close();
         }
         return count;
+    }
+
+    /**
+     * Deletes rows from the Reminders table and marks the corresponding events as dirty.
+     * Ensures the hasAlarm column in the Event is updated.
+     *
+     * @return The number of rows deleted.
+     */
+    private int deleteReminders(Uri uri, boolean byId, String selection, String[] selectionArgs,
+            boolean callerIsSyncAdapter) {
+        /*
+         * If this is a by-ID URI, make sure we have a good ID.  Also, confirm that the
+         * selection is null, since we will be ignoring it.
+         */
+        long rowId = -1;
+        if (byId) {
+            if (!TextUtils.isEmpty(selection)) {
+                throw new UnsupportedOperationException("Selection not allowed for " + uri);
+            }
+            rowId = ContentUris.parseId(uri);
+            if (rowId < 0) {
+                throw new IllegalArgumentException("ID expected but not found in " + uri);
+            }
+        }
+
+        /*
+         * Determine the set of events affected by this operation.  There can be multiple
+         * reminders with the same event_id, so to avoid beating up the database with "how many
+         * reminders are left" and "duplicate this event" requests, we want to generate a list
+         * of affected event IDs and work off that.
+         *
+         * TODO: use GROUP BY to reduce the number of rows returned in the cursor.  (The content
+         * provider query() doesn't take it as an argument.)
+         */
+        HashSet<Long> eventIdSet = new HashSet<Long>();
+        Cursor c = query(uri, new String[] { Attendees.EVENT_ID }, selection, selectionArgs, null);
+        try {
+            while (c.moveToNext()) {
+                eventIdSet.add(c.getLong(0));
+            }
+        } finally {
+            c.close();
+        }
+
+        /*
+         * If this isn't a sync adapter, duplicate each event (along with its associated tables),
+         * and mark each as "dirty".  This is for the benefit of partial-update sync.
+         */
+        if (!callerIsSyncAdapter) {
+            ContentValues dirtyValues = new ContentValues();
+            dirtyValues.put(Events.DIRTY, "1");
+
+            Iterator<Long> iter = eventIdSet.iterator();
+            while (iter.hasNext()) {
+                long eventId = iter.next();
+                mDbHelper.duplicateEvent(eventId);
+                mDb.update(Tables.EVENTS, dirtyValues, SQL_WHERE_ID,
+                        new String[] { String.valueOf(eventId) });
+            }
+        }
+
+        /*
+         * Issue the original deletion request.  If we were called with a by-ID URI, generate
+         * a selection.
+         */
+        if (byId) {
+            selection = SQL_WHERE_ID;
+            selectionArgs = new String[] { String.valueOf(rowId) };
+        }
+        int delCount = mDb.delete(Tables.REMINDERS, selection, selectionArgs);
+
+        /*
+         * For each event, set "hasAlarm" to zero if we've deleted the last of the reminders.
+         * (If the event still has reminders, hasAlarm should already be 1.)  Because we're
+         * executing in an exclusive transaction there's no risk of racing against other
+         * database updates.
+         */
+        ContentValues noAlarmValues = new ContentValues();
+        noAlarmValues.put(Events.HAS_ALARM, 0);
+        Iterator<Long> iter = eventIdSet.iterator();
+        while (iter.hasNext()) {
+            long eventId = iter.next();
+
+            // Count up the number of reminders still associated with this event.
+            Cursor reminders = mDb.query(Tables.REMINDERS, new String[] { GENERIC_ID },
+                    SQL_WHERE_EVENT_ID, new String[] { String.valueOf(eventId) },
+                    null, null, null);
+            int reminderCount = reminders.getCount();
+            reminders.close();
+
+            if (reminderCount == 0) {
+                mDb.update(Tables.EVENTS, noAlarmValues, SQL_WHERE_ID,
+                        new String[] { String.valueOf(eventId) });
+            }
+        }
+
+        return delCount;
     }
 
     /**
@@ -3231,6 +3366,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      */
     private int handleUpdateEvents(Cursor cursor, ContentValues updateValues,
             boolean callerIsSyncAdapter) {
+        /*
+         * This field is considered read-only.  It should not be modified by applications or
+         * by the sync adapter.
+         */
+        updateValues.remove(Events.HAS_ALARM);
+
         /*
          * For a single event, we can just load the event, merge modValues in, perform any
          * fix-ups (putting changes into modValues), check validity, and then update().  We have

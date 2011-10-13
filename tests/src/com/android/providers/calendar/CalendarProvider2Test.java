@@ -16,8 +16,6 @@
 
 package com.android.providers.calendar;
 
-import com.android.common.ArrayListCursor;
-
 import android.content.ComponentName;
 import android.content.ContentProvider;
 import android.content.ContentResolver;
@@ -29,6 +27,7 @@ import android.content.EntityIterator;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.database.Cursor;
+import android.database.MatrixCursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
@@ -2424,7 +2423,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         @Override
         public Cursor query(Uri uri, String[] projection, String selection,
                 String[] selectionArgs, String sortOrder) {
-            return new ArrayListCursor(new String[]{}, new ArrayList<ArrayList>());
+            return new MatrixCursor(new String[]{ "_id" }, 0);
         }
 
         @Override

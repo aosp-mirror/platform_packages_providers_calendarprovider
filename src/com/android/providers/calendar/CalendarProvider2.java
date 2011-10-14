@@ -1687,6 +1687,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             // and drop in the new caller-supplied values.  This will set originalInstanceTime.
             ContentValues values = new ContentValues();
             DatabaseUtils.cursorRowToContentValues(cursor, values);
+            cursor.close();
+            cursor = null;
 
             // TODO: if we're changing this to an all-day event, we should ensure that
             //       hours/mins/secs on DTSTART are zeroed out (before computing DTEND).
@@ -1884,13 +1886,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                      * the Calendar.  We're expecting to find one matching entry in Attendees.
                      */
                     long calendarId = values.getAsLong(Events.CALENDAR_ID);
-                    cursor = mDb.query(Tables.CALENDARS, new String[] { Calendars.OWNER_ACCOUNT },
-                            SQL_WHERE_ID, new String[] { String.valueOf(calendarId) },
-                            null /* groupBy */, null /* having */, null /* sortOrder */);
-                    if (!cursor.moveToFirst()) {
-                        Log.w(TAG, "Can't get calendar account_name for calendar " + calendarId);
-                    } else {
-                        String accountName = cursor.getString(0);
+                    String accountName = getOwner(calendarId);
+
+                    if (accountName != null) {
                         ContentValues attValues = new ContentValues();
                         attValues.put(Attendees.ATTENDEE_STATUS,
                                 modValues.getAsString(Events.SELF_ATTENDEE_STATUS));
@@ -1920,7 +1918,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                             throw new RuntimeException("Status update WTF");
                         }
                     }
-                    cursor.close();
                 }
             } else {
                 /*
@@ -2432,8 +2429,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     /**
-     * Gets the calendar's owner for an event.
-     * @param calId
+     * Gets a calendar's "owner account", i.e. the e-mail address of the owner of the calendar.
+     *
+     * @param calId The calendar ID.
      * @return email of owner or null
      */
     private String getOwner(long calId) {

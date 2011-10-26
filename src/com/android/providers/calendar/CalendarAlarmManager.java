@@ -112,12 +112,6 @@ public class CalendarAlarmManager {
     @VisibleForTesting
     protected AtomicBoolean mNextAlarmCheckScheduled;
     /**
-     * Used for tracking if current alarms should be removed when recalculating
-     * new ones.
-     */
-    @VisibleForTesting
-    protected AtomicBoolean mNeedRemoveAlarms;
-    /**
      * Used for synchronization
      */
     @VisibleForTesting
@@ -139,14 +133,10 @@ public class CalendarAlarmManager {
         mContext = context;
         mAlarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         mNextAlarmCheckScheduled = new AtomicBoolean(false);
-        mNeedRemoveAlarms = new AtomicBoolean(false);
         mAlarmLock = new Object();
     }
 
     void scheduleNextAlarm(boolean removeAlarms) {
-        // We aggregate first the "remove alarm flag". Whenever it is to true,
-        // it will be sticky
-        mNeedRemoveAlarms.set(mNeedRemoveAlarms.get() || removeAlarms);
         if (!mNextAlarmCheckScheduled.getAndSet(true)) {
             if (Log.isLoggable(CalendarProvider2.TAG, Log.DEBUG)) {
                 Log.d(CalendarProvider2.TAG, "Scheduling check of next Alarm");

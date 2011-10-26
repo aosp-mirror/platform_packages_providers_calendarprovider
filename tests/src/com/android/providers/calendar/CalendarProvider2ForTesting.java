@@ -49,7 +49,6 @@ public class CalendarProvider2ForTesting extends CalendarProvider2 {
         protected void initializeWithContext(Context context) {
             mContext = context;
             mNextAlarmCheckScheduled = new AtomicBoolean(false);
-            mNeedRemoveAlarms = new AtomicBoolean(false);
             mAlarmLock = new Object();
         }
 

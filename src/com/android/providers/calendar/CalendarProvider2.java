@@ -50,6 +50,7 @@ import android.provider.CalendarContract;
 import android.provider.CalendarContract.Attendees;
 import android.provider.CalendarContract.CalendarAlerts;
 import android.provider.CalendarContract.Calendars;
+import android.provider.CalendarContract.Colors;
 import android.provider.CalendarContract.Events;
 import android.provider.CalendarContract.Instances;
 import android.provider.CalendarContract.Reminders;
@@ -108,6 +109,28 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final int EVENTS_RDATE_INDEX = 2;
     private static final int EVENTS_ORIGINAL_ID_INDEX = 3;
     private static final int EVENTS_ORIGINAL_SYNC_ID_INDEX = 4;
+
+    private static final String[] COLORS_PROJECTION = new String[] {
+        Colors.ACCOUNT_NAME,
+        Colors.ACCOUNT_TYPE,
+        Colors.COLOR_TYPE,
+        Colors.COLOR_INDEX,
+        Colors.COLOR,
+    };
+    private static final int COLORS_ACCOUNT_NAME_INDEX = 0;
+    private static final int COLORS_ACCOUNT_TYPE_INDEX = 1;
+    private static final int COLORS_COLOR_TYPE_INDEX = 2;
+    private static final int COLORS_COLOR_INDEX_INDEX = 3;
+    private static final int COLORS_COLOR_INDEX = 4;
+
+    private static final String GENERIC_ACCOUNT_NAME = Calendars.ACCOUNT_NAME;
+    private static final String GENERIC_ACCOUNT_TYPE = Calendars.ACCOUNT_TYPE;
+    private static final String[] ACCOUNT_PROJECTION = new String[] {
+        GENERIC_ACCOUNT_NAME,
+        GENERIC_ACCOUNT_TYPE,
+    };
+    private static final int ACCOUNT_NAME_INDEX = 0;
+    private static final int ACCOUNT_TYPE_INDEX = 1;
 
     // many tables have _id and event_id; pick a representative version to use as our generic
     private static final String GENERIC_ID = Attendees._ID;
@@ -171,6 +194,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             " SET " + Events.DIRTY + "=1" +
             " WHERE " + Events._ID + "=?";
 
+    private static final String SQL_WHERE_CALENDAR_COLOR = Calendars.ACCOUNT_NAME + "=? AND "
+            + Calendars.ACCOUNT_TYPE + "=? AND " + Calendars.CALENDAR_COLOR_INDEX + "=?";
+
+    private static final String SQL_WHERE_EVENT_COLOR = Events.ACCOUNT_NAME + "=? AND "
+            + Events.ACCOUNT_TYPE + "=? AND " + Events.EVENT_COLOR_INDEX + "=?";
+
     protected static final String SQL_WHERE_ID = GENERIC_ID + "=?";
     private static final String SQL_WHERE_EVENT_ID = GENERIC_EVENT_ID + "=?";
     private static final String SQL_WHERE_ORIGINAL_ID = Events.ORIGINAL_ID + "=?";
@@ -207,6 +236,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final String SQL_DELETE_FROM_CALENDARS = "DELETE FROM " + Tables.CALENDARS +
                 " WHERE " + Calendars.ACCOUNT_NAME + "=? AND " +
                     Calendars.ACCOUNT_TYPE + "=?";
+
+    private static final String SQL_DELETE_FROM_COLORS = "DELETE FROM " + Tables.COLORS + " WHERE "
+            + Calendars.ACCOUNT_NAME + "=? AND " + Calendars.ACCOUNT_TYPE + "=?";
 
     private static final String SQL_SELECT_COUNT_FOR_SYNC_ID =
             "SELECT COUNT(*) FROM " + Tables.EVENTS + " WHERE " + Events._SYNC_ID + "=?";
@@ -340,6 +372,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         ALLOWED_IN_EXCEPTION.add(Events.TITLE);
         ALLOWED_IN_EXCEPTION.add(Events.EVENT_LOCATION);
         ALLOWED_IN_EXCEPTION.add(Events.DESCRIPTION);
+        ALLOWED_IN_EXCEPTION.add(Events.EVENT_COLOR);
+        ALLOWED_IN_EXCEPTION.add(Events.EVENT_COLOR_INDEX);
         ALLOWED_IN_EXCEPTION.add(Events.STATUS);
         ALLOWED_IN_EXCEPTION.add(Events.SELF_ATTENDEE_STATUS);
         ALLOWED_IN_EXCEPTION.add(Events.SYNC_DATA6);
@@ -807,6 +841,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 qb.setProjectionMap(sEventEntitiesProjectionMap);
                 selectionArgs = insertSelectionArg(selectionArgs, uri.getPathSegments().get(1));
                 qb.appendWhere(SQL_WHERE_ID);
+                break;
+
+            case COLORS:
+                qb.setTables(Tables.COLORS);
+                qb.setProjectionMap(sColorsProjectionMap);
+                selection = appendAccountFromParameterToSelection(selection, uri);
                 break;
 
             case CALENDARS:
@@ -1655,6 +1695,23 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
             //DatabaseUtils.dumpCursor(cursor);
 
+            // If there's a color index check that it's valid
+            String color_index = modValues.getAsString(Events.EVENT_COLOR_INDEX);
+            if (!TextUtils.isEmpty(color_index)) {
+                int calIdCol = cursor.getColumnIndex(Events.CALENDAR_ID);
+                Long calId = cursor.getLong(calIdCol);
+                String accountName = null;
+                String accountType = null;
+                if (calId != null) {
+                    Account account = getAccount(calId);
+                    if (account != null) {
+                        accountName = account.name;
+                        accountType = account.type;
+                    }
+                }
+                verifyColorExists(accountName, accountType, color_index, Colors.TYPE_EVENT);
+            }
+
             /*
              * Verify that the original event is in fact a recurring event by checking for the
              * presence of an RRULE.  If it's there, we assume that the event is otherwise
@@ -2007,10 +2064,29 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     throw new RuntimeException("Could not insert event.");
                     // return null;
                 }
+                Long calendar_id = updatedValues.getAsLong(Events.CALENDAR_ID);
+                if (calendar_id == null) {
+                    // validateEventData checks this for non-sync adapter
+                    // inserts
+                    throw new IllegalArgumentException("New events must specify a calendar id");
+                }
+                // Verify the color is valid if it is being set
+                String color_id = updatedValues.getAsString(Events.EVENT_COLOR_INDEX);
+                if (!TextUtils.isEmpty(color_id)) {
+                    Account account = getAccount(calendar_id);
+                    String accountName = null;
+                    String accountType = null;
+                    if (account != null) {
+                        accountName = account.name;
+                        accountType = account.type;
+                    }
+                    int color = verifyColorExists(accountName, accountType, color_id,
+                            Colors.TYPE_EVENT);
+                    updatedValues.put(Events.EVENT_COLOR, color);
+                }
                 String owner = null;
-                if (updatedValues.containsKey(Events.CALENDAR_ID) &&
-                        !updatedValues.containsKey(Events.ORGANIZER)) {
-                    owner = getOwner(updatedValues.getAsLong(Events.CALENDAR_ID));
+                if (!updatedValues.containsKey(Events.ORGANIZER)) {
+                    owner = getOwner(calendar_id);
                     // TODO: This isn't entirely correct.  If a guest is adding a recurrence
                     // exception to an event, the organizer should stay the original organizer.
                     // This value doesn't go to the server and it will get fixed on sync,
@@ -2053,42 +2129,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     if (values.containsKey(Events.SELF_ATTENDEE_STATUS)) {
                         int status = values.getAsInteger(Events.SELF_ATTENDEE_STATUS);
                         if (owner == null) {
-                            owner = getOwner(updatedValues.getAsLong(Events.CALENDAR_ID));
+                            owner = getOwner(calendar_id);
                         }
                         createAttendeeEntry(id, status, owner);
-                    }
-                    // if the Event Timezone is defined, store it as the original one in the
-                    // ExtendedProperties table
-                    if (values.containsKey(Events.EVENT_TIMEZONE) && !callerIsSyncAdapter) {
-                        String originalTimezone = values.getAsString(Events.EVENT_TIMEZONE);
-
-                        ContentValues expropsValues = new ContentValues();
-                        expropsValues.put(CalendarContract.ExtendedProperties.EVENT_ID, id);
-                        expropsValues.put(CalendarContract.ExtendedProperties.NAME,
-                                EXT_PROP_ORIGINAL_TIMEZONE);
-                        expropsValues.put(CalendarContract.ExtendedProperties.VALUE,
-                                originalTimezone);
-
-                        // Insert the extended property
-                        long exPropId = mDbHelper.extendedPropertiesInsert(expropsValues);
-                        if (exPropId == -1) {
-                            if (Log.isLoggable(TAG, Log.ERROR)) {
-                                Log.e(TAG, "Cannot add the original Timezone in the "
-                                        + "ExtendedProperties table for Event: " + id);
-                            }
-                        } else {
-                            // Update the Event for saying it has some extended properties
-                            ContentValues eventValues = new ContentValues();
-                            eventValues.put(Events.HAS_EXTENDED_PROPERTIES, "1");
-                            int result = mDb.update("Events", eventValues, SQL_WHERE_ID,
-                                    new String[] {String.valueOf(id)});
-                            if (result <= 0) {
-                                if (Log.isLoggable(TAG, Log.ERROR)) {
-                                    Log.e(TAG, "Cannot update hasExtendedProperties column"
-                                            + " for Event: " + id);
-                                }
-                            }
-                        }
                     }
 
                     backfillExceptionOriginalIds(id, values);
@@ -2110,8 +2153,56 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     String eventsUrl = values.getAsString(Calendars.CAL_SYNC1);
                     mDbHelper.scheduleSync(account, false /* two-way sync */, eventsUrl);
                 }
+                String cal_color_id = values.getAsString(Calendars.CALENDAR_COLOR_INDEX);
+                if (!TextUtils.isEmpty(cal_color_id)) {
+                    String accountName = values.getAsString(Calendars.ACCOUNT_NAME);
+                    String accountType = values.getAsString(Calendars.ACCOUNT_TYPE);
+                    int color = verifyColorExists(accountName, accountType, cal_color_id,
+                            Colors.TYPE_CALENDAR);
+                    values.put(Calendars.CALENDAR_COLOR, color);
+                }
                 id = mDbHelper.calendarsInsert(values);
                 sendUpdateNotification(id, callerIsSyncAdapter);
+                break;
+            case COLORS:
+                // verifyTransactionAllowed requires this be from a sync
+                // adapter, all of the required fields are marked NOT NULL in
+                // the db. TODO Do we need explicit checks here or should we
+                // just let sqlite throw if something isn't specified?
+                String accountName = uri.getQueryParameter(Colors.ACCOUNT_NAME);
+                String accountType = uri.getQueryParameter(Colors.ACCOUNT_TYPE);
+                String colorIndex = values.getAsString(Colors.COLOR_INDEX);
+                if (TextUtils.isEmpty(accountName) || TextUtils.isEmpty(accountType)) {
+                    throw new IllegalArgumentException("Account name and type must be non"
+                            + " empty parameters for " + uri);
+                }
+                if (TextUtils.isEmpty(colorIndex)) {
+                    throw new IllegalArgumentException("COLOR_INDEX must be non empty for " + uri);
+                }
+                if (!values.containsKey(Colors.COLOR_TYPE) || !values.containsKey(Colors.COLOR)) {
+                    throw new IllegalArgumentException(
+                            "New colors must contain COLOR_TYPE and COLOR");
+                }
+                // Make sure the account we're inserting for is the same one the
+                // adapter is claiming to be. TODO should we throw if they
+                // aren't the same?
+                values.put(Colors.ACCOUNT_NAME, accountName);
+                values.put(Colors.ACCOUNT_TYPE, accountType);
+
+                // Verify the color doesn't already exist
+                Cursor c = null;
+                try {
+                    c = getColorByIndex(accountName, accountType, colorIndex);
+                    if (c.getCount() != 0) {
+                        throw new IllegalArgumentException(colorIndex
+                                + " already exists for account " + accountName + " with type "
+                                + accountType);
+                    }
+                } finally {
+                    if (c != null)
+                        c.close();
+                }
+                id = mDbHelper.colorsInsert(values);
                 break;
             case ATTENDEES:
                 if (!values.containsKey(Attendees.EVENT_ID)) {
@@ -2428,6 +2519,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         return originalSyncId;
     }
 
+    private Cursor getColorByIndex(String accountName, String accountType, String index) {
+        return mDb.query(Tables.COLORS, COLORS_PROJECTION, Colors.ACCOUNT_NAME + "=? AND "
+                + Colors.ACCOUNT_TYPE + "=? AND " + Colors.COLOR_INDEX + "=?",
+                new String[] { accountName, accountType, index }, null, null, null);
+    }
+
     /**
      * Gets a calendar's "owner account", i.e. the e-mail address of the owner of the calendar.
      *
@@ -2463,6 +2560,29 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
         }
         return emailAddress;
+    }
+
+    private Account getAccount(long calId) {
+        Account account = null;
+        Cursor cursor = null;
+        try {
+            cursor = query(ContentUris.withAppendedId(Calendars.CONTENT_URI, calId),
+                    ACCOUNT_PROJECTION, null /* selection */, null /* selectionArgs */,
+                    null /* sort */);
+            if (cursor == null || !cursor.moveToFirst()) {
+                if (Log.isLoggable(TAG, Log.DEBUG)) {
+                    Log.d(TAG, "Couldn't find " + calId + " in Calendars table");
+                }
+                return null;
+            }
+            account = new Account(cursor.getString(ACCOUNT_NAME_INDEX),
+                    cursor.getString(ACCOUNT_TYPE_INDEX));
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+        return account;
     }
 
     /**
@@ -2802,6 +2922,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 selectionArgs = insertSelectionArg(selectionArgs,
                         String.valueOf(ContentUris.parseId(uri)));
                 return mDbHelper.getSyncState().delete(mDb, selectionWithId,
+                        selectionArgs);
+
+            case COLORS:
+                return deleteMatchingColors(appendAccountToSelection(uri, selection),
                         selectionArgs);
 
             case EVENTS:
@@ -3286,6 +3410,56 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         return count;
     }
 
+    private int deleteMatchingColors(String selection, String[] selectionArgs) {
+        // query to find all the colors that match, for each
+        // - verify no one references it
+        // - delete color
+        Cursor c = mDb.query(Tables.COLORS, COLORS_PROJECTION, selection, selectionArgs, null,
+                null, null);
+        if (c == null) {
+            return 0;
+        }
+        try {
+            Cursor c2 = null;
+            while (c.moveToNext()) {
+                String index = c.getString(COLORS_COLOR_INDEX_INDEX);
+                String accountName = c.getString(COLORS_ACCOUNT_NAME_INDEX);
+                String accountType = c.getString(COLORS_ACCOUNT_TYPE_INDEX);
+                boolean isCalendarColor = c.getInt(COLORS_COLOR_TYPE_INDEX) == Colors.TYPE_CALENDAR;
+                try {
+                    if (isCalendarColor) {
+                        c2 = mDb.query(Tables.CALENDARS, ID_ONLY_PROJECTION,
+                                SQL_WHERE_CALENDAR_COLOR, new String[] {
+                                        accountName, accountType, index
+                                }, null, null, null);
+                        if (c2.getCount() != 0) {
+                            throw new UnsupportedOperationException("Cannot delete color " + index
+                                    + ". Referenced by " + c2.getCount() + " calendars.");
+
+                        }
+                    } else {
+                        c2 = query(Events.CONTENT_URI, ID_ONLY_PROJECTION, SQL_WHERE_EVENT_COLOR,
+                                new String[] {accountName, accountType, index}, null);
+                        if (c2.getCount() != 0) {
+                            throw new UnsupportedOperationException("Cannot delete color " + index
+                                    + ". Referenced by " + c2.getCount() + " events.");
+
+                        }
+                    }
+                } finally {
+                    if (c2 != null) {
+                        c2.close();
+                    }
+                }
+            }
+        } finally {
+            if (c != null) {
+                c.close();
+            }
+        }
+        return mDb.delete(Tables.COLORS, selection, selectionArgs);
+    }
+
     private int deleteMatchingCalendars(String selection, String[] selectionArgs) {
         // query to find all the calendars that match, for each
         // - delete calendar subscription
@@ -3345,6 +3519,40 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
         // This is the normal case, we just want an UPDATE
         return true;
+    }
+
+    private int handleUpdateColors(ContentValues values, String selection, String[] selectionArgs) {
+        Cursor c = null;
+        int result = mDb.update(Tables.COLORS, values, selection, selectionArgs);
+        if (values.containsKey(Colors.COLOR)) {
+            try {
+                c = mDb.query(Tables.COLORS, COLORS_PROJECTION, selection, selectionArgs,
+                        null /* groupBy */, null /* having */, null /* orderBy */);
+                while (c.moveToNext()) {
+                    boolean calendarColor =
+                            c.getInt(COLORS_COLOR_TYPE_INDEX) == Colors.TYPE_CALENDAR;
+                    int color = c.getInt(COLORS_COLOR_INDEX);
+                    String[] args = {
+                            c.getString(COLORS_ACCOUNT_NAME_INDEX),
+                            c.getString(COLORS_ACCOUNT_TYPE_INDEX),
+                            c.getString(COLORS_COLOR_INDEX_INDEX)
+                    };
+                    ContentValues colorValue = new ContentValues();
+                    if (calendarColor) {
+                        colorValue.put(Calendars.CALENDAR_COLOR, color);
+                        mDb.update(Tables.CALENDARS, values, SQL_WHERE_CALENDAR_COLOR, args);
+                    } else {
+                        colorValue.put(Events.EVENT_COLOR, color);
+                        mDb.update(Tables.EVENTS, values, SQL_WHERE_EVENT_COLOR, args);
+                    }
+                }
+            } finally {
+                if (c != null) {
+                    c.close();
+                }
+            }
+        }
+        return result;
     }
 
 
@@ -3410,6 +3618,26 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
             // Merge the modifications in.
             values.putAll(modValues);
+
+            // If a color_index is being set make sure it's valid
+            String color_id = modValues.getAsString(Events.EVENT_COLOR_INDEX);
+            if (!TextUtils.isEmpty(color_id)) {
+                String accountName = null;
+                String accountType = null;
+                Cursor c = mDb.query(Tables.CALENDARS, ACCOUNT_PROJECTION, SQL_WHERE_ID,
+                        new String[] { values.getAsString(Events.CALENDAR_ID) }, null, null, null);
+                try {
+                    if (c.moveToFirst()) {
+                        accountName = c.getString(ACCOUNT_NAME_INDEX);
+                        accountType = c.getString(ACCOUNT_TYPE_INDEX);
+                    }
+                } finally {
+                    if (c != null) {
+                        c.close();
+                    }
+                }
+                verifyColorExists(accountName, accountType, color_id, Colors.TYPE_EVENT);
+            }
 
             // Scrub and/or validate the combined event.
             if (callerIsSyncAdapter) {
@@ -3551,6 +3779,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 return mDbHelper.getSyncState().update(mDb, values, selectionWithId, selectionArgs);
             }
 
+            case COLORS:
+                Integer color = values.getAsInteger(Colors.COLOR);
+                if (values.size() > 1 || (values.size() == 1 && color == null)) {
+                    throw new UnsupportedOperationException("You may only change the COLOR "
+                            + "for an existing Colors entry.");
+                }
+                return handleUpdateColors(values, appendAccountToSelection(uri, selection),
+                        selectionArgs);
+
             case CALENDARS:
             case CALENDARS_ID:
             {
@@ -3579,6 +3816,19 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 Integer syncEvents = values.getAsInteger(Calendars.SYNC_EVENTS);
                 if (syncEvents != null) {
                     modifyCalendarSubscription(id, syncEvents == 1);
+                }
+                String color_id = values.getAsString(Calendars.CALENDAR_COLOR_INDEX);
+                if (!TextUtils.isEmpty(color_id)) {
+                    String accountName = values.getAsString(Calendars.ACCOUNT_NAME);
+                    String accountType = values.getAsString(Calendars.ACCOUNT_TYPE);
+                    if (TextUtils.isEmpty(accountName) || TextUtils.isEmpty(accountType)) {
+                        Account account = getAccount(id);
+                        if (account != null) {
+                            accountName = account.name;
+                            accountType = account.type;
+                        }
+                    }
+                    verifyColorExists(accountName, accountType, color_id, Colors.TYPE_CALENDAR);
                 }
 
                 int result = mDb.update(Tables.CALENDARS, values, SQL_WHERE_ID,
@@ -3769,6 +4019,39 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     }
 
+    /**
+     * Verifies that a color with the given index exists for the given Calendar
+     * entry.
+     *
+     * @param accountName The email of the account the color is for
+     * @param accountType The type of account the color is for
+     * @param color_index The color_index being set for the calendar
+     * @param color_type The type of color expected (Calendar/Event)
+     * @return The color specified by the index
+     */
+    private int verifyColorExists(String accountName, String accountType, String color_index,
+            int color_type) {
+        if (TextUtils.isEmpty(accountName) || TextUtils.isEmpty(accountType)) {
+            throw new IllegalArgumentException("Cannot set color. A valid account does"
+                    + " not exist for this calendar.");
+        }
+        int color;
+        Cursor c = null;
+        try {
+            c = getColorByIndex(accountName, accountType, color_index);
+            if (!c.moveToFirst() || c.getInt(COLORS_COLOR_TYPE_INDEX) != color_type) {
+                throw new IllegalArgumentException(color_index
+                        + " color does not exist for account or is the wrong type.");
+            }
+            color = c.getInt(COLORS_COLOR_INDEX);
+        } finally {
+            if (c != null) {
+                c.close();
+            }
+        }
+        return color;
+    }
+
     private String appendAccountFromParameterToSelection(String selection, Uri uri) {
         final String accountName = QueryParameterUtils.getQueryParameter(uri,
                 CalendarContract.EventsEntity.ACCOUNT_NAME);
@@ -3861,8 +4144,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
 
         if (type == TRANSACTION_UPDATE || type == TRANSACTION_DELETE) {
+            // TODO review this list, document in contract.
             if (!TextUtils.isEmpty(selection)) {
                 // Only allow selections for the URIs that can reasonably use them.
+                // Whitelist of URIs allowed selections
                 switch (uriMatch) {
                     case SYNCSTATE:
                     case CALENDARS:
@@ -3872,12 +4157,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     case REMINDERS:
                     case EXTENDED_PROPERTIES:
                     case PROVIDER_PROPERTIES:
+                    case COLORS:
                         break;
                     default:
                         throw new IllegalArgumentException("Selection not permitted for " + uri);
                 }
             } else {
                 // Disallow empty selections for some URIs.
+                // Blacklist of URIs _not_ allowed empty selections
                 switch (uriMatch) {
                     case EVENTS:
                     case ATTENDEES:
@@ -3892,9 +4179,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
 
         // Only the sync adapter can use these to make changes.
-        if (uriMatch == SYNCSTATE || uriMatch == EXTENDED_PROPERTIES) {
-            if (!isSyncAdapter) {
-                throw new IllegalArgumentException("Only sync adapters may use " + uri);
+        if (!isSyncAdapter) {
+            switch (uriMatch) {
+                case SYNCSTATE:
+                case SYNCSTATE_ID:
+                case EXTENDED_PROPERTIES:
+                case EXTENDED_PROPERTIES_ID:
+                case COLORS:
+                    throw new IllegalArgumentException("Only sync adapters may write using " + uri);
+                default:
+                    break;
             }
         }
 
@@ -4034,7 +4328,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     oldSyncEvents = (cursor.getInt(3) != 0);
                 }
             } finally {
-                cursor.close();
+                if (cursor != null)
+                    cursor.close();
             }
         }
 
@@ -4176,9 +4471,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final int EXCEPTION_ID = 29;
     private static final int EXCEPTION_ID2 = 30;
     private static final int EMMA = 31;
+    private static final int COLORS = 32;
 
     private static final UriMatcher sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
     private static final HashMap<String, String> sInstancesProjectionMap;
+    private static final HashMap<String, String> sColorsProjectionMap;
     protected static final HashMap<String, String> sEventsProjectionMap;
     private static final HashMap<String, String> sEventEntitiesProjectionMap;
     private static final HashMap<String, String> sAttendeesProjectionMap;
@@ -4225,10 +4522,20 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sUriMatcher.addURI(CalendarContract.AUTHORITY, "exception/#", EXCEPTION_ID);
         sUriMatcher.addURI(CalendarContract.AUTHORITY, "exception/#/#", EXCEPTION_ID2);
         sUriMatcher.addURI(CalendarContract.AUTHORITY, "emma", EMMA);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "colors", COLORS);
 
         /** Contains just BaseColumns._COUNT */
         sCountProjectionMap = new HashMap<String, String>();
         sCountProjectionMap.put(BaseColumns._COUNT, "COUNT(*)");
+
+        sColorsProjectionMap = new HashMap<String, String>();
+        sColorsProjectionMap.put(Colors._ID, Colors._ID);
+        sColorsProjectionMap.put(Colors.DATA, Colors.DATA);
+        sColorsProjectionMap.put(Colors.ACCOUNT_NAME, Colors.ACCOUNT_NAME);
+        sColorsProjectionMap.put(Colors.ACCOUNT_TYPE, Colors.ACCOUNT_TYPE);
+        sColorsProjectionMap.put(Colors.COLOR_INDEX, Colors.COLOR_INDEX);
+        sColorsProjectionMap.put(Colors.COLOR_TYPE, Colors.COLOR_TYPE);
+        sColorsProjectionMap.put(Colors.COLOR, Colors.COLOR);
 
         sEventsProjectionMap = new HashMap<String, String>();
         // Events columns
@@ -4239,6 +4546,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Events.DESCRIPTION, Events.DESCRIPTION);
         sEventsProjectionMap.put(Events.STATUS, Events.STATUS);
         sEventsProjectionMap.put(Events.EVENT_COLOR, Events.EVENT_COLOR);
+        sEventsProjectionMap.put(Events.EVENT_COLOR_INDEX, Events.EVENT_COLOR_INDEX);
         sEventsProjectionMap.put(Events.SELF_ATTENDEE_STATUS, Events.SELF_ATTENDEE_STATUS);
         sEventsProjectionMap.put(Events.DTSTART, Events.DTSTART);
         sEventsProjectionMap.put(Events.DTEND, Events.DTEND);
@@ -4274,12 +4582,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         // Calendar columns
         sEventsProjectionMap.put(Calendars.CALENDAR_COLOR, Calendars.CALENDAR_COLOR);
+        sEventsProjectionMap.put(Calendars.CALENDAR_COLOR_INDEX, Calendars.CALENDAR_COLOR_INDEX);
         sEventsProjectionMap.put(Calendars.CALENDAR_ACCESS_LEVEL, Calendars.CALENDAR_ACCESS_LEVEL);
         sEventsProjectionMap.put(Calendars.VISIBLE, Calendars.VISIBLE);
         sEventsProjectionMap.put(Calendars.CALENDAR_TIME_ZONE, Calendars.CALENDAR_TIME_ZONE);
         sEventsProjectionMap.put(Calendars.OWNER_ACCOUNT, Calendars.OWNER_ACCOUNT);
         sEventsProjectionMap.put(Calendars.CALENDAR_DISPLAY_NAME, Calendars.CALENDAR_DISPLAY_NAME);
         sEventsProjectionMap.put(Calendars.ALLOWED_REMINDERS, Calendars.ALLOWED_REMINDERS);
+        sEventsProjectionMap
+                .put(Calendars.ALLOWED_ATTENDEE_TYPES, Calendars.ALLOWED_ATTENDEE_TYPES);
+        sEventsProjectionMap.put(Calendars.ALLOWED_AVAILABILITY, Calendars.ALLOWED_AVAILABILITY);
         sEventsProjectionMap.put(Calendars.MAX_REMINDERS, Calendars.MAX_REMINDERS);
         sEventsProjectionMap.put(Calendars.CAN_ORGANIZER_RESPOND, Calendars.CAN_ORGANIZER_RESPOND);
         sEventsProjectionMap.put(Calendars.CAN_MODIFY_TIME_ZONE, Calendars.CAN_MODIFY_TIME_ZONE);
@@ -4467,21 +4779,20 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             return;
         }
 
-        HashMap<Account, Boolean> accountHasCalendar = new HashMap<Account, Boolean>();
         HashSet<Account> validAccounts = new HashSet<Account>();
         for (Account account : accounts) {
             validAccounts.add(new Account(account.name, account.type));
-            accountHasCalendar.put(account, false);
         }
         ArrayList<Account> accountsToDelete = new ArrayList<Account>();
 
         mDb.beginTransaction();
+        Cursor c = null;
         try {
 
-            for (String table : new String[]{Tables.CALENDARS}) {
+            for (String table : new String[]{Tables.CALENDARS, Tables.COLORS}) {
                 // Find all the accounts the calendar DB knows about, mark the ones that aren't
                 // in the valid set for deletion.
-                Cursor c = mDb.rawQuery("SELECT DISTINCT " +
+                c = mDb.rawQuery("SELECT DISTINCT " +
                                             Calendars.ACCOUNT_NAME +
                                             "," +
                                             Calendars.ACCOUNT_TYPE +
@@ -4502,6 +4813,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     }
                 }
                 c.close();
+                c = null;
             }
 
             for (Account account : accountsToDelete) {
@@ -4510,10 +4822,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 String[] params = new String[]{account.name, account.type};
                 mDb.execSQL(SQL_DELETE_FROM_CALENDARS, params);
+                // This will be a no-op for accounts without a color palette.
+                mDb.execSQL(SQL_DELETE_FROM_COLORS, params);
             }
             mDbHelper.getSyncState().onAccountsChanged(mDb, accounts);
             mDb.setTransactionSuccessful();
         } finally {
+            if (c != null) {
+                c.close();
+            }
             mDb.endTransaction();
         }
 

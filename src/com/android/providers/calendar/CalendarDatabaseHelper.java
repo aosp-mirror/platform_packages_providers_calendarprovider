@@ -28,6 +28,8 @@ import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Bundle;
 import android.provider.CalendarContract;
 import android.provider.CalendarContract.Attendees;
+import android.provider.CalendarContract.Calendars;
+import android.provider.CalendarContract.Colors;
 import android.provider.CalendarContract.Events;
 import android.provider.CalendarContract.Reminders;
 import android.provider.SyncStateContract;
@@ -60,7 +62,7 @@ import java.util.TimeZone;
     // Versions under 100 cover through Froyo, 1xx version are for Gingerbread,
     // 2xx for Honeycomb, and 3xx for ICS. For future versions bump this to the
     // next hundred at each major release.
-    static final int DATABASE_VERSION = 307;
+    static final int DATABASE_VERSION = 308;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -72,6 +74,7 @@ import java.util.TimeZone;
             Events.EVENT_LOCATION + "," +
             Events.DESCRIPTION + "," +
             Events.EVENT_COLOR + "," +
+            Events.EVENT_COLOR_INDEX + "," +
             Events.STATUS + "," +
             Events.SELF_ATTENDEE_STATUS + "," +
             Events.DTSTART + "," +
@@ -130,6 +133,7 @@ import java.util.TimeZone;
         public static final String CALENDAR_CACHE = "CalendarCache";
         public static final String SYNC_STATE = "_sync_state";
         public static final String SYNC_STATE_META = "_sync_state_metadata";
+        public static final String COLORS = "Colors";
     }
 
     public interface Views {
@@ -179,6 +183,33 @@ import java.util.TimeZone;
             " WHERE " + CalendarContract.Events.CALENDAR_ID + "=" +
                 "old." + CalendarContract.Events._ID + ";";
 
+    private static final String CALENDAR_UPDATE_COLOR_TRIGGER_SQL = "UPDATE " + Tables.CALENDARS
+            + " SET calendar_color=(SELECT " + Colors.COLOR + " FROM " + Tables.COLORS + " WHERE "
+            + Colors.ACCOUNT_NAME + "=" + "new." + Calendars.ACCOUNT_NAME + " AND "
+            + Colors.ACCOUNT_TYPE + "=" + "new." + Calendars.ACCOUNT_TYPE + " AND "
+            + Colors.COLOR_INDEX + "=" + "new." + Calendars.CALENDAR_COLOR_INDEX + ") "
+            + " WHERE " + Calendars._ID + "=" + "old." + Calendars._ID
+            + ";";
+    private static final String CALENDAR_COLOR_UPDATE_TRIGGER_NAME = "calendar_color_update";
+    private static final String CREATE_CALENDAR_COLOR_UPDATE_TRIGGER = "CREATE TRIGGER "
+            + CALENDAR_COLOR_UPDATE_TRIGGER_NAME + " UPDATE OF " + Calendars.CALENDAR_COLOR_INDEX
+            + " ON " + Tables.CALENDARS + " WHEN new." + Calendars.CALENDAR_COLOR_INDEX
+            + " NOT NULL BEGIN " + CALENDAR_UPDATE_COLOR_TRIGGER_SQL + " END";
+
+    private static final String EVENT_UPDATE_COLOR_TRIGGER_SQL = "UPDATE " + Tables.EVENTS
+            + " SET eventColor=(SELECT " + Colors.COLOR + " FROM " + Tables.COLORS + " WHERE "
+            + Colors.ACCOUNT_NAME + "=" + "(SELECT " + Calendars.ACCOUNT_NAME + " FROM "
+            + Tables.CALENDARS + " WHERE " + Calendars._ID + "=new." + Events.CALENDAR_ID
+            + ") AND " + Colors.ACCOUNT_TYPE + "=" + "(SELECT " + Calendars.ACCOUNT_TYPE + " FROM "
+            + Tables.CALENDARS + " WHERE " + Calendars._ID + "=new." + Events.CALENDAR_ID
+            + ") AND " + Colors.COLOR_INDEX + "=" + "new." + Events.EVENT_COLOR_INDEX + ") "
+            + " WHERE " + Events._ID + "=" + "old." + Events._ID + ";";
+    private static final String EVENT_COLOR_UPDATE_TRIGGER_NAME = "event_color_update";
+    private static final String CREATE_EVENT_COLOR_UPDATE_TRIGGER = "CREATE TRIGGER "
+            + EVENT_COLOR_UPDATE_TRIGGER_NAME + " UPDATE OF " + Events.EVENT_COLOR_INDEX + " ON "
+            + Tables.EVENTS + " WHEN new." + Events.EVENT_COLOR_INDEX + " NOT NULL BEGIN "
+            + EVENT_UPDATE_COLOR_TRIGGER_SQL + " END";
+
     /** Selects rows from Attendees for which the event_id refers to a nonexistent Event */
     private static final String WHERE_ATTENDEES_ORPHANS =
             Attendees.EVENT_ID + " IN (SELECT " + Attendees.EVENT_ID + " FROM " +
@@ -200,6 +231,7 @@ import java.util.TimeZone;
     private static CalendarDatabaseHelper sSingleton = null;
 
     private DatabaseUtils.InsertHelper mCalendarsInserter;
+    private DatabaseUtils.InsertHelper mColorsInserter;
     private DatabaseUtils.InsertHelper mEventsInserter;
     private DatabaseUtils.InsertHelper mEventsRawTimesInserter;
     private DatabaseUtils.InsertHelper mInstancesInserter;
@@ -210,6 +242,10 @@ import java.util.TimeZone;
 
     public long calendarsInsert(ContentValues values) {
         return mCalendarsInserter.insert(values);
+    }
+
+    public long colorsInsert(ContentValues values) {
+        return mColorsInserter.insert(values);
     }
 
     public long eventsInsert(ContentValues values) {
@@ -271,6 +307,7 @@ import java.util.TimeZone;
         mSyncState.onDatabaseOpened(db);
 
         mCalendarsInserter = new DatabaseUtils.InsertHelper(db, Tables.CALENDARS);
+        mColorsInserter = new DatabaseUtils.InsertHelper(db, Tables.COLORS);
         mEventsInserter = new DatabaseUtils.InsertHelper(db, Tables.EVENTS);
         mEventsRawTimesInserter = new DatabaseUtils.InsertHelper(db, Tables.EVENTS_RAW_TIMES);
         mInstancesInserter = new DatabaseUtils.InsertHelper(db, Tables.INSTANCES);
@@ -332,6 +369,8 @@ import java.util.TimeZone;
         Log.i(TAG, "Bootstrapping database");
 
         mSyncState.createDatabase(db);
+
+        createColorsTable(db);
 
         createCalendarsTable(db);
 
@@ -441,6 +480,10 @@ import java.util.TimeZone;
                 EVENTS_CLEANUP_TRIGGER_SQL +
                 "END");
 
+        // Triggers to update the color stored in an event or a calendar when
+        // the color_index is changed.
+        createColorsTriggers(db);
+
         // Trigger to update exceptions when an original event updates its
         // _sync_id
         db.execSQL(CREATE_SYNC_ID_UPDATE_TRIGGER);
@@ -464,6 +507,7 @@ import java.util.TimeZone;
                 CalendarContract.Events.EVENT_LOCATION + " TEXT," +
                 CalendarContract.Events.DESCRIPTION + " TEXT," +
                 CalendarContract.Events.EVENT_COLOR + " INTEGER," +
+                CalendarContract.Events.EVENT_COLOR_INDEX + " TEXT," +
                 CalendarContract.Events.STATUS + " INTEGER," +
                 CalendarContract.Events.SELF_ATTENDEE_STATUS + " INTEGER NOT NULL DEFAULT 0," +
                 // dtstart in millis since epoch
@@ -514,6 +558,68 @@ import java.util.TimeZone;
 
         db.execSQL("CREATE INDEX eventsCalendarIdIndex ON " + Tables.EVENTS + " ("
                 + CalendarContract.Events.CALENDAR_ID + ");");
+    }
+
+    private void createEventsTable307(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE Events ("
+                + "_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "_sync_id TEXT,"
+                + "dirty INTEGER,"
+                + "lastSynced INTEGER DEFAULT 0,"
+                + "calendar_id INTEGER NOT NULL,"
+                + "title TEXT,"
+                + "eventLocation TEXT,"
+                + "description TEXT,"
+                + "eventColor INTEGER,"
+                + "eventStatus INTEGER,"
+                + "selfAttendeeStatus INTEGER NOT NULL DEFAULT 0,"
+                // dtstart in millis since epoch
+                + "dtstart INTEGER,"
+                // dtend in millis since epoch
+                + "dtend INTEGER,"
+                // timezone for event
+                + "eventTimezone TEXT,"
+                + "duration TEXT,"
+                + "allDay INTEGER NOT NULL DEFAULT 0,"
+                + "accessLevel INTEGER NOT NULL DEFAULT 0,"
+                + "availability INTEGER NOT NULL DEFAULT 0,"
+                + "hasAlarm INTEGER NOT NULL DEFAULT 0,"
+                + "hasExtendedProperties INTEGER NOT NULL DEFAULT 0,"
+                + "rrule TEXT,"
+                + "rdate TEXT,"
+                + "exrule TEXT,"
+                + "exdate TEXT,"
+                + "original_id INTEGER,"
+                // ORIGINAL_SYNC_ID is the _sync_id of recurring event
+                + "original_sync_id TEXT,"
+                // originalInstanceTime is in millis since epoch
+                + "originalInstanceTime INTEGER,"
+                + "originalAllDay INTEGER,"
+                // lastDate is in millis since epoch
+                + "lastDate INTEGER,"
+                + "hasAttendeeData INTEGER NOT NULL DEFAULT 0,"
+                + "guestsCanModify INTEGER NOT NULL DEFAULT 0,"
+                + "guestsCanInviteOthers INTEGER NOT NULL DEFAULT 1,"
+                + "guestsCanSeeGuests INTEGER NOT NULL DEFAULT 1,"
+                + "organizer STRING,"
+                + "deleted INTEGER NOT NULL DEFAULT 0,"
+                // timezone for event with allDay events are in local timezone
+                + "eventEndTimezone TEXT,"
+                // SYNC_DATAX columns are available for use by sync adapters
+                + "sync_data1 TEXT,"
+                + "sync_data2 TEXT,"
+                + "sync_data3 TEXT,"
+                + "sync_data4 TEXT,"
+                + "sync_data5 TEXT,"
+                + "sync_data6 TEXT,"
+                + "sync_data7 TEXT,"
+                + "sync_data8 TEXT,"
+                + "sync_data9 TEXT,"
+                + "sync_data10 TEXT);");
+
+        // **When updating this be sure to also update LAST_SYNCED_EVENT_COLUMNS
+
+        db.execSQL("CREATE INDEX eventsCalendarIdIndex ON Events (calendar_id);");
     }
 
     // TODO Remove this method after merging all ICS upgrades
@@ -611,6 +717,24 @@ import java.util.TimeZone;
                 "END");
     }
 
+    private void createColorsTable(SQLiteDatabase db) {
+
+        db.execSQL("CREATE TABLE " + Tables.COLORS + " (" +
+                CalendarContract.Colors._ID + " INTEGER PRIMARY KEY," +
+                CalendarContract.Colors.ACCOUNT_NAME + " TEXT NOT NULL," +
+                CalendarContract.Colors.ACCOUNT_TYPE + " TEXT NOT NULL," +
+                CalendarContract.Colors.DATA + " TEXT," +
+                CalendarContract.Colors.COLOR_TYPE + " INTEGER NOT NULL," +
+                CalendarContract.Colors.COLOR_INDEX + " TEXT NOT NULL," +
+                CalendarContract.Colors.COLOR + " INTEGER NOT NULL" +
+                ");");
+    }
+
+    public void createColorsTriggers(SQLiteDatabase db) {
+        db.execSQL(CREATE_EVENT_COLOR_UPDATE_TRIGGER);
+        db.execSQL(CREATE_CALENDAR_COLOR_UPDATE_TRIGGER);
+    }
+
     private void createCalendarsTable(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE " + Tables.CALENDARS + " (" +
                 CalendarContract.Calendars._ID + " INTEGER PRIMARY KEY," +
@@ -621,6 +745,7 @@ import java.util.TimeZone;
                 CalendarContract.Calendars.NAME + " TEXT," +
                 CalendarContract.Calendars.CALENDAR_DISPLAY_NAME + " TEXT," +
                 CalendarContract.Calendars.CALENDAR_COLOR + " INTEGER," +
+                CalendarContract.Calendars.CALENDAR_COLOR_INDEX + " TEXT," +
                 CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL + " INTEGER," +
                 CalendarContract.Calendars.VISIBLE + " INTEGER NOT NULL DEFAULT 1," +
                 CalendarContract.Calendars.SYNC_EVENTS + " INTEGER NOT NULL DEFAULT 0," +
@@ -632,6 +757,8 @@ import java.util.TimeZone;
                 CalendarContract.Calendars.CAN_PARTIALLY_UPDATE + " INTEGER DEFAULT 0," +
                 CalendarContract.Calendars.MAX_REMINDERS + " INTEGER DEFAULT 5," +
                 CalendarContract.Calendars.ALLOWED_REMINDERS + " TEXT DEFAULT '0,1'," +
+                CalendarContract.Calendars.ALLOWED_AVAILABILITY + " TEXT DEFAULT '0,1'," +
+                CalendarContract.Calendars.ALLOWED_ATTENDEE_TYPES + " TEXT DEFAULT '0,1,2'," +
                 CalendarContract.Calendars.DELETED + " INTEGER NOT NULL DEFAULT 0," +
                 CalendarContract.Calendars.CAL_SYNC1 + " TEXT," +
                 CalendarContract.Calendars.CAL_SYNC2 + " TEXT," +
@@ -649,6 +776,47 @@ import java.util.TimeZone;
         db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON " + Tables.CALENDARS + " " +
                 "BEGIN " +
                 CALENDAR_CLEANUP_TRIGGER_SQL +
+                "END");
+    }
+
+    private void createCalendarsTable305(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE Calendars (" +
+                "_id INTEGER PRIMARY KEY," +
+                "account_name TEXT," +
+                "account_type TEXT," +
+                "_sync_id TEXT," +
+                "dirty INTEGER," +
+                "name TEXT," +
+                "calendar_displayName TEXT," +
+                "calendar_color INTEGER," +
+                "calendar_access_level INTEGER," +
+                "visible INTEGER NOT NULL DEFAULT 1," +
+                "sync_events INTEGER NOT NULL DEFAULT 0," +
+                "calendar_location TEXT," +
+                "calendar_timezone TEXT," +
+                "ownerAccount TEXT, " +
+                "canOrganizerRespond INTEGER NOT NULL DEFAULT 1," +
+                "canModifyTimeZone INTEGER DEFAULT 1," +
+                "canPartiallyUpdate INTEGER DEFAULT 0," +
+                "maxReminders INTEGER DEFAULT 5," +
+                "allowedReminders TEXT DEFAULT '0,1'," +
+                "deleted INTEGER NOT NULL DEFAULT 0," +
+                "cal_sync1 TEXT," +
+                "cal_sync2 TEXT," +
+                "cal_sync3 TEXT," +
+                "cal_sync4 TEXT," +
+                "cal_sync5 TEXT," +
+                "cal_sync6 TEXT," +
+                "cal_sync7 TEXT," +
+                "cal_sync8 TEXT," +
+                "cal_sync9 TEXT," +
+                "cal_sync10 TEXT" +
+                ");");
+
+        // Trigger to remove a calendar's events when we delete the calendar
+        db.execSQL("CREATE TRIGGER calendar_cleanup DELETE ON Calendars " +
+                "BEGIN " +
+                "DELETE FROM Events WHERE calendar_id=old._id;" +
                 "END");
     }
 
@@ -1174,6 +1342,11 @@ import java.util.TimeZone;
                 upgradeToVersion307(db);
                 oldVersion++;
             }
+            if (oldVersion == 307) {
+                upgradeToVersion308(db);
+                oldVersion++;
+                createEventsView = true;
+            }
             if (createEventsView) {
                 createEventsView(db);
             }
@@ -1230,6 +1403,33 @@ import java.util.TimeZone;
     }
 
     @VisibleForTesting
+    void upgradeToVersion308(SQLiteDatabase db) {
+        /*
+         * Changes from version 307 to 308:
+         * - add Colors table to db
+         * - add eventColor_index to Events table
+         * - add calendar_color_index to Calendars table
+         * - add allowedAttendeeTypes to Calendars table
+         * - add allowedAvailability to Calendars table
+         */
+        createColorsTable(db);
+
+        db.execSQL("ALTER TABLE Calendars ADD COLUMN allowedAvailability TEXT DEFAULT '0,1';");
+        db.execSQL("ALTER TABLE Calendars ADD COLUMN allowedAttendeeTypes TEXT DEFAULT '0,1,2';");
+        db.execSQL("ALTER TABLE Calendars ADD COLUMN calendar_color_index TEXT;");
+        db.execSQL("ALTER TABLE Events ADD COLUMN eventColor_index TEXT;");
+
+        // Default Exchange calendars to be supporting the 'tentative'
+        // availability as well
+        db.execSQL("UPDATE Calendars SET allowedAvailability='0,1,2' WHERE _id IN "
+                + "(SELECT _id FROM Calendars WHERE account_type='com.android.exchange');");
+
+        // Triggers to update the color stored in an event or a calendar when
+        // the color_index is changed.
+        createColorsTriggers(db);
+    }
+
+    @VisibleForTesting
     void upgradeToVersion307(SQLiteDatabase db) {
         /*
          * Changes from version 306 to 307:
@@ -1239,7 +1439,7 @@ import java.util.TimeZone;
         db.execSQL("DROP TRIGGER IF EXISTS events_cleanup_delete");
         db.execSQL("DROP TRIGGER IF EXISTS original_sync_update");
         db.execSQL("DROP INDEX IF EXISTS eventsCalendarIdIndex");
-        createEventsTable(db);
+        createEventsTable307(db);
 
         String FIELD_LIST =
             "_id, " +
@@ -1350,7 +1550,7 @@ import java.util.TimeZone;
         // rename old table, create new table with updated layout
         db.execSQL("ALTER TABLE Calendars RENAME TO Calendars_Backup;");
         db.execSQL("DROP TRIGGER IF EXISTS calendar_cleanup");
-        createCalendarsTable(db);
+        createCalendarsTable305(db);
 
         // copy fields from old to new
         db.execSQL("INSERT INTO Calendars (" +
@@ -1423,7 +1623,7 @@ import java.util.TimeZone;
         // addition of "autoincrement" to _ID doesn't affect the upgrade path.  (Note that
         // much older databases may also already have autoincrement set because the change
         // was back-ported.)
-        createEventsTable(db);
+        createEventsTable307(db);
 
         // copy fields from old to new
         db.execSQL("INSERT INTO Events (" +
@@ -2718,6 +2918,7 @@ import java.util.TimeZone;
     }
 
     private void dropTables(SQLiteDatabase db) {
+        db.execSQL("DROP TABLE IF EXISTS " + Tables.COLORS + ";");
         db.execSQL("DROP TABLE IF EXISTS " + Tables.CALENDARS + ";");
         db.execSQL("DROP TABLE IF EXISTS " + Tables.EVENTS + ";");
         db.execSQL("DROP TABLE IF EXISTS " + Tables.EVENTS_RAW_TIMES + ";");
@@ -2771,6 +2972,7 @@ import java.util.TimeZone;
                 + CalendarContract.Events.DESCRIPTION + ","
                 + CalendarContract.Events.EVENT_LOCATION + ","
                 + CalendarContract.Events.EVENT_COLOR + ","
+                + CalendarContract.Events.EVENT_COLOR_INDEX + ","
                 + CalendarContract.Events.STATUS + ","
                 + CalendarContract.Events.SELF_ATTENDEE_STATUS + ","
                 + CalendarContract.Events.DTSTART + ","
@@ -2824,9 +3026,12 @@ import java.util.TimeZone;
                 + CalendarContract.Calendars.CALENDAR_LOCATION + ","
                 + CalendarContract.Calendars.VISIBLE + ","
                 + CalendarContract.Calendars.CALENDAR_COLOR + ","
+                + CalendarContract.Calendars.CALENDAR_COLOR_INDEX + ","
                 + CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL + ","
                 + CalendarContract.Calendars.MAX_REMINDERS + ","
                 + CalendarContract.Calendars.ALLOWED_REMINDERS + ","
+                + CalendarContract.Calendars.ALLOWED_ATTENDEE_TYPES + ","
+                + CalendarContract.Calendars.ALLOWED_AVAILABILITY + ","
                 + CalendarContract.Calendars.CAN_ORGANIZER_RESPOND + ","
                 + CalendarContract.Calendars.CAN_MODIFY_TIME_ZONE + ","
                 + CalendarContract.Calendars.CAN_PARTIALLY_UPDATE + ","

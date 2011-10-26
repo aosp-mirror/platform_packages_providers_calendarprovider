@@ -2104,6 +2104,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 id = handleInsertException(originalEventId, values, callerIsSyncAdapter);
                 break;
             case CALENDARS:
+                // TODO: verify that all required fields are present
                 Integer syncEvents = values.getAsInteger(Calendars.SYNC_EVENTS);
                 if (syncEvents != null && syncEvents == 1) {
                     String accountName = values.getAsString(Calendars.ACCOUNT_NAME);
@@ -2357,15 +2358,18 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * @throws IllegalArgumentException if bad data is found.
      */
     private void validateEventData(ContentValues values) {
+        if (TextUtils.isEmpty(values.getAsString(Events.CALENDAR_ID))) {
+            throw new IllegalArgumentException("Event values must include a calendar_id");
+        }
+        if (TextUtils.isEmpty(values.getAsString(Events.EVENT_TIMEZONE))) {
+            throw new IllegalArgumentException("Event values must include an eventTimezone");
+        }
+
         boolean hasDtstart = values.getAsLong(Events.DTSTART) != null;
         boolean hasDtend = values.getAsLong(Events.DTEND) != null;
         boolean hasDuration = !TextUtils.isEmpty(values.getAsString(Events.DURATION));
         boolean hasRrule = !TextUtils.isEmpty(values.getAsString(Events.RRULE));
         boolean hasRdate = !TextUtils.isEmpty(values.getAsString(Events.RDATE));
-        boolean hasCalId = !TextUtils.isEmpty(values.getAsString(Events.CALENDAR_ID));
-        if (!hasCalId) {
-            throw new IllegalArgumentException("New events must include a calendar_id.");
-        }
         if (hasRrule || hasRdate) {
             if (!validateRecurrenceRule(values)) {
                 throw new IllegalArgumentException("Invalid recurrence rule: " +
@@ -2700,7 +2704,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     /**
      * Add LAST_DATE to values.
-     * @param values the ContentValues (in/out)
+     * @param values the ContentValues (in/out); must include DTSTART and, if the event is
+     *   recurring, the columns necessary to process a recurrence rule (RRULE, DURATION,
+     *   EVENT_TIMEZONE, etc).
      * @return values on success, null on failure
      */
     private ContentValues updateLastDate(ContentValues values) {

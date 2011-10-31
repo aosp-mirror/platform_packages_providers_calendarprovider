@@ -74,7 +74,7 @@ import java.util.TimeZone;
             Events.EVENT_LOCATION + "," +
             Events.DESCRIPTION + "," +
             Events.EVENT_COLOR + "," +
-            Events.EVENT_COLOR_INDEX + "," +
+            Events.EVENT_COLOR_KEY + "," +
             Events.STATUS + "," +
             Events.SELF_ATTENDEE_STATUS + "," +
             Events.DTSTART + "," +
@@ -187,13 +187,13 @@ import java.util.TimeZone;
             + " SET calendar_color=(SELECT " + Colors.COLOR + " FROM " + Tables.COLORS + " WHERE "
             + Colors.ACCOUNT_NAME + "=" + "new." + Calendars.ACCOUNT_NAME + " AND "
             + Colors.ACCOUNT_TYPE + "=" + "new." + Calendars.ACCOUNT_TYPE + " AND "
-            + Colors.COLOR_INDEX + "=" + "new." + Calendars.CALENDAR_COLOR_INDEX + ") "
+            + Colors.COLOR_KEY + "=" + "new." + Calendars.CALENDAR_COLOR_KEY + ") "
             + " WHERE " + Calendars._ID + "=" + "old." + Calendars._ID
             + ";";
     private static final String CALENDAR_COLOR_UPDATE_TRIGGER_NAME = "calendar_color_update";
     private static final String CREATE_CALENDAR_COLOR_UPDATE_TRIGGER = "CREATE TRIGGER "
-            + CALENDAR_COLOR_UPDATE_TRIGGER_NAME + " UPDATE OF " + Calendars.CALENDAR_COLOR_INDEX
-            + " ON " + Tables.CALENDARS + " WHEN new." + Calendars.CALENDAR_COLOR_INDEX
+            + CALENDAR_COLOR_UPDATE_TRIGGER_NAME + " UPDATE OF " + Calendars.CALENDAR_COLOR_KEY
+            + " ON " + Tables.CALENDARS + " WHEN new." + Calendars.CALENDAR_COLOR_KEY
             + " NOT NULL BEGIN " + CALENDAR_UPDATE_COLOR_TRIGGER_SQL + " END";
 
     private static final String EVENT_UPDATE_COLOR_TRIGGER_SQL = "UPDATE " + Tables.EVENTS
@@ -202,12 +202,12 @@ import java.util.TimeZone;
             + Tables.CALENDARS + " WHERE " + Calendars._ID + "=new." + Events.CALENDAR_ID
             + ") AND " + Colors.ACCOUNT_TYPE + "=" + "(SELECT " + Calendars.ACCOUNT_TYPE + " FROM "
             + Tables.CALENDARS + " WHERE " + Calendars._ID + "=new." + Events.CALENDAR_ID
-            + ") AND " + Colors.COLOR_INDEX + "=" + "new." + Events.EVENT_COLOR_INDEX + ") "
+            + ") AND " + Colors.COLOR_KEY + "=" + "new." + Events.EVENT_COLOR_KEY + ") "
             + " WHERE " + Events._ID + "=" + "old." + Events._ID + ";";
     private static final String EVENT_COLOR_UPDATE_TRIGGER_NAME = "event_color_update";
     private static final String CREATE_EVENT_COLOR_UPDATE_TRIGGER = "CREATE TRIGGER "
-            + EVENT_COLOR_UPDATE_TRIGGER_NAME + " UPDATE OF " + Events.EVENT_COLOR_INDEX + " ON "
-            + Tables.EVENTS + " WHEN new." + Events.EVENT_COLOR_INDEX + " NOT NULL BEGIN "
+            + EVENT_COLOR_UPDATE_TRIGGER_NAME + " UPDATE OF " + Events.EVENT_COLOR_KEY + " ON "
+            + Tables.EVENTS + " WHEN new." + Events.EVENT_COLOR_KEY + " NOT NULL BEGIN "
             + EVENT_UPDATE_COLOR_TRIGGER_SQL + " END";
 
     /** Selects rows from Attendees for which the event_id refers to a nonexistent Event */
@@ -507,7 +507,7 @@ import java.util.TimeZone;
                 CalendarContract.Events.EVENT_LOCATION + " TEXT," +
                 CalendarContract.Events.DESCRIPTION + " TEXT," +
                 CalendarContract.Events.EVENT_COLOR + " INTEGER," +
-                CalendarContract.Events.EVENT_COLOR_INDEX + " TEXT," +
+                CalendarContract.Events.EVENT_COLOR_KEY + " TEXT," +
                 CalendarContract.Events.STATUS + " INTEGER," +
                 CalendarContract.Events.SELF_ATTENDEE_STATUS + " INTEGER NOT NULL DEFAULT 0," +
                 // dtstart in millis since epoch
@@ -725,7 +725,7 @@ import java.util.TimeZone;
                 CalendarContract.Colors.ACCOUNT_TYPE + " TEXT NOT NULL," +
                 CalendarContract.Colors.DATA + " TEXT," +
                 CalendarContract.Colors.COLOR_TYPE + " INTEGER NOT NULL," +
-                CalendarContract.Colors.COLOR_INDEX + " TEXT NOT NULL," +
+                CalendarContract.Colors.COLOR_KEY + " TEXT NOT NULL," +
                 CalendarContract.Colors.COLOR + " INTEGER NOT NULL" +
                 ");");
     }
@@ -745,7 +745,7 @@ import java.util.TimeZone;
                 CalendarContract.Calendars.NAME + " TEXT," +
                 CalendarContract.Calendars.CALENDAR_DISPLAY_NAME + " TEXT," +
                 CalendarContract.Calendars.CALENDAR_COLOR + " INTEGER," +
-                CalendarContract.Calendars.CALENDAR_COLOR_INDEX + " TEXT," +
+                CalendarContract.Calendars.CALENDAR_COLOR_KEY + " TEXT," +
                 CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL + " INTEGER," +
                 CalendarContract.Calendars.VISIBLE + " INTEGER NOT NULL DEFAULT 1," +
                 CalendarContract.Calendars.SYNC_EVENTS + " INTEGER NOT NULL DEFAULT 0," +
@@ -2972,7 +2972,7 @@ import java.util.TimeZone;
                 + CalendarContract.Events.DESCRIPTION + ","
                 + CalendarContract.Events.EVENT_LOCATION + ","
                 + CalendarContract.Events.EVENT_COLOR + ","
-                + CalendarContract.Events.EVENT_COLOR_INDEX + ","
+                + CalendarContract.Events.EVENT_COLOR_KEY + ","
                 + CalendarContract.Events.STATUS + ","
                 + CalendarContract.Events.SELF_ATTENDEE_STATUS + ","
                 + CalendarContract.Events.DTSTART + ","
@@ -3026,7 +3026,7 @@ import java.util.TimeZone;
                 + CalendarContract.Calendars.CALENDAR_LOCATION + ","
                 + CalendarContract.Calendars.VISIBLE + ","
                 + CalendarContract.Calendars.CALENDAR_COLOR + ","
-                + CalendarContract.Calendars.CALENDAR_COLOR_INDEX + ","
+                + CalendarContract.Calendars.CALENDAR_COLOR_KEY + ","
                 + CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL + ","
                 + CalendarContract.Calendars.MAX_REMINDERS + ","
                 + CalendarContract.Calendars.ALLOWED_REMINDERS + ","

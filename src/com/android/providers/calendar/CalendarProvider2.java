@@ -114,7 +114,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         Colors.ACCOUNT_NAME,
         Colors.ACCOUNT_TYPE,
         Colors.COLOR_TYPE,
-        Colors.COLOR_INDEX,
+        Colors.COLOR_KEY,
         Colors.COLOR,
     };
     private static final int COLORS_ACCOUNT_NAME_INDEX = 0;
@@ -195,10 +195,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             " WHERE " + Events._ID + "=?";
 
     private static final String SQL_WHERE_CALENDAR_COLOR = Calendars.ACCOUNT_NAME + "=? AND "
-            + Calendars.ACCOUNT_TYPE + "=? AND " + Calendars.CALENDAR_COLOR_INDEX + "=?";
+            + Calendars.ACCOUNT_TYPE + "=? AND " + Calendars.CALENDAR_COLOR_KEY + "=?";
 
     private static final String SQL_WHERE_EVENT_COLOR = Events.ACCOUNT_NAME + "=? AND "
-            + Events.ACCOUNT_TYPE + "=? AND " + Events.EVENT_COLOR_INDEX + "=?";
+            + Events.ACCOUNT_TYPE + "=? AND " + Events.EVENT_COLOR_KEY + "=?";
 
     protected static final String SQL_WHERE_ID = GENERIC_ID + "=?";
     private static final String SQL_WHERE_EVENT_ID = GENERIC_EVENT_ID + "=?";
@@ -373,7 +373,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         ALLOWED_IN_EXCEPTION.add(Events.EVENT_LOCATION);
         ALLOWED_IN_EXCEPTION.add(Events.DESCRIPTION);
         ALLOWED_IN_EXCEPTION.add(Events.EVENT_COLOR);
-        ALLOWED_IN_EXCEPTION.add(Events.EVENT_COLOR_INDEX);
+        ALLOWED_IN_EXCEPTION.add(Events.EVENT_COLOR_KEY);
         ALLOWED_IN_EXCEPTION.add(Events.STATUS);
         ALLOWED_IN_EXCEPTION.add(Events.SELF_ATTENDEE_STATUS);
         ALLOWED_IN_EXCEPTION.add(Events.SYNC_DATA6);
@@ -1696,7 +1696,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             //DatabaseUtils.dumpCursor(cursor);
 
             // If there's a color index check that it's valid
-            String color_index = modValues.getAsString(Events.EVENT_COLOR_INDEX);
+            String color_index = modValues.getAsString(Events.EVENT_COLOR_KEY);
             if (!TextUtils.isEmpty(color_index)) {
                 int calIdCol = cursor.getColumnIndex(Events.CALENDAR_ID);
                 Long calId = cursor.getLong(calIdCol);
@@ -2071,7 +2071,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     throw new IllegalArgumentException("New events must specify a calendar id");
                 }
                 // Verify the color is valid if it is being set
-                String color_id = updatedValues.getAsString(Events.EVENT_COLOR_INDEX);
+                String color_id = updatedValues.getAsString(Events.EVENT_COLOR_KEY);
                 if (!TextUtils.isEmpty(color_id)) {
                     Account account = getAccount(calendar_id);
                     String accountName = null;
@@ -2144,6 +2144,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 id = handleInsertException(originalEventId, values, callerIsSyncAdapter);
                 break;
             case CALENDARS:
+                // TODO: verify that all required fields are present
                 Integer syncEvents = values.getAsInteger(Calendars.SYNC_EVENTS);
                 if (syncEvents != null && syncEvents == 1) {
                     String accountName = values.getAsString(Calendars.ACCOUNT_NAME);
@@ -2153,7 +2154,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     String eventsUrl = values.getAsString(Calendars.CAL_SYNC1);
                     mDbHelper.scheduleSync(account, false /* two-way sync */, eventsUrl);
                 }
-                String cal_color_id = values.getAsString(Calendars.CALENDAR_COLOR_INDEX);
+                String cal_color_id = values.getAsString(Calendars.CALENDAR_COLOR_KEY);
                 if (!TextUtils.isEmpty(cal_color_id)) {
                     String accountName = values.getAsString(Calendars.ACCOUNT_NAME);
                     String accountType = values.getAsString(Calendars.ACCOUNT_TYPE);
@@ -2171,7 +2172,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // just let sqlite throw if something isn't specified?
                 String accountName = uri.getQueryParameter(Colors.ACCOUNT_NAME);
                 String accountType = uri.getQueryParameter(Colors.ACCOUNT_TYPE);
-                String colorIndex = values.getAsString(Colors.COLOR_INDEX);
+                String colorIndex = values.getAsString(Colors.COLOR_KEY);
                 if (TextUtils.isEmpty(accountName) || TextUtils.isEmpty(accountType)) {
                     throw new IllegalArgumentException("Account name and type must be non"
                             + " empty parameters for " + uri);
@@ -2445,15 +2446,18 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * @throws IllegalArgumentException if bad data is found.
      */
     private void validateEventData(ContentValues values) {
+        if (TextUtils.isEmpty(values.getAsString(Events.CALENDAR_ID))) {
+            throw new IllegalArgumentException("Event values must include a calendar_id");
+        }
+        if (TextUtils.isEmpty(values.getAsString(Events.EVENT_TIMEZONE))) {
+            throw new IllegalArgumentException("Event values must include an eventTimezone");
+        }
+
         boolean hasDtstart = values.getAsLong(Events.DTSTART) != null;
         boolean hasDtend = values.getAsLong(Events.DTEND) != null;
         boolean hasDuration = !TextUtils.isEmpty(values.getAsString(Events.DURATION));
         boolean hasRrule = !TextUtils.isEmpty(values.getAsString(Events.RRULE));
         boolean hasRdate = !TextUtils.isEmpty(values.getAsString(Events.RDATE));
-        boolean hasCalId = !TextUtils.isEmpty(values.getAsString(Events.CALENDAR_ID));
-        if (!hasCalId) {
-            throw new IllegalArgumentException("New events must include a calendar_id.");
-        }
         if (hasRrule || hasRdate) {
             if (!validateRecurrenceRule(values)) {
                 throw new IllegalArgumentException("Invalid recurrence rule: " +
@@ -2521,7 +2525,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private Cursor getColorByIndex(String accountName, String accountType, String index) {
         return mDb.query(Tables.COLORS, COLORS_PROJECTION, Colors.ACCOUNT_NAME + "=? AND "
-                + Colors.ACCOUNT_TYPE + "=? AND " + Colors.COLOR_INDEX + "=?",
+                + Colors.ACCOUNT_TYPE + "=? AND " + Colors.COLOR_KEY + "=?",
                 new String[] { accountName, accountType, index }, null, null, null);
     }
 
@@ -2818,7 +2822,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     /**
      * Add LAST_DATE to values.
-     * @param values the ContentValues (in/out)
+     * @param values the ContentValues (in/out); must include DTSTART and, if the event is
+     *   recurring, the columns necessary to process a recurrence rule (RRULE, DURATION,
+     *   EVENT_TIMEZONE, etc).
      * @return values on success, null on failure
      */
     private ContentValues updateLastDate(ContentValues values) {
@@ -3620,7 +3626,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             values.putAll(modValues);
 
             // If a color_index is being set make sure it's valid
-            String color_id = modValues.getAsString(Events.EVENT_COLOR_INDEX);
+            String color_id = modValues.getAsString(Events.EVENT_COLOR_KEY);
             if (!TextUtils.isEmpty(color_id)) {
                 String accountName = null;
                 String accountType = null;
@@ -3817,7 +3823,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 if (syncEvents != null) {
                     modifyCalendarSubscription(id, syncEvents == 1);
                 }
-                String color_id = values.getAsString(Calendars.CALENDAR_COLOR_INDEX);
+                String color_id = values.getAsString(Calendars.CALENDAR_COLOR_KEY);
                 if (!TextUtils.isEmpty(color_id)) {
                     String accountName = values.getAsString(Calendars.ACCOUNT_NAME);
                     String accountType = values.getAsString(Calendars.ACCOUNT_TYPE);
@@ -4533,7 +4539,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sColorsProjectionMap.put(Colors.DATA, Colors.DATA);
         sColorsProjectionMap.put(Colors.ACCOUNT_NAME, Colors.ACCOUNT_NAME);
         sColorsProjectionMap.put(Colors.ACCOUNT_TYPE, Colors.ACCOUNT_TYPE);
-        sColorsProjectionMap.put(Colors.COLOR_INDEX, Colors.COLOR_INDEX);
+        sColorsProjectionMap.put(Colors.COLOR_KEY, Colors.COLOR_KEY);
         sColorsProjectionMap.put(Colors.COLOR_TYPE, Colors.COLOR_TYPE);
         sColorsProjectionMap.put(Colors.COLOR, Colors.COLOR);
 
@@ -4546,7 +4552,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Events.DESCRIPTION, Events.DESCRIPTION);
         sEventsProjectionMap.put(Events.STATUS, Events.STATUS);
         sEventsProjectionMap.put(Events.EVENT_COLOR, Events.EVENT_COLOR);
-        sEventsProjectionMap.put(Events.EVENT_COLOR_INDEX, Events.EVENT_COLOR_INDEX);
+        sEventsProjectionMap.put(Events.EVENT_COLOR_KEY, Events.EVENT_COLOR_KEY);
         sEventsProjectionMap.put(Events.SELF_ATTENDEE_STATUS, Events.SELF_ATTENDEE_STATUS);
         sEventsProjectionMap.put(Events.DTSTART, Events.DTSTART);
         sEventsProjectionMap.put(Events.DTEND, Events.DTEND);
@@ -4582,7 +4588,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         // Calendar columns
         sEventsProjectionMap.put(Calendars.CALENDAR_COLOR, Calendars.CALENDAR_COLOR);
-        sEventsProjectionMap.put(Calendars.CALENDAR_COLOR_INDEX, Calendars.CALENDAR_COLOR_INDEX);
+        sEventsProjectionMap.put(Calendars.CALENDAR_COLOR_KEY, Calendars.CALENDAR_COLOR_KEY);
         sEventsProjectionMap.put(Calendars.CALENDAR_ACCESS_LEVEL, Calendars.CALENDAR_ACCESS_LEVEL);
         sEventsProjectionMap.put(Calendars.VISIBLE, Calendars.VISIBLE);
         sEventsProjectionMap.put(Calendars.CALENDAR_TIME_ZONE, Calendars.CALENDAR_TIME_ZONE);

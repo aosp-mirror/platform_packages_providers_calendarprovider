@@ -16,6 +16,9 @@
 
 package com.android.providers.calendar;
 
+import com.android.common.content.SyncStateContentProviderHelper;
+import com.google.common.annotations.VisibleForTesting;
+
 import android.accounts.Account;
 import android.content.ContentResolver;
 import android.content.ContentValues;
@@ -36,8 +39,6 @@ import android.provider.SyncStateContract;
 import android.text.TextUtils;
 import android.text.format.Time;
 import android.util.Log;
-import com.android.common.content.SyncStateContentProviderHelper;
-import com.google.common.annotations.VisibleForTesting;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
@@ -2957,7 +2958,6 @@ import java.util.TimeZone;
         }
         if (url != null) {
             extras.putString("feed", url);
-            extras.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
         }
         ContentResolver.requestSync(account, CalendarContract.Calendars.CONTENT_URI.getAuthority(),
                 extras);

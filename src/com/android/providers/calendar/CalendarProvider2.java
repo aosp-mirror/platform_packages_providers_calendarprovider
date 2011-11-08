@@ -1961,8 +1961,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         if (count != 1 && count != 2) {
                             // We're only expecting one matching entry.  We might briefly see
                             // two during a server sync.
-                            Log.e(TAG, "Attendee status update on event=" + newEventId +
-                                    " name=" + accountName + " touched " + count + " rows");
+                            Log.e(TAG, "Attendee status update on event=" + newEventId
+                                    + " touched " + count + " rows. Expected one or two rows.");
                             if (false) {
                                 // This dumps PII in the log, don't ship with it enabled.
                                 Cursor debugCursor = mDb.query(Tables.ATTENDEES, null,
@@ -2196,8 +2196,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     c = getColorByIndex(accountName, accountType, colorIndex);
                     if (c.getCount() != 0) {
                         throw new IllegalArgumentException(colorIndex
-                                + " already exists for account " + accountName + " with type "
-                                + accountType);
+                                + " already exists for account and type provided");
                     }
                 } finally {
                     if (c != null)

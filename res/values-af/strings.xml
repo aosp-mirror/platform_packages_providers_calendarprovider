@@ -27,7 +27,7 @@
     <string name="provider_label" msgid="2306513350843464739">"Kalender"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Vee nou uit"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Begin"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Jy gaan nou 1) \'n kopie van jou kalenderdatabasis na die SD-kaart/USB-geheue maak, wat deur enige toestel leesbaar is en 2) dit e-pos. Onthou om dit uit te vee sodra jy dit suksesvol van die toestel gekopieer het of sodra die e-pos ontvang is."</string>
+    <string name="debug_tool_message" msgid="4414152820946316089">"Jy gaan nou 1) \'n kopie van jou kalenderdatabasis na die SD-kaart/USB-berging maak, wat deur enige toestel leesbaar is en 2) dit e-pos. Onthou om dit uit te vee sodra jy dit suksesvol van die toestel gekopieer het of sodra die e-pos ontvang is."</string>
     <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Kies \'n program om jou lêer te stuur"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Kalenderdatabasis aangeheg"</string>
     <string name="debug_tool_email_body" msgid="740309162644398319">"Hierby aangeheg is my kalenderdatabasis met al my afsprake en persoonlike inligting. Hanteer asseblief versigtig."</string>

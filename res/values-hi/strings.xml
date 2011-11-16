@@ -18,7 +18,7 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="calendar_storage" msgid="5387668002987562770">"कैलेंडर संग्रहण"</string>
     <string name="upgrade_msg" msgid="2792831029435070926">"कैलेंडर डेटाबेस अपग्रेड हो रहा है."</string>
-    <string name="calendar_default_name" msgid="6924293766625167275">"डिफ़ॉल्ट"</string>
+    <string name="calendar_default_name" msgid="6924293766625167275">"डिफ़ॉल्ट"</string>
     <string name="calendar_info" msgid="6687678621418059281">"कैलेंडर जानकारी"</string>
     <string name="calendar_info_error" msgid="5575162446528419982">"त्रुटि"</string>
     <string name="calendar_info_no_calendars" msgid="4287534468186704433">"कोई कैलेंडर नहीं"</string>

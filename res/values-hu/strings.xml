@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Naptár"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Törlés most"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Indítás"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Arra készül, hogy 1) másolatot készítsen a naptár adatbázisáról a bármilyen alkalmazás által olvasható SD-kártyára/usb-tárhelyre, és 2) e-mailben elküldje. Ne felejtse el azonnal törölni, amint sikeresen átmásolta a készülékről, vagy miután az e-mail megérkezett."</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Válasszon programot a fájl elküldéséhez"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"Arra készül, hogy 1) másolatot készítsen a naptár adatbázisáról a bármilyen alkalmazás által olvasható SD-kártyára/USB-tárhelyre, és 2) e-mailben elküldje. Ne felejtse el azonnal törölni a másolatot, amint sikeresen átmásolta a készülékről, vagy miután az e-mail megérkezett."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Válasszon programot a fájl elküldéséhez"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Naptár-adatbázis mellékelve"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"Csatolva van a naptáram adatbázisa az összes találkozómmal és személyes adataimmal. Kérem, legyenek elővigyázatosak."</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"Csatolva van a naptáram adatbázisa az összes találkozómmal és személyes adataimmal. Kérem, legyenek elővigyázatosak."</string>
 </resources>

@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Calendario"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Elimina adesso"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Inizia"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Stai per 1) creare una copia del database di calendario sulla scheda SD o sull\'archivio USB che è leggibile da qualsiasi applicazione e 2) inviare tale copia tramite email. Ricorda di eliminarla subito dopo aver effettuato la copia dal dispositivo o subito dopo la ricezione dell\'email."</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Seleziona un programma per inviare il file"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"Stai per 1) creare una copia del database di calendario sulla scheda SD o sull\'archivio USB che è leggibile da qualsiasi applicazione e 2) inviare tale copia tramite email. Ricorda di eliminare la copia subito dopo aver effettuato la copia dal dispositivo o subito dopo la ricezione dell\'email."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Scegli un programma per inviare il file"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Db calendario allegato"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"In allegato è presente il mio database di calendario con tutti i miei appuntamenti e le mie informazioni personali. Trattare con cura."</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"In allegato è presente il mio database dell\'applicazione Calendario con tutti i miei appuntamenti e le mie informazioni personali. Trattare con cura."</string>
 </resources>

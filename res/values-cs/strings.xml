@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Kalendář"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Smazat"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Spustit"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Chystáte se 1) vytvořit na kartě SD nebo v úložišti USB kopii databáze kalendáře, která bude čitelná pro všechny aplikace, a 2) poslat ji e-mailem. Po úspěšném zkopírování ze zařízení nebo přijetí e-mailem ji nezapomeňte ihned odstranit."</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Vyberte program pro odeslání souboru"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"Chystáte se 1) vytvořit na kartě SD nebo v úložišti USB kopii databáze kalendáře, která bude čitelná pomocí libovolné aplikace, a 2) poslat ji e-mailem. Po úspěšném zkopírování ze zařízení nebo přijetí e-mailu ji nezapomeňte ihned smazat."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Vyberte program pro odeslání souboru"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Přiložena je databáze Kalendáře"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"Přiložil(a) jsem databázi kalendáře se všemi schůzkami a osobními informacemi. Zacházejte s ní prosím opatrně."</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"Přiložena je databáze Kalendáře se všemi mými schůzkami a osobními informacemi. Zacházejte s ní prosím opatrně."</string>
 </resources>

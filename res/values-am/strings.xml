@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"ቀን መቁጠሪያ"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"አሁን ሰርዝ"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"ጀምር"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"አሁን 1 ) የቀን መቁጠሪያዎን  የውሂብ ጎታዎች ወደ sd ካርድ/usb ማከማቻበማንኛውም ትግበራ የሚነበብ  ሊገለብጡ እና2) ኢሜይል ሊያደርጉ ነው።  ከመሣሪያው ላይ በተሳካ ከገለበጡ  በኋላወይም ኢሜይል ከተቀበሉ በኋላ መሰረዝ አይርሱ።"</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"ፋይልዎን ለመላክ ፕሮግራም ይምረጡ"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"አሁን 1 ) የቀን መቁጠሪያህን የውሂብ ጎታዎች ወደ sd ካርድ/usb ማከማቻ በማንኛውም ትግበራ እንዲነበብ ልትገለብጥ  እና2) ኢሜይል ልታደርግ ነው። ከመሣሪያው ላይ በተሳካ ከገለበጥክ በኋላወይም ኢሜይል ከተቀበልክ በኋላ መሰረዝ አትርሳ።"</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"ፋይልህን ለመላክ ፕሮግራም ምረጥ"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"የቀን መቁጠሪያ ውሂብ ጎታ አባሪ ተደርጓል"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"የቀን መቁጠሪያዬ ውሂብ ጎታ ከቀጠሮዎቼ እና የግል መረጃዎች ጋር አባሪ ተደርጓል። በደንብ ይጠበቅ።"</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"የቀን መቁጠሪያዬ ውሂብ ጎታ ከቀጠሮዎቼ እና የግል መረጃዎች ጋር አባሪ ተደርጓል። በደንብ ይጠበቅ።"</string>
 </resources>

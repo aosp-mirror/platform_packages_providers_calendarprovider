@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Kalendorius"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Dabar ištrinti"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Pradėti"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Ketinate 1) sukurti kalendoriaus duomenų kopiją SD kortelėje / USB atmintyje, kurią galima skaityti naudojant bet kurią programą, ir 2) išsiųsti ją el. paštu. Būtinai ją ištrinkite iš karto, kai sėkmingai nukopijuosite iš įrenginio ar gausite el. laišką."</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Pasirinkite programą, kad išsiųstumėte failą"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"Ketinate: 1) sukurti kalendoriaus duomenų kopiją SD kortelėje ir (arba) USB atmintyje, kurią galima skaityti naudojant bet kurią programą, ir 2) išsiųsti ją el. paštu. Būtinai ją ištrinkite iš karto, kai sėkmingai nukopijuosite iš įrenginio ar gausite el. laišką."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Pasirinkite programą, kad galėtumėte išsiųsti failą"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Kalendoriaus duomenys pridėti"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"Pridėti mano kalendoriaus duomenis su visa susitikimų ir asmenine informacija. Tvarkykite atidžiai."</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"Pridedami kalendoriaus duomenys su visa susitikimų ir asmenine informacija. Elkitės atsargiai."</string>
 </resources>

@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Kalender"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Ta bort nu"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Börja"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Du kommer att 1) göra en kopia av din kalenderdatabas på SD-kortet/USB-minnet som kan läsas av alla appar och (2) skicka den via e-post. Kom ihåg att ta bort den så snart den har kopierats från enheten eller e-postmeddelandet har tagits emot."</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Välj ett program för att skicka din fil"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"Du kommer att 1) göra en kopia av din kalenderdatabas på SD-kortet/USB-minnet som kan läsas av alla appar och (2) skicka den via e-post. Kom ihåg att ta bort den så snart den har kopierats från enheten eller så snart e-postmeddelandet har tagits emot."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Välj ett program för att skicka filen"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Kalenderdatabas bifogad"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"Jag bifogar min kalenderdatabas med alla mina möten och personlig information. Hantera dem varsamt."</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"Jag bifogar min kalenderdatabas med alla mina möten och personliga uppgifter. Hantera dem varsamt."</string>
 </resources>

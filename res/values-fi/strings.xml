@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Kalenteri"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Poista nyt"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Aloita"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Olet 1) tekemässä kopiota kalenteritietokannastasi SD-kortille/USB-tallennusvälineelle, joka on kaikkien sovelluksien luettavissa ja 2)lähettämässä tietokantaa sähköpostitse. Muista poistaa tietokanta kopioituasi sen laitteelta tai saatuasi sähköpostin."</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Valitse ohjelma tiedoston lähettämiseen"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"Olet 1) tekemässä kopiota kalenteritietokannastasi SD-kortille/USB-tallennusvälineelle, joka on kaikkien sovelluksien luettavissa, ja 2) lähettämässä tietokantaa sähköpostitse. Muista poistaa tietokanta kopioituasi sen laitteelta tai saatuasi sähköpostin."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Valitse ohjelma tiedoston lähettämiseen"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Kalenterin vianetsintä liitteenä"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"Liitteenä kalenteritietokantani, joka sisältää kaikki tapaamiseni ja henkilötietoni. Käsittele varoen."</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"Liitteenä kalenteritietokantani, joka sisältää kaikki tapaamiseni ja henkilötietoni. Käsiteltävä varoen."</string>
 </resources>

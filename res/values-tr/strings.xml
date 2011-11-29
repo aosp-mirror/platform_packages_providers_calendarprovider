@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Takvim"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Şimdi sil"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Başlat"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Takvim veritabanınızı 1) tüm uygulamaların okuyabileceği sd kart/usb depolama birimine kopyalamak ve 2) bunu e-postayla göndermek üzeresiniz. Bu veritabanını, başarılı bir şekilde kopyaladıktan veya e-posta alındıktan sonra cihazdan hemen silmeyi unutmayın."</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Dosyanızı göndermek için bir program seçin"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"Takvim veritabanınızı 1) tüm uygulamaların okuyabileceği sd kart/usb depolama birimine kopyalamak ve 2) bunu e-postayla göndermek üzeresiniz. Bu veritabanını başarılı bir şekilde kopyaladıktan veya e-posta alındıktan sonra, kopyayı cihazdan hemen silmeyi unutmayın."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Dosyanızı göndermek için bir program seçin"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Takvim Veritabanı ekte"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"Tüm randevularımı ve kişisel bilgilerimi içeren takvim veritabanımı ekte bulabilirsiniz. Kullanırken dikkatli olmanızı rica ediyorum."</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"Tüm randevularımı ve kişisel bilgilerimi içeren takvim veritabanımı ekte bulabilirsiniz. Lütfen kullanırken dikkatli olun."</string>
 </resources>

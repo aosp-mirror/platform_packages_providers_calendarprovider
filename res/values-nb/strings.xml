@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Kalender"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Slett nå"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Start"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Du er i ferd med å 1) lage en kopi av kalenderdatabasen på SD-kortet eller USB-lagringen som kan leses av alle apper, og 2) sende den per e-post. Husk å slette den så snart du har kopiert den fra enheten, eller når e-posten er mottatt."</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Velg en applikasjon for å sende filen"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"Du er i ferd med å 1) lage en kopi av kalenderdatabasen på SD-kortet eller USB-lagringen som kan leses av alle apper, og 2) sende den per e-post. Husk å slette den så snart du har kopiert den fra enheten, eller når e-posten er mottatt."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Velg et program for å sende filen"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Kalenderdatabase vedlagt"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"Vedlagt er kalenderendatabasen med alle mine avtaler og personlige opplysninger. Vær forsiktig med disse dataene."</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"Vedlagt er kalenderdatabasen min med alle avtalene mine og personlig informasjon. Vær forsiktig med opplysningene."</string>
 </resources>

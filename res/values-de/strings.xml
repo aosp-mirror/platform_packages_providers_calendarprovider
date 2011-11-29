@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Kalender"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Jetzt löschen"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Starten"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Sie sind dabei, 1) eine Kopie Ihrer Kalenderdatenbank auf der SD-Karte bzw. dem USB-Speicher zu speichern, die von jeder App gelesen werden kann, und sie 2) per E-Mail zu versenden. Löschen Sie sie, sobald sie vom Gerät kopiert oder die E-Mail erhalten wurde."</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Wählen Sie ein Programm aus, um Ihre Datei senden."</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"Sie sind im Begriff, 1) eine Kopie Ihrer Kalenderdatenbank auf der SD-Karte bzw. dem USB-Speicher zu speichern, die von jeder App gelesen werden kann, und sie 2) per E-Mail zu versenden. Löschen Sie die Kopie unbedingt, sobald sie vom Gerät kopiert oder die E-Mail erhalten wurde."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Wählen Sie ein Programm zum Senden Ihrer Datei aus."</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Kalender-Debug angehängt"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"Beigefügt ist meine Kalenderdatenbank mit all meinen Terminen und persönlichen Informationen. Bitte gehen Sie sorgfältig damit um."</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"Beigefügt ist meine Kalenderdatenbank mit allen meinen Terminen und persönlichen Informationen. Bitte gehen Sie sorgfältig damit um."</string>
 </resources>

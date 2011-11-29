@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Calendar"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Delete now"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Start"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"You are about to 1) make a copy of your calendar database to the sd card/usb storage, which is readable by any app, and 2) email it. Remember to delete it as soon as you have successfully copied it off the device or the email is received."</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Select a programme to send your file"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"You are about to 1) make a copy of your calendar database to the SD card/USB storage, which is readable by any app, and 2) email it. Remember to delete the copy as soon as you have successfully copied it off the device or the email is received."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Select a programme to send your file"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Calendar Db attached"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"Attached is my calendar database with all my appointments and personal information. Please handle with care."</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"Attached is my calendar database with all my appointments and personal information. Please handle with care."</string>
 </resources>

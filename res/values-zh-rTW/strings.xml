@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"日曆"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"立即刪除"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"開始"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"您即將 1) 在任何應用程式均可讀取的 SD 卡或 USB 儲存裝置中儲存您的日曆資料庫副本，並且 2) 以電子郵件傳送日曆資料庫。提醒您，成功將日曆資料庫複製到卸除式裝置或收到電子郵件後，請立即刪除日曆資料庫。"</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"選取要傳送檔案的程式"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"您即將 1) 在任何應用程式均可讀取的 SD 卡或 USB 儲存裝置中儲存您的日曆資料庫副本，並且 2) 以電子郵件傳送日曆資料庫。提醒您，在您成功將日曆資料庫複製到卸除式裝置或確認我們收到電子郵件後，請立即刪除日曆資料庫副本。"</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"選擇要傳送檔案的程式"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"內含日曆偵錯附件"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"附件是我的日曆資料庫，其中包含我所有的約會和個人資訊，請謹慎處理。"</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"附件是我的日曆資料庫，其中包含我所有的約會和個人資訊，請謹慎處理。"</string>
 </resources>

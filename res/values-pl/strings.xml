@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Kalendarz"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Usuń teraz"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Rozpocznij"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Za chwilę wykonasz następujące czynności: 1) skopiujesz bazę danych kalendarza na kartę SD lub do pamięci USB, gdzie będzie dostępna dla wszystkich aplikacji, po czym 2) wyślesz ją w wiadomości e-mail. Pamiętaj o usunięciu bazy danych, gdy pomyślnie skopiujesz ją z urządzenia lub wiadomość e-mail zostanie otrzymana."</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Wybierz program, którego użyjesz do wysłania pliku"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"Za chwilę wykonasz następujące czynności: 1) skopiujesz bazę danych kalendarza na kartę SD lub nośnik USB, gdzie będzie dostępna dla wszystkich aplikacji, a następnie 2) wyślesz ją e-mailem. Pamiętaj o usunięciu bazy danych, gdy pomyślnie skopiujesz ją z urządzenia lub otrzymasz już wiadomość e-mail."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Wybierz program, którego użyjesz do wysłania pliku."</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Załączono bazę danych Kalendarza"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"W załączniku przesyłam bazę danych swojego kalendarza, zawierającą wszystkie moje informacje o spotkaniach i dane osobiste. Proszę zachować ostrożność."</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"W załączniku przesyłam bazę danych swojego kalendarza, zawierającą wszystkie moje informacje o spotkaniach i dane osobiste. Proszę zachować ostrożność."</string>
 </resources>

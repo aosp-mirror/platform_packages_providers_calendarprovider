@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Kalendaryo"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Tanggalin ngayon"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Magsimula"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Ikaw ay 1) gagawa ng kopya ng iyong database ng kalendaryo sa sd card/usb storage na nababasa ng anumang app at 2) magpapadala ng email nito. Tandaang tanggalin ito sa oras na matagumpay mo itong nakopya mula sa device o natanggap ang email."</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Pumili ng program upang ipadala ang iyong file"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"Ikaw ay 1) gagawa ng kopya ng iyong database ng kalendaryo sa SD card/USB storage, na nababasa ng anumang app, at 2) i-e-email ito. Tandaang tanggalin ang kopya sa sandaling matagumpay mo itong nakopya mula sa device o natanggap ang email."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Pumili ng programa upang ipadala ang iyong file"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Naka-attach ang Calendar Db"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"Naka-attach ang aking database ng kalendaryo kasama ang lahat ng aking mga appointment at personal na impormasyon. Mangyaring pangasiwaan nang may pag-iingat."</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"Naka-attach ang aking database ng Kalendaryo kasama ang lahat ng aking appointment at personal na impormasyon. Pangasiwaan nang may pag-iingat."</string>
 </resources>

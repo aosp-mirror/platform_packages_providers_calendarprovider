@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Kalenda"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Futa sasa"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Anza"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Uko karibu 1) kutengeneza nakala ya hifadhidata ya kalenda yako kwa kadi ya sd/hifadhi ya usb ambayo inasomeka na programu yoyote na 2) kuituma kwa barua pepe. Kumbuka kuifuta pindi utakapomaliza kuinakili kwa mafaniko kwenye kifaa hicho au barua pepe itapokelewa"</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Chagua programu kutuma faili yako"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"Uko karibu 1) kutengeneza nakala ya hifadhidata ya kalenda yako kwa kadi ya SD/hifadhi ya USB ambayo inaweza kusomwa na programu yoyote, na 2) kuituma kwa barua pepe. Kumbuka kufuta nakala pindi tu unapofaulu kuinakili kwenye kifaa hicho au barua pepe imepokewa."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Chagua programu ili kutuma faili yako"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Hifadhidata ya Kalenda imeambatishwa"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"Kilichoambatishwa ni hifadhidata ya kalenda yangu ikiwa na miadi yangu yote na maelezo binafsi. Tafadhali yashughulike kwa uangalifu."</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"Kilichoambatishwa ni hifadhidata yangu ya kalenda iliyo na miadi yangu yote na maelezo ya kibinafsi. Shughulikia kwa uangalifu."</string>
 </resources>

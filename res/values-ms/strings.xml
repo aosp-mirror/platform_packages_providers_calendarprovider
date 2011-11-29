@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Kalendar"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Padam sekarang"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Mula"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Anda bakal 1) membuat salinan pangkalan data kalendar anda ke kad sd/storan usb yang boleh dibaca oleh mana-mana apl dan 2) meng-e-melkannya. Ingat untuk memadamkannya sebaik sahaja anda telah berjaya menyalinnya kepada peranti atau selepas e-mel diterima."</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Pilih program untuk menghantar fail anda"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"Anda akan 1) membuat salinan pangkalan data kalendar anda ke kad SD/storan USB yang boleh dibaca oleh sebarang apl dan 2) menghantarnya melalui e-mel. Jangan lupa untuk memadamkan salinan itu sebaik sahaja anda berjaya menyalinnya dari peranti atau selepas e-mel diterima."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Pilih program untuk menghantar fail anda"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Db Kalendar dilampirkan"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"Dilampirkan pangkalan data kalendar saya dengan semua janji temu dan maklumat peribadi saya. Sila gunakan dengan cermat."</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"Dilampirkan pangkalan data Kalendar saya dengan semua janji temu dan maklumat peribadi. Sila gunakan dengan cermat."</string>
 </resources>

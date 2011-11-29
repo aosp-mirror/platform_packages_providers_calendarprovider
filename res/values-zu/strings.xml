@@ -27,7 +27,7 @@
     <string name="provider_label" msgid="2306513350843464739">"Ikhalenda"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Susa manje"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Qala"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Usuzo 1) kwenza ikhophi yemininingo egciniwe yekhalenda esilondweni se-sd/usb eqashelwa yinoma iluphi uhlelo bese 2) uyayi-imeyila. Khumbula ukulisusa ngokushesha ngemva kokulikopisha ngokuphumelelayo edivayisini noma uma i-imeyili isitholiwe."</string>
+    <string name="debug_tool_message" msgid="4414152820946316089">"Usuzo 1) kwenza ikhophi yemininingo egciniwe yekhalenda kusitorejini se-SD/USB esingafundwa yinoma iluphi uhlelo bese 2) uyayi-imeyila. Khumbula ukulisusa ngokushesha ngemuva kokulikopisha ngempumelelo edivayisini noma uma i-imeyili isitholiwe."</string>
     <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Khetha iprogramu"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"i-Db yekhalenda inamathelisiwe"</string>
     <string name="debug_tool_email_body" msgid="740309162644398319">"Okunamathelisiwe iminingo egciniwe yekhalenda lami enawo wonke ama-aphoyintimenti ami nokwazisa komuntu siqu. Ngicela uphathe ngokukhathalela."</string>

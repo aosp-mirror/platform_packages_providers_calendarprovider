@@ -1512,7 +1512,11 @@ import java.util.TimeZone;
         * Change event id's from ".../private/full/... to .../events/...
         * Set Calendars.canPartiallyUpdate to 1 to support partial updates
         * Nuke sync state so we re-sync with a fresh etag and edit url
+        *
+        * We need to drop the original_sync_update trigger because it fires whenever the
+        * sync_id field is touched, and dramatically slows this operation.
         */
+        db.execSQL("DROP TRIGGER IF EXISTS original_sync_update");
         db.execSQL("UPDATE Events SET "
                 + "_sync_id = REPLACE(_sync_id, '/private/full/', '/events/'), "
                 + "original_sync_id = REPLACE(original_sync_id, '/private/full/', '/events/') "
@@ -1520,6 +1524,7 @@ import java.util.TimeZone;
                 +    "JOIN Calendars ON Events.calendar_id = Calendars._id "
                 +    "WHERE account_type = 'com.google')"
         );
+        db.execSQL(CREATE_SYNC_ID_UPDATE_TRIGGER);
 
         db.execSQL("UPDATE Calendars SET canPartiallyUpdate = 1 WHERE account_type = 'com.google'");
 

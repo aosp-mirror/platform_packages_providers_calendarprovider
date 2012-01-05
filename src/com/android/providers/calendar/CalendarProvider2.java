@@ -2345,12 +2345,38 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     er.parse(recur);
                 } catch (EventRecurrence.InvalidFormatException ife) {
                     Log.w(TAG, "Invalid recurrence rule: " + recur);
+                    dumpEventNoPII(values);
                     return false;
                 }
             }
         }
 
         return true;
+    }
+
+    private void dumpEventNoPII(ContentValues values) {
+        if (values == null) {
+            return;
+        }
+
+        StringBuilder bob = new StringBuilder();
+        bob.append("dtStart:       ").append(values.getAsLong(Events.DTSTART));
+        bob.append("\ndtEnd:         ").append(values.getAsLong(Events.DTEND));
+        bob.append("\nall_day:       ").append(values.getAsInteger(Events.ALL_DAY));
+        bob.append("\ntz:            ").append(values.getAsString(Events.EVENT_TIMEZONE));
+        bob.append("\ndur:           ").append(values.getAsString(Events.DURATION));
+        bob.append("\nrrule:         ").append(values.getAsString(Events.RRULE));
+        bob.append("\nrdate:         ").append(values.getAsString(Events.RDATE));
+        bob.append("\nlast_date:     ").append(values.getAsLong(Events.LAST_DATE));
+
+        bob.append("\nid:            ").append(values.getAsLong(Events._ID));
+        bob.append("\nsync_id:       ").append(values.getAsString(Events._SYNC_ID));
+        bob.append("\nori_id:        ").append(values.getAsLong(Events.ORIGINAL_ID));
+        bob.append("\nori_sync_id:   ").append(values.getAsString(Events.ORIGINAL_SYNC_ID));
+        bob.append("\nori_inst_time: ").append(values.getAsLong(Events.ORIGINAL_INSTANCE_TIME));
+        bob.append("\nori_all_day:   ").append(values.getAsInteger(Events.ORIGINAL_ALL_DAY));
+
+        Log.i(TAG, bob.toString());
     }
 
     /**
@@ -2465,13 +2491,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
 
         if (!hasDtstart) {
+            dumpEventNoPII(values);
             throw new IllegalArgumentException("DTSTART cannot be empty.");
         }
         if (!hasDuration && !hasDtend) {
+            dumpEventNoPII(values);
             throw new IllegalArgumentException("DTEND and DURATION cannot both be null for " +
                     "an event.");
         }
         if (hasDuration && hasDtend) {
+            dumpEventNoPII(values);
             throw new IllegalArgumentException("Cannot have both DTEND and DURATION in an event");
         }
     }

@@ -102,7 +102,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
                 mDb.endTransaction();
             }
 
-            onEndTransaction();
+            onEndTransaction(isCallerSyncAdapter);
         } else {
             result = insertInTransaction(uri, values, isCallerSyncAdapter);
             if (result != null) {
@@ -131,7 +131,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
             mDb.endTransaction();
         }
 
-        onEndTransaction();
+        onEndTransaction(isCallerSyncAdapter);
         return numValues;
     }
 
@@ -154,7 +154,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
                 mDb.endTransaction();
             }
 
-            onEndTransaction();
+            onEndTransaction(isCallerSyncAdapter);
         } else {
             count = updateInTransaction(uri, values, selection, selectionArgs,
                         isCallerSyncAdapter);
@@ -184,7 +184,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
                 mDb.endTransaction();
             }
 
-            onEndTransaction();
+            onEndTransaction(isCallerSyncAdapter);
         } else {
             count = deleteInTransaction(uri, selection, selectionArgs, isCallerSyncAdapter);
             if (count > 0) {
@@ -206,11 +206,15 @@ public abstract class SQLiteContentProvider extends ContentProvider
     @Override
     public ContentProviderResult[] applyBatch(ArrayList<ContentProviderOperation> operations)
             throws OperationApplicationException {
+        final int numOperations = operations.size();
+        if (numOperations == 0) {
+            return new ContentProviderResult[0];
+        }
         mDb = mOpenHelper.getWritableDatabase();
         mDb.beginTransactionWithListener(this);
+        final boolean isCallerSyncAdapter = getIsCallerSyncAdapter(operations.get(0).getUri());
         try {
             mApplyingBatch.set(true);
-            final int numOperations = operations.size();
             final ContentProviderResult[] results = new ContentProviderResult[numOperations];
             for (int i = 0; i < numOperations; i++) {
                 final ContentProviderOperation operation = operations.get(i);
@@ -224,7 +228,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
         } finally {
             mApplyingBatch.set(false);
             mDb.endTransaction();
-            onEndTransaction();
+            onEndTransaction(isCallerSyncAdapter);
         }
     }
 
@@ -247,11 +251,11 @@ public abstract class SQLiteContentProvider extends ContentProvider
     protected void beforeTransactionCommit() {
     }
 
-    protected void onEndTransaction() {
+    protected void onEndTransaction(boolean isCallerSyncAdapter) {
         if (mNotifyChange) {
             mNotifyChange = false;
             // We sync to network if the caller was not the sync adapter
-            notifyChange(null == mIsCallerSyncAdapter || !mIsCallerSyncAdapter);
+            notifyChange(!isCallerSyncAdapter);
         }
     }
 }

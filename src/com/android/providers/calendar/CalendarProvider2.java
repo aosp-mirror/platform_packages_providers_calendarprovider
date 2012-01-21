@@ -1237,7 +1237,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
 
         return qb.query(mDb, projection, selection, selectionArgs,
-                Tables.EVENTS + "." + Instances._ID /* groupBy */,
+                Tables.INSTANCES + "." + Instances._ID /* groupBy */,
                 searchWhere /* having */, sort);
     }
 

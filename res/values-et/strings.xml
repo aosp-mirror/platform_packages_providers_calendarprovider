@@ -27,8 +27,8 @@
     <string name="provider_label" msgid="2306513350843464739">"Kalender"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Kustuta kohe"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Alusta"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Olete 1) tegemas koopiat oma kalendri andmebaasist SD-kaardile/USB-mäluruumi, mida saavad lugeda kõik rakendused, ja 2) seda meilimas. Kustutage see kindlasti kohe pärast seadmest kustutamist või meili kättesaamist."</string>
-    <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Vali programm faili saatmiseks"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"Teete 1) koopiat oma kalendri andmebaasist SD-kaardile/USB-salvestusruumi, mida saavad lugeda kõik rakendused, ja 2) meilite selle. Kustutage koopia kindlasti pärast seadmelt kopeerimist või kui meil on kätte saadud."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Valige programm faili saatmiseks"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Kalendri Db on lisatud"</string>
-    <string name="debug_tool_email_body" msgid="740309162644398319">"Lisatud on minu kalendri andmebaas koos kõigi kohtumiste ja isiklike andmetega. Käsitlege neid ettevaatlikult."</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"Lisatud on minu kalendri andmebaas koos kõigi kohtumiste ja isikliku teabega. Käsitlege neid ettevaatlikult."</string>
 </resources>

@@ -17,13 +17,14 @@
 
 package com.android.providers.calendar;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import com.android.calendarcommon.DateException;
 import com.android.calendarcommon.EventRecurrence;
 import com.android.calendarcommon.RecurrenceProcessor;
 import com.android.calendarcommon.RecurrenceSet;
 import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
 import com.android.providers.calendar.CalendarDatabaseHelper.Views;
-import com.google.common.annotations.VisibleForTesting;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;
@@ -3574,10 +3575,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     ContentValues colorValue = new ContentValues();
                     if (calendarColor) {
                         colorValue.put(Calendars.CALENDAR_COLOR, color);
-                        mDb.update(Tables.CALENDARS, values, SQL_WHERE_CALENDAR_COLOR, args);
+                        mDb.update(Tables.CALENDARS, colorValue, SQL_WHERE_CALENDAR_COLOR, args);
                     } else {
                         colorValue.put(Events.EVENT_COLOR, color);
-                        mDb.update(Tables.EVENTS, values, SQL_WHERE_EVENT_COLOR, args);
+                        mDb.update(Tables.EVENTS, colorValue, SQL_WHERE_EVENT_COLOR, args);
                     }
                 }
             } finally {

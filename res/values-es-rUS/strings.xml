@@ -27,7 +27,7 @@
     <string name="provider_label" msgid="2306513350843464739">"Calendario"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Eliminar ahora"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Iniciar"</string>
-    <string name="debug_tool_message" msgid="4414152820946316089">"Estás a punto de 1) hacer una copia de tu base de datos de calendario en la tarjeta SD / USB de almacenamiento que puede leerse desde cualquier aplicación y 2) enviarla por correo electrónico. Recuerda que debes eliminarla inmediatamente después de haberla copiado con éxito del dispositivo o de haber recibido el correo electrónico."</string>
+    <string name="debug_tool_message" msgid="4414152820946316089">"Estás a punto de 1) hacer una copia de tu base de datos de calendario en la tarjeta SD / USB de almacenamiento que puede leerse desde cualquier aplicación y 2) enviarla por correo. Recuerda que debes eliminarla inmediatamente después de haberla copiado con éxito del dispositivo o de haber recibido el correo."</string>
     <string name="debug_tool_email_sender_picker" msgid="4418621476577347562">"Selecciona un programa para enviar el archivo."</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Base de datos de calendario adjunta"</string>
     <string name="debug_tool_email_body" msgid="740309162644398319">"Adjunto mi base de datos de calendario con todas mis citas y mi información personal. Por favor, tratar con cuidado."</string>

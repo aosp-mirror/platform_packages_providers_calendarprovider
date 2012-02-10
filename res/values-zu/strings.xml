@@ -19,7 +19,7 @@
     <string name="calendar_storage" msgid="5387668002987562770">"Isitoreji sekhalenda"</string>
     <string name="upgrade_msg" msgid="2792831029435070926">"Ukufaka ezakamuva kwimininingo egciniwe yeKhalenda."</string>
     <string name="calendar_default_name" msgid="6924293766625167275">"Okuzenzakalelayo"</string>
-    <string name="calendar_info" msgid="6687678621418059281">"Ukwaziswa kwekhalenda"</string>
+    <string name="calendar_info" msgid="6687678621418059281">"Ulwazi lekhalenda"</string>
     <string name="calendar_info_error" msgid="5575162446528419982">"Iphutha"</string>
     <string name="calendar_info_no_calendars" msgid="4287534468186704433">"Awekho amakhalenda"</string>
     <string name="calendar_info_events" msgid="1805502308105103803">"Izenzakalo: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>

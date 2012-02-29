@@ -22,8 +22,6 @@ import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
-import android.content.Entity;
-import android.content.EntityIterator;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.database.Cursor;
@@ -33,8 +31,8 @@ import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
 import android.provider.CalendarContract;
 import android.provider.CalendarContract.Calendars;
+import android.provider.CalendarContract.Colors;
 import android.provider.CalendarContract.Events;
-import android.provider.CalendarContract.EventsEntity;
 import android.provider.CalendarContract.Instances;
 import android.test.AndroidTestCase;
 import android.test.IsolatedContext;
@@ -50,7 +48,6 @@ import android.text.format.Time;
 import android.util.Log;
 
 import java.io.File;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -1054,6 +1051,33 @@ public class CalendarProvider2Test extends AndroidTestCase {
         return Integer.parseInt(id);
     }
 
+    private String obsToString(Object... objs) {
+        StringBuilder bob = new StringBuilder();
+
+        for (Object obj : objs) {
+            bob.append(obj.toString());
+            bob.append('#');
+        }
+
+        return bob.toString();
+    }
+
+    private long insertColor(long colorType, String colorKey, long color) {
+        ContentValues m = new ContentValues();
+        m.put(Colors.ACCOUNT_NAME, DEFAULT_ACCOUNT);
+        m.put(Colors.ACCOUNT_TYPE, DEFAULT_ACCOUNT_TYPE);
+        m.put(Colors.DATA, obsToString(colorType, colorKey, color));
+        m.put(Colors.COLOR_TYPE, colorType);
+        m.put(Colors.COLOR_KEY, colorKey);
+        m.put(Colors.COLOR, color);
+
+        Uri uri = CalendarContract.Colors.CONTENT_URI;
+
+        uri = mResolver.insert(addSyncQueryParams(uri, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE), m);
+        String id = uri.getLastPathSegment();
+        return Long.parseLong(id);
+    }
+
     /**
      * Constructs a URI from a base URI (e.g. "content://com.android.calendar/calendars"),
      * an account name, and an account type.
@@ -1238,6 +1262,49 @@ public class CalendarProvider2Test extends AndroidTestCase {
     private void deleteAllEvents() {
         mDb.execSQL("DELETE FROM Events;");
         mMetaData.clearInstanceRange();
+    }
+
+    public void testInsertColor() throws Exception {
+        checkColor(Colors.TYPE_EVENT, "1" /* color key */, 11 /* color */);
+        try {
+            checkColor(Colors.TYPE_EVENT, "1" /* color key */, 11 /* color */);
+            fail("Expected to fail with duplicate insertion");
+        } catch (IllegalArgumentException iae) {
+            // good
+        }
+
+        checkColor(Colors.TYPE_CALENDAR, "1" /* color key */, 22 /* color */);
+    }
+
+    private void checkColor(long colorType, String colorKey, long color) {
+        String[] projection = new String[] {
+                Colors.ACCOUNT_NAME, // 0
+                Colors.ACCOUNT_TYPE, // 1
+                Colors.COLOR_TYPE,   // 2
+                Colors.COLOR_KEY,    // 3
+                Colors.COLOR,        // 4
+                Colors._ID,          // 5
+                Colors.DATA,         // 6
+        };
+
+        long color1Id = insertColor(colorType, colorKey, color);
+
+        Cursor cursor = mResolver.query(Colors.CONTENT_URI, projection, Colors.COLOR_KEY
+                + "=? AND " + Colors.COLOR_TYPE + "=?", new String[] {
+                colorKey, Long.toString(colorType)
+        }, null /* sortOrder */);
+
+        assertEquals(1, cursor.getCount());
+
+        assertTrue(cursor.moveToFirst());
+        assertEquals(DEFAULT_ACCOUNT, cursor.getString(0));
+        assertEquals(DEFAULT_ACCOUNT_TYPE, cursor.getString(1));
+        assertEquals(colorType, cursor.getLong(2));
+        assertEquals(colorKey, cursor.getString(3));
+        assertEquals(color, cursor.getLong(4));
+        assertEquals(color1Id, cursor.getLong(5));
+        assertEquals(obsToString(colorType, colorKey, color), cursor.getString(6));
+        cursor.close();
     }
 
     public void testInsertNormalEvents() throws Exception {

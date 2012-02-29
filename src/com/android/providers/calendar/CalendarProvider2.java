@@ -124,6 +124,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final int COLORS_COLOR_INDEX_INDEX = 3;
     private static final int COLORS_COLOR_INDEX = 4;
 
+    private static final String COLOR_FULL_SELECTION = Colors.ACCOUNT_NAME + "=? AND "
+            + Colors.ACCOUNT_TYPE + "=? AND " + Colors.COLOR_TYPE + "=? AND " + Colors.COLOR_KEY
+            + "=?";
+
     private static final String GENERIC_ACCOUNT_NAME = Calendars.ACCOUNT_NAME;
     private static final String GENERIC_ACCOUNT_TYPE = Calendars.ACCOUNT_TYPE;
     private static final String[] ACCOUNT_PROJECTION = new String[] {
@@ -2194,9 +2198,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // Verify the color doesn't already exist
                 Cursor c = null;
                 try {
-                    c = getColorByIndex(accountName, accountType, colorIndex);
+                    final long colorType = values.getAsLong(Colors.COLOR_TYPE);
+                    c = getColorByTypeIndex(accountName, accountType, colorType, colorIndex);
                     if (c.getCount() != 0) {
-                        throw new IllegalArgumentException(colorIndex
+                        throw new IllegalArgumentException("color type " + colorType
+                                + " and index " + colorIndex
                                 + " already exists for account and type provided");
                     }
                 } finally {
@@ -2552,10 +2558,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         return originalSyncId;
     }
 
-    private Cursor getColorByIndex(String accountName, String accountType, String index) {
-        return mDb.query(Tables.COLORS, COLORS_PROJECTION, Colors.ACCOUNT_NAME + "=? AND "
-                + Colors.ACCOUNT_TYPE + "=? AND " + Colors.COLOR_KEY + "=?",
-                new String[] { accountName, accountType, index }, null, null, null);
+    private Cursor getColorByTypeIndex(String accountName, String accountType, long colorType,
+            String colorIndex) {
+        return mDb.query(Tables.COLORS, COLORS_PROJECTION, COLOR_FULL_SELECTION, new String[] {
+                accountName, accountType, Long.toString(colorType), colorIndex
+        }, null, null, null);
     }
 
     /**
@@ -4060,12 +4067,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      *
      * @param accountName The email of the account the color is for
      * @param accountType The type of account the color is for
-     * @param color_index The color_index being set for the calendar
-     * @param color_type The type of color expected (Calendar/Event)
+     * @param colorIndex The color_index being set for the calendar
+     * @param colorType The type of color expected (Calendar/Event)
      * @return The color specified by the index
      */
-    private int verifyColorExists(String accountName, String accountType, String color_index,
-            int color_type) {
+    private int verifyColorExists(String accountName, String accountType, String colorIndex,
+            int colorType) {
         if (TextUtils.isEmpty(accountName) || TextUtils.isEmpty(accountType)) {
             throw new IllegalArgumentException("Cannot set color. A valid account does"
                     + " not exist for this calendar.");
@@ -4073,10 +4080,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         int color;
         Cursor c = null;
         try {
-            c = getColorByIndex(accountName, accountType, color_index);
-            if (!c.moveToFirst() || c.getInt(COLORS_COLOR_TYPE_INDEX) != color_type) {
-                throw new IllegalArgumentException(color_index
-                        + " color does not exist for account or is the wrong type.");
+            c = getColorByTypeIndex(accountName, accountType, colorType, colorIndex);
+            if (!c.moveToFirst()) {
+                throw new IllegalArgumentException("Color type: " + colorType + " and index "
+                        + colorIndex + " does not exist for account.");
             }
             color = c.getInt(COLORS_COLOR_INDEX);
         } finally {

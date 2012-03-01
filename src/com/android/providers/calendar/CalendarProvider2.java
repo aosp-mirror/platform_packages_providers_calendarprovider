@@ -4637,6 +4637,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Calendars.MAX_REMINDERS, Calendars.MAX_REMINDERS);
         sEventsProjectionMap.put(Calendars.CAN_ORGANIZER_RESPOND, Calendars.CAN_ORGANIZER_RESPOND);
         sEventsProjectionMap.put(Calendars.CAN_MODIFY_TIME_ZONE, Calendars.CAN_MODIFY_TIME_ZONE);
+        sEventsProjectionMap.put(Events.DISPLAY_COLOR, Events.DISPLAY_COLOR);
 
         // Put the shared items into the Instances projection map
         // The Instances and CalendarAlerts are joined with Calendars, so the projections include

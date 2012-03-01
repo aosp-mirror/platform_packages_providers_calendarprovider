@@ -16,8 +16,9 @@
 
 package com.android.providers.calendar;
 
-import com.android.common.content.SyncStateContentProviderHelper;
 import com.google.common.annotations.VisibleForTesting;
+
+import com.android.common.content.SyncStateContentProviderHelper;
 
 import android.accounts.Account;
 import android.content.ContentResolver;
@@ -63,7 +64,7 @@ import java.util.TimeZone;
     // Versions under 100 cover through Froyo, 1xx version are for Gingerbread,
     // 2xx for Honeycomb, and 3xx for ICS. For future versions bump this to the
     // next hundred at each major release.
-    static final int DATABASE_VERSION = 308;
+    static final int DATABASE_VERSION = 309;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -188,7 +189,8 @@ import java.util.TimeZone;
             + " SET calendar_color=(SELECT " + Colors.COLOR + " FROM " + Tables.COLORS + " WHERE "
             + Colors.ACCOUNT_NAME + "=" + "new." + Calendars.ACCOUNT_NAME + " AND "
             + Colors.ACCOUNT_TYPE + "=" + "new." + Calendars.ACCOUNT_TYPE + " AND "
-            + Colors.COLOR_KEY + "=" + "new." + Calendars.CALENDAR_COLOR_KEY + ") "
+            + Colors.COLOR_KEY + "=" + "new." + Calendars.CALENDAR_COLOR_KEY + " AND "
+            + Colors.COLOR_TYPE + "=" + Colors.TYPE_CALENDAR + ") "
             + " WHERE " + Calendars._ID + "=" + "old." + Calendars._ID
             + ";";
     private static final String CALENDAR_COLOR_UPDATE_TRIGGER_NAME = "calendar_color_update";
@@ -203,7 +205,8 @@ import java.util.TimeZone;
             + Tables.CALENDARS + " WHERE " + Calendars._ID + "=new." + Events.CALENDAR_ID
             + ") AND " + Colors.ACCOUNT_TYPE + "=" + "(SELECT " + Calendars.ACCOUNT_TYPE + " FROM "
             + Tables.CALENDARS + " WHERE " + Calendars._ID + "=new." + Events.CALENDAR_ID
-            + ") AND " + Colors.COLOR_KEY + "=" + "new." + Events.EVENT_COLOR_KEY + ") "
+            + ") AND " + Colors.COLOR_KEY + "=" + "new." + Events.EVENT_COLOR_KEY + " AND "
+            + Colors.COLOR_TYPE + "=" + Colors.TYPE_EVENT + ") "
             + " WHERE " + Events._ID + "=" + "old." + Events._ID + ";";
     private static final String EVENT_COLOR_UPDATE_TRIGGER_NAME = "event_color_update";
     private static final String CREATE_EVENT_COLOR_UPDATE_TRIGGER = "CREATE TRIGGER "
@@ -738,39 +741,39 @@ import java.util.TimeZone;
 
     private void createCalendarsTable(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE " + Tables.CALENDARS + " (" +
-                CalendarContract.Calendars._ID + " INTEGER PRIMARY KEY," +
-                CalendarContract.Calendars.ACCOUNT_NAME + " TEXT," +
-                CalendarContract.Calendars.ACCOUNT_TYPE + " TEXT," +
-                CalendarContract.Calendars._SYNC_ID + " TEXT," +
-                CalendarContract.Calendars.DIRTY + " INTEGER," +
-                CalendarContract.Calendars.NAME + " TEXT," +
-                CalendarContract.Calendars.CALENDAR_DISPLAY_NAME + " TEXT," +
-                CalendarContract.Calendars.CALENDAR_COLOR + " INTEGER," +
-                CalendarContract.Calendars.CALENDAR_COLOR_KEY + " TEXT," +
-                CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL + " INTEGER," +
-                CalendarContract.Calendars.VISIBLE + " INTEGER NOT NULL DEFAULT 1," +
-                CalendarContract.Calendars.SYNC_EVENTS + " INTEGER NOT NULL DEFAULT 0," +
-                CalendarContract.Calendars.CALENDAR_LOCATION + " TEXT," +
-                CalendarContract.Calendars.CALENDAR_TIME_ZONE + " TEXT," +
-                CalendarContract.Calendars.OWNER_ACCOUNT + " TEXT, " +
-                CalendarContract.Calendars.CAN_ORGANIZER_RESPOND + " INTEGER NOT NULL DEFAULT 1," +
-                CalendarContract.Calendars.CAN_MODIFY_TIME_ZONE + " INTEGER DEFAULT 1," +
-                CalendarContract.Calendars.CAN_PARTIALLY_UPDATE + " INTEGER DEFAULT 0," +
-                CalendarContract.Calendars.MAX_REMINDERS + " INTEGER DEFAULT 5," +
-                CalendarContract.Calendars.ALLOWED_REMINDERS + " TEXT DEFAULT '0,1'," +
-                CalendarContract.Calendars.ALLOWED_AVAILABILITY + " TEXT DEFAULT '0,1'," +
-                CalendarContract.Calendars.ALLOWED_ATTENDEE_TYPES + " TEXT DEFAULT '0,1,2'," +
-                CalendarContract.Calendars.DELETED + " INTEGER NOT NULL DEFAULT 0," +
-                CalendarContract.Calendars.CAL_SYNC1 + " TEXT," +
-                CalendarContract.Calendars.CAL_SYNC2 + " TEXT," +
-                CalendarContract.Calendars.CAL_SYNC3 + " TEXT," +
-                CalendarContract.Calendars.CAL_SYNC4 + " TEXT," +
-                CalendarContract.Calendars.CAL_SYNC5 + " TEXT," +
-                CalendarContract.Calendars.CAL_SYNC6 + " TEXT," +
-                CalendarContract.Calendars.CAL_SYNC7 + " TEXT," +
-                CalendarContract.Calendars.CAL_SYNC8 + " TEXT," +
-                CalendarContract.Calendars.CAL_SYNC9 + " TEXT," +
-                CalendarContract.Calendars.CAL_SYNC10 + " TEXT" +
+                Calendars._ID + " INTEGER PRIMARY KEY," +
+                Calendars.ACCOUNT_NAME + " TEXT," +
+                Calendars.ACCOUNT_TYPE + " TEXT," +
+                Calendars._SYNC_ID + " TEXT," +
+                Calendars.DIRTY + " INTEGER," +
+                Calendars.NAME + " TEXT," +
+                Calendars.CALENDAR_DISPLAY_NAME + " TEXT," +
+                Calendars.CALENDAR_COLOR + " INTEGER," +
+                Calendars.CALENDAR_COLOR_KEY + " TEXT," +
+                Calendars.CALENDAR_ACCESS_LEVEL + " INTEGER," +
+                Calendars.VISIBLE + " INTEGER NOT NULL DEFAULT 1," +
+                Calendars.SYNC_EVENTS + " INTEGER NOT NULL DEFAULT 0," +
+                Calendars.CALENDAR_LOCATION + " TEXT," +
+                Calendars.CALENDAR_TIME_ZONE + " TEXT," +
+                Calendars.OWNER_ACCOUNT + " TEXT, " +
+                Calendars.CAN_ORGANIZER_RESPOND + " INTEGER NOT NULL DEFAULT 1," +
+                Calendars.CAN_MODIFY_TIME_ZONE + " INTEGER DEFAULT 1," +
+                Calendars.CAN_PARTIALLY_UPDATE + " INTEGER DEFAULT 0," +
+                Calendars.MAX_REMINDERS + " INTEGER DEFAULT 5," +
+                Calendars.ALLOWED_REMINDERS + " TEXT DEFAULT '0,1'," +
+                Calendars.ALLOWED_AVAILABILITY + " TEXT DEFAULT '0,1'," +
+                Calendars.ALLOWED_ATTENDEE_TYPES + " TEXT DEFAULT '0,1,2'," +
+                Calendars.DELETED + " INTEGER NOT NULL DEFAULT 0," +
+                Calendars.CAL_SYNC1 + " TEXT," +
+                Calendars.CAL_SYNC2 + " TEXT," +
+                Calendars.CAL_SYNC3 + " TEXT," +
+                Calendars.CAL_SYNC4 + " TEXT," +
+                Calendars.CAL_SYNC5 + " TEXT," +
+                Calendars.CAL_SYNC6 + " TEXT," +
+                Calendars.CAL_SYNC7 + " TEXT," +
+                Calendars.CAL_SYNC8 + " TEXT," +
+                Calendars.CAL_SYNC9 + " TEXT," +
+                Calendars.CAL_SYNC10 + " TEXT" +
                 ");");
 
         // Trigger to remove a calendar's events when we delete the calendar
@@ -1348,6 +1351,11 @@ import java.util.TimeZone;
                 oldVersion++;
                 createEventsView = true;
             }
+            if (oldVersion == 308) {
+                upgradeToVersion309(db);
+                createEventsView = true;
+                oldVersion++;
+            }
             if (createEventsView) {
                 createEventsView(db);
             }
@@ -1401,6 +1409,13 @@ import java.util.TimeZone;
             return true;
         }
         return false;
+    }
+
+    private void upgradeToVersion309(SQLiteDatabase db) {
+        db.execSQL("DROP TRIGGER IF EXISTS calendar_color_update");
+        db.execSQL(CREATE_CALENDAR_COLOR_UPDATE_TRIGGER);
+        db.execSQL("DROP TRIGGER IF EXISTS event_color_update");
+        db.execSQL(CREATE_EVENT_COLOR_UPDATE_TRIGGER);
     }
 
     @VisibleForTesting
@@ -2964,7 +2979,7 @@ import java.util.TimeZone;
         if (url != null) {
             extras.putString("feed", url);
         }
-        ContentResolver.requestSync(account, CalendarContract.Calendars.CONTENT_URI.getAuthority(),
+        ContentResolver.requestSync(account, Calendars.CONTENT_URI.getAuthority(),
                 extras);
     }
 
@@ -3022,39 +3037,41 @@ import java.util.TimeZone;
                 + Tables.EVENTS + "." + CalendarContract.Events.DIRTY
                 + " AS " + CalendarContract.Events.DIRTY + ","
                 + CalendarContract.Events.LAST_SYNCED + ","
-                + Tables.CALENDARS + "." + CalendarContract.Calendars.ACCOUNT_NAME
+                + Tables.CALENDARS + "." + Calendars.ACCOUNT_NAME
                 + " AS " + CalendarContract.Events.ACCOUNT_NAME + ","
-                + Tables.CALENDARS + "." + CalendarContract.Calendars.ACCOUNT_TYPE
+                + Tables.CALENDARS + "." + Calendars.ACCOUNT_TYPE
                 + " AS " + CalendarContract.Events.ACCOUNT_TYPE + ","
-                + CalendarContract.Calendars.CALENDAR_TIME_ZONE + ","
-                + CalendarContract.Calendars.CALENDAR_DISPLAY_NAME + ","
-                + CalendarContract.Calendars.CALENDAR_LOCATION + ","
-                + CalendarContract.Calendars.VISIBLE + ","
-                + CalendarContract.Calendars.CALENDAR_COLOR + ","
-                + CalendarContract.Calendars.CALENDAR_COLOR_KEY + ","
-                + CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL + ","
-                + CalendarContract.Calendars.MAX_REMINDERS + ","
-                + CalendarContract.Calendars.ALLOWED_REMINDERS + ","
-                + CalendarContract.Calendars.ALLOWED_ATTENDEE_TYPES + ","
-                + CalendarContract.Calendars.ALLOWED_AVAILABILITY + ","
-                + CalendarContract.Calendars.CAN_ORGANIZER_RESPOND + ","
-                + CalendarContract.Calendars.CAN_MODIFY_TIME_ZONE + ","
-                + CalendarContract.Calendars.CAN_PARTIALLY_UPDATE + ","
-                + CalendarContract.Calendars.CAL_SYNC1 + ","
-                + CalendarContract.Calendars.CAL_SYNC2 + ","
-                + CalendarContract.Calendars.CAL_SYNC3 + ","
-                + CalendarContract.Calendars.CAL_SYNC4 + ","
-                + CalendarContract.Calendars.CAL_SYNC5 + ","
-                + CalendarContract.Calendars.CAL_SYNC6 + ","
-                + CalendarContract.Calendars.CAL_SYNC7 + ","
-                + CalendarContract.Calendars.CAL_SYNC8 + ","
-                + CalendarContract.Calendars.CAL_SYNC9 + ","
-                + CalendarContract.Calendars.CAL_SYNC10 + ","
-                + CalendarContract.Calendars.OWNER_ACCOUNT + ","
-                + CalendarContract.Calendars.SYNC_EVENTS
+                + Calendars.CALENDAR_TIME_ZONE + ","
+                + Calendars.CALENDAR_DISPLAY_NAME + ","
+                + Calendars.CALENDAR_LOCATION + ","
+                + Calendars.VISIBLE + ","
+                + Calendars.CALENDAR_COLOR + ","
+                + Calendars.CALENDAR_COLOR_KEY + ","
+                + Calendars.CALENDAR_ACCESS_LEVEL + ","
+                + Calendars.MAX_REMINDERS + ","
+                + Calendars.ALLOWED_REMINDERS + ","
+                + Calendars.ALLOWED_ATTENDEE_TYPES + ","
+                + Calendars.ALLOWED_AVAILABILITY + ","
+                + Calendars.CAN_ORGANIZER_RESPOND + ","
+                + Calendars.CAN_MODIFY_TIME_ZONE + ","
+                + Calendars.CAN_PARTIALLY_UPDATE + ","
+                + Calendars.CAL_SYNC1 + ","
+                + Calendars.CAL_SYNC2 + ","
+                + Calendars.CAL_SYNC3 + ","
+                + Calendars.CAL_SYNC4 + ","
+                + Calendars.CAL_SYNC5 + ","
+                + Calendars.CAL_SYNC6 + ","
+                + Calendars.CAL_SYNC7 + ","
+                + Calendars.CAL_SYNC8 + ","
+                + Calendars.CAL_SYNC9 + ","
+                + Calendars.CAL_SYNC10 + ","
+                + Calendars.OWNER_ACCOUNT + ","
+                + Calendars.SYNC_EVENTS  + ","
+                + "ifnull(" + Events.EVENT_COLOR + "," + Calendars.CALENDAR_COLOR + ") AS "
+                + Events.DISPLAY_COLOR
                 + " FROM " + Tables.EVENTS + " JOIN " + Tables.CALENDARS
-                + " ON (" + Tables.EVENTS + "." + CalendarContract.Events.CALENDAR_ID
-                + "=" + Tables.CALENDARS + "." + CalendarContract.Calendars._ID
+                + " ON (" + Tables.EVENTS + "." + Events.CALENDAR_ID
+                + "=" + Tables.CALENDARS + "." + Calendars._ID
                 + ")";
 
         db.execSQL("CREATE VIEW " + Views.EVENTS + " AS " + eventsSelect);
@@ -3172,7 +3189,7 @@ import java.util.TimeZone;
     protected void duplicateEvent(final long id) {
         final SQLiteDatabase db = getWritableDatabase();
         final long canPartiallyUpdate = DatabaseUtils.longForQuery(db, "SELECT "
-                + CalendarContract.Calendars.CAN_PARTIALLY_UPDATE + " FROM " + Views.EVENTS
+                + Calendars.CAN_PARTIALLY_UPDATE + " FROM " + Views.EVENTS
                 + " WHERE " + Events._ID + " = ?", new String[] {
             String.valueOf(id)
         });

@@ -26,6 +26,7 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
+import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
@@ -61,9 +62,14 @@ import java.util.TimeZone;
 
     // Note: if you update the version number, you must also update the code
     // in upgradeDatabase() to modify the database (gracefully, if possible).
-    // Versions under 100 cover through Froyo, 1xx version are for Gingerbread,
-    // 2xx for Honeycomb, and 3xx for ICS. For future versions bump this to the
-    // next hundred at each major release.
+    //
+    //  xx Froyo and prior
+    // 1xx for Gingerbread,
+    // 2xx for Honeycomb
+    // 3xx for ICS
+    // 4xx for JB
+    // 5xx for K
+    // Bump this to the next hundred at each major release.
     static final int DATABASE_VERSION = 401;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
@@ -1155,8 +1161,8 @@ import java.util.TimeZone;
 
         if (oldVersion < 49) {
             dropTables(db);
-            mSyncState.createDatabase(db);
-            return; // this was lossy
+            bootstrapDB(db);
+            return;
         }
 
         // From schema versions 59 to version 66, the CalendarMetaData table definition had lost
@@ -1391,6 +1397,14 @@ import java.util.TimeZone;
          * in 300. At each major release we should jump to the next
          * centiversion.
          */
+    }
+
+    @Override
+    public void onDowngrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        Log.i(TAG, "Can't downgrade DB from version " + oldVersion + " to " + newVersion);
+        dropTables(db);
+        bootstrapDB(db);
+        return;
     }
 
     /**
@@ -2993,17 +3007,31 @@ import java.util.TimeZone;
     }
 
     private void dropTables(SQLiteDatabase db) {
-        db.execSQL("DROP TABLE IF EXISTS " + Tables.COLORS + ";");
-        db.execSQL("DROP TABLE IF EXISTS " + Tables.CALENDARS + ";");
-        db.execSQL("DROP TABLE IF EXISTS " + Tables.EVENTS + ";");
-        db.execSQL("DROP TABLE IF EXISTS " + Tables.EVENTS_RAW_TIMES + ";");
-        db.execSQL("DROP TABLE IF EXISTS " + Tables.INSTANCES + ";");
-        db.execSQL("DROP TABLE IF EXISTS " + Tables.CALENDAR_META_DATA + ";");
-        db.execSQL("DROP TABLE IF EXISTS " + Tables.CALENDAR_CACHE + ";");
-        db.execSQL("DROP TABLE IF EXISTS " + Tables.ATTENDEES + ";");
-        db.execSQL("DROP TABLE IF EXISTS " + Tables.REMINDERS + ";");
-        db.execSQL("DROP TABLE IF EXISTS " + Tables.CALENDAR_ALERTS + ";");
-        db.execSQL("DROP TABLE IF EXISTS " + Tables.EXTENDED_PROPERTIES + ";");
+        Log.i(TAG, "Clearing database");
+
+        String[] columns = {
+                "type", "name"
+        };
+        Cursor cursor = db.query("sqlite_master", columns, null, null, null, null, null);
+        if (cursor == null) {
+            return;
+        }
+        try {
+            while (cursor.moveToNext()) {
+                final String name = cursor.getString(1);
+                if (!name.startsWith("sqlite_")) {
+                    // If it's not a SQL-controlled entity, drop it
+                    final String sql = "DROP " + cursor.getString(0) + " IF EXISTS " + name;
+                    try {
+                        db.execSQL(sql);
+                    } catch (SQLException e) {
+                        Log.e(TAG, "Error executing " + sql + " " + e.toString());
+                    }
+                }
+            }
+        } finally {
+            cursor.close();
+        }
     }
 
     @Override

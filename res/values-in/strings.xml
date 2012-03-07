@@ -28,7 +28,7 @@
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Hapus sekarang"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Mulai"</string>
     <string name="debug_tool_message" msgid="4862486669932821937">"Anda akan 1) membuat salinan dari basis data kalender ke kartu SD/penyimpanan USB yang mudah dibaca oleh semua apl, dan 2) mengirimkannya lewat email. Ingatlah untuk segera menghapusnya setelah Anda berhasil menyalin dari perangkat atau menerima emailnya."</string>
-    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Pilih program untuk mengirim berkas Anda"</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Pilih program untuk mengirim file Anda"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Db Kalender terlampir"</string>
     <string name="debug_tool_email_body" msgid="4835949635324134017">"Terlampir adalah basis data kalender saya beserta semua janji dan informasi pribadi. Harap tangani dengan benar."</string>
 </resources>

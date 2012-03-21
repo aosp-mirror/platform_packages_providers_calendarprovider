@@ -2054,7 +2054,18 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     values.put(Events.DIRTY, 1);
                 }
                 if (!values.containsKey(Events.DTSTART)) {
-                    throw new RuntimeException("DTSTART field missing from event");
+                    if (values.containsKey(Events.ORIGINAL_SYNC_ID)
+                            && values.containsKey(Events.ORIGINAL_INSTANCE_TIME)
+                            && Events.STATUS_CANCELED == values.getAsInteger(Events.STATUS)) {
+                        // event is a canceled instance of a recurring event, it doesn't these
+                        // values but lets fake some to satisfy curious consumers.
+                        final long origStart = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
+                        values.put(Events.DTSTART, origStart);
+                        values.put(Events.DTEND, origStart);
+                        values.put(Events.EVENT_TIMEZONE, Time.TIMEZONE_UTC);
+                    } else {
+                        throw new RuntimeException("DTSTART field missing from event");
+                    }
                 }
                 // TODO: do we really need to make a copy?
                 ContentValues updatedValues = new ContentValues(values);

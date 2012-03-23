@@ -27,7 +27,7 @@
     <string name="provider_label" msgid="2306513350843464739">"日历"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"立即删除"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"开始"</string>
-    <string name="debug_tool_message" msgid="4862486669932821937">"您需要执行以下操作：1) 在任意应用程序都可读取的 SD 卡/USB 存储设备中，创建日历数据库的副本；2) 通过电子邮件发送该副本。在成功从设备中复制该副本或开发人员收到相关电子邮件后，请务必将该副本及时删除。"</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"您需要执行以下操作：1) 在任意应用都可读取的 SD 卡/USB 存储设备中，创建日历数据库的副本；2) 通过电子邮件发送该副本。在成功从设备中复制该副本或开发人员收到相关电子邮件后，请务必将该副本及时删除。"</string>
     <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"选择用于发送文件的程序"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"日历调试工具已附加"</string>
     <string name="debug_tool_email_body" msgid="4835949635324134017">"附件是我的日历数据库，其中包含我的全部约会和个人信息，因此请谨慎处理。"</string>

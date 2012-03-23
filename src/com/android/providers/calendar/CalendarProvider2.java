@@ -17,16 +17,6 @@
 
 package com.android.providers.calendar;
 
-import com.google.common.annotations.VisibleForTesting;
-
-import com.android.calendarcommon.DateException;
-import com.android.calendarcommon.Duration;
-import com.android.calendarcommon.EventRecurrence;
-import com.android.calendarcommon.RecurrenceProcessor;
-import com.android.calendarcommon.RecurrenceSet;
-import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
-import com.android.providers.calendar.CalendarDatabaseHelper.Views;
-
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.accounts.OnAccountsUpdateListener;
@@ -63,6 +53,16 @@ import android.text.format.Time;
 import android.util.Log;
 import android.util.TimeFormatException;
 import android.util.TimeUtils;
+
+import com.android.calendarcommon.DateException;
+import com.android.calendarcommon.Duration;
+import com.android.calendarcommon.EventRecurrence;
+import com.android.calendarcommon.RecurrenceProcessor;
+import com.android.calendarcommon.RecurrenceSet;
+import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
+import com.android.providers.calendar.CalendarDatabaseHelper.Views;
+import com.google.android.collect.Sets;
+import com.google.common.annotations.VisibleForTesting;
 
 import java.io.File;
 import java.lang.reflect.Array;
@@ -366,6 +366,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private static final long SYNC_UPDATE_BROADCAST_TIMEOUT_MILLIS =
         30 * DateUtils.SECOND_IN_MILLIS;
+
+    private static final HashSet<String> ALLOWED_URI_PARAMETERS = Sets.newHashSet(
+            CalendarContract.CALLER_IS_SYNCADAPTER,
+            CalendarContract.EventsEntity.ACCOUNT_NAME,
+            CalendarContract.EventsEntity.ACCOUNT_TYPE);
 
     /** Set of columns allowed to be altered when creating an exception to a recurring event. */
     private static final HashSet<String> ALLOWED_IN_EXCEPTION = new HashSet<String>();
@@ -801,7 +806,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "query uri - " + uri);
         }
-
+        validateUriParameters(uri.getQueryParameterNames());
         final SQLiteDatabase db = mDbHelper.getReadableDatabase();
 
         SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
@@ -826,7 +831,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case EVENTS:
                 qb.setTables(CalendarDatabaseHelper.Views.EVENTS);
                 qb.setProjectionMap(sEventsProjectionMap);
-                selection = appendAccountFromParameterToSelection(selection, uri);
+                selection = appendAccountToSelection(uri, selection, Calendars.ACCOUNT_NAME,
+                        Calendars.ACCOUNT_TYPE);
                 selection = appendLastSyncedColumnToSelection(selection, uri);
                 break;
             case EVENTS_ID:
@@ -839,7 +845,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case EVENT_ENTITIES:
                 qb.setTables(CalendarDatabaseHelper.Views.EVENTS);
                 qb.setProjectionMap(sEventEntitiesProjectionMap);
-                selection = appendAccountFromParameterToSelection(selection, uri);
+                selection = appendAccountToSelection(uri, selection, Calendars.ACCOUNT_NAME,
+                        Calendars.ACCOUNT_TYPE);
                 selection = appendLastSyncedColumnToSelection(selection, uri);
                 break;
             case EVENT_ENTITIES_ID:
@@ -852,13 +859,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case COLORS:
                 qb.setTables(Tables.COLORS);
                 qb.setProjectionMap(sColorsProjectionMap);
-                selection = appendAccountFromParameterToSelection(selection, uri);
+                selection = appendAccountToSelection(uri, selection, Calendars.ACCOUNT_NAME,
+                        Calendars.ACCOUNT_TYPE);
                 break;
 
             case CALENDARS:
             case CALENDAR_ENTITIES:
                 qb.setTables(Tables.CALENDARS);
-                selection = appendAccountFromParameterToSelection(selection, uri);
+                selection = appendAccountToSelection(uri, selection, Calendars.ACCOUNT_NAME,
+                        Calendars.ACCOUNT_TYPE);
                 break;
             case CALENDARS_ID:
             case CALENDAR_ENTITIES_ID:
@@ -979,6 +988,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         // run the query
         return query(db, qb, projection, selection, selectionArgs, sortOrder, groupBy, limit);
+    }
+
+    private void validateUriParameters(Set<String> queryParameterNames) {
+        final Set<String> parameterNames = queryParameterNames;
+        for (String parameterName : parameterNames) {
+            if (!ALLOWED_URI_PARAMETERS.contains(parameterName)) {
+                throw new IllegalArgumentException("Invalid URI parameter: " + parameterName);
+            }
+        }
     }
 
     private Cursor query(final SQLiteDatabase db, SQLiteQueryBuilder qb, String[] projection,
@@ -2040,6 +2058,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "insertInTransaction: " + uri);
         }
+        validateUriParameters(uri.getQueryParameterNames());
         final int match = sUriMatcher.match(uri);
         verifyTransactionAllowed(TRANSACTION_INSERT, uri, values, callerIsSyncAdapter, match,
                 null /* selection */, null /* selection args */);
@@ -2961,6 +2980,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "deleteInTransaction: " + uri);
         }
+        validateUriParameters(uri.getQueryParameterNames());
         final int match = sUriMatcher.match(uri);
         verifyTransactionAllowed(TRANSACTION_DELETE, uri, null, callerIsSyncAdapter, match,
                 selection, selectionArgs);
@@ -2979,13 +2999,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         selectionArgs);
 
             case COLORS:
-                return deleteMatchingColors(appendAccountToSelection(uri, selection),
+                return deleteMatchingColors(appendAccountToSelection(uri, selection,
+                        Calendars.ACCOUNT_NAME, Calendars.ACCOUNT_TYPE),
                         selectionArgs);
 
             case EVENTS:
             {
                 int result = 0;
-                selection = appendSyncAccountToSelection(uri, selection);
+                selection = appendAccountToSelection(
+                        uri, selection, Events.ACCOUNT_NAME, Events.ACCOUNT_TYPE);
 
                 // Query this event to get the ids to delete.
                 Cursor cursor = mDb.query(Views.EVENTS, ID_ONLY_PROJECTION,
@@ -3096,7 +3118,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 selection = selectionSb.toString();
                 // $FALL-THROUGH$ - fall through to CALENDARS for the actual delete
             case CALENDARS:
-                selection = appendAccountToSelection(uri, selection);
+                selection = appendAccountToSelection(uri, selection, Calendars.ACCOUNT_NAME,
+                        Calendars.ACCOUNT_TYPE);
                 return deleteMatchingCalendars(selection, selectionArgs);
             case INSTANCES:
             case INSTANCES_BY_DAY:
@@ -3814,6 +3837,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "updateInTransaction: " + uri);
         }
+        validateUriParameters(uri.getQueryParameterNames());
         final int match = sUriMatcher.match(uri);
         verifyTransactionAllowed(TRANSACTION_UPDATE, uri, values, callerIsSyncAdapter, match,
                 selection, selectionArgs);
@@ -3821,10 +3845,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         switch (match) {
             case SYNCSTATE:
                 return mDbHelper.getSyncState().update(mDb, values,
-                        appendAccountToSelection(uri, selection), selectionArgs);
+                        appendAccountToSelection(uri, selection, Calendars.ACCOUNT_NAME,
+                                Calendars.ACCOUNT_TYPE), selectionArgs);
 
             case SYNCSTATE_ID: {
-                selection = appendAccountToSelection(uri, selection);
+                selection = appendAccountToSelection(uri, selection, Calendars.ACCOUNT_NAME,
+                        Calendars.ACCOUNT_TYPE);
                 String selectionWithId = (SyncState._ID + "=?")
                         + (selection == null ? "" : " AND (" + selection + ")");
                 // Prepend id to selectionArgs
@@ -3839,7 +3865,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     throw new UnsupportedOperationException("You may only change the COLOR "
                             + "for an existing Colors entry.");
                 }
-                return handleUpdateColors(values, appendAccountToSelection(uri, selection),
+                return handleUpdateColors(values, appendAccountToSelection(uri, selection,
+                        Calendars.ACCOUNT_NAME, Calendars.ACCOUNT_TYPE),
                         selectionArgs);
 
             case CALENDARS:
@@ -4106,25 +4133,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         return color;
     }
 
-    private String appendAccountFromParameterToSelection(String selection, Uri uri) {
-        final String accountName = QueryParameterUtils.getQueryParameter(uri,
-                CalendarContract.EventsEntity.ACCOUNT_NAME);
-        final String accountType = QueryParameterUtils.getQueryParameter(uri,
-                CalendarContract.EventsEntity.ACCOUNT_TYPE);
-        if (!TextUtils.isEmpty(accountName)) {
-            final StringBuilder sb = new StringBuilder();
-            sb.append(Calendars.ACCOUNT_NAME + "=")
-                    .append(DatabaseUtils.sqlEscapeString(accountName))
-                    .append(" AND ")
-                    .append(Calendars.ACCOUNT_TYPE)
-                    .append(" = ")
-                    .append(DatabaseUtils.sqlEscapeString(accountType));
-            return appendSelection(sb, selection);
-        } else {
-            return selection;
-        }
-    }
-
     private String appendLastSyncedColumnToSelection(String selection, Uri uri) {
         if (getIsCallerSyncAdapter(uri)) {
             return selection;
@@ -4134,33 +4142,25 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         return appendSelection(sb, selection);
     }
 
-    private String appendAccountToSelection(Uri uri, String selection) {
+    private String appendAccountToSelection(
+            Uri uri,
+            String selection,
+            String accountNameColumn,
+            String accountTypeColumn) {
         final String accountName = QueryParameterUtils.getQueryParameter(uri,
                 CalendarContract.EventsEntity.ACCOUNT_NAME);
         final String accountType = QueryParameterUtils.getQueryParameter(uri,
                 CalendarContract.EventsEntity.ACCOUNT_TYPE);
         if (!TextUtils.isEmpty(accountName)) {
-            StringBuilder selectionSb = new StringBuilder(CalendarContract.Calendars.ACCOUNT_NAME
-                    + "=" + DatabaseUtils.sqlEscapeString(accountName) + " AND "
-                    + CalendarContract.Calendars.ACCOUNT_TYPE + "="
-                    + DatabaseUtils.sqlEscapeString(accountType));
-            return appendSelection(selectionSb, selection);
-        } else {
-            return selection;
-        }
-    }
-
-    private String appendSyncAccountToSelection(Uri uri, String selection) {
-        final String accountName = QueryParameterUtils.getQueryParameter(uri,
-                CalendarContract.EventsEntity.ACCOUNT_NAME);
-        final String accountType = QueryParameterUtils.getQueryParameter(uri,
-                CalendarContract.EventsEntity.ACCOUNT_TYPE);
-        if (!TextUtils.isEmpty(accountName)) {
-            StringBuilder selectionSb = new StringBuilder(CalendarContract.Events.ACCOUNT_NAME + "="
-                    + DatabaseUtils.sqlEscapeString(accountName) + " AND "
-                    + CalendarContract.Events.ACCOUNT_TYPE + "="
-                    + DatabaseUtils.sqlEscapeString(accountType));
-            return appendSelection(selectionSb, selection);
+            final StringBuilder sb = new StringBuilder()
+                    .append(accountNameColumn)
+                    .append("=")
+                    .append(DatabaseUtils.sqlEscapeString(accountName))
+                    .append(" AND ")
+                    .append(accountTypeColumn)
+                    .append("=")
+                    .append(DatabaseUtils.sqlEscapeString(accountType));
+            return appendSelection(sb, selection);
         } else {
             return selection;
         }

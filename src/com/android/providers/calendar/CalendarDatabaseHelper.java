@@ -64,7 +64,7 @@ import java.util.TimeZone;
     // Versions under 100 cover through Froyo, 1xx version are for Gingerbread,
     // 2xx for Honeycomb, and 3xx for ICS. For future versions bump this to the
     // next hundred at each major release.
-    static final int DATABASE_VERSION = 309;
+    static final int DATABASE_VERSION = 401;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -1352,9 +1352,15 @@ import java.util.TimeZone;
                 createEventsView = true;
             }
             if (oldVersion == 308) {
-                upgradeToVersion309(db);
+                upgradeToVersion400(db);
                 createEventsView = true;
-                oldVersion++;
+                oldVersion = 400;
+            }
+            // 309 was changed to 400 since it is the first change of the J release.
+            if (oldVersion == 309 || oldVersion == 400) {
+                upgradeToVersion401(db);
+                createEventsView = true;
+                oldVersion = 401;
             }
             if (createEventsView) {
                 createEventsView(db);
@@ -1411,11 +1417,59 @@ import java.util.TimeZone;
         return false;
     }
 
-    private void upgradeToVersion309(SQLiteDatabase db) {
+    /**********************************************************/
+    /* DO NOT USE CONSTANTS FOR UPGRADES, USE STRING LITERALS */
+    /**********************************************************/
+
+    /**********************************************************/
+    /* 5xx db version is for K release
+    /**********************************************************/
+
+    /**********************************************************/
+    /* 4xx db version is for J release
+    /**********************************************************/
+
+    /*
+     * Changes from version 309 to 401:
+     * Fix repeating events' exceptions with the wrong original_id
+     */
+    private void upgradeToVersion401(SQLiteDatabase db) {
+        db.execSQL("UPDATE events SET original_id=(SELECT _id FROM events inner_events WHERE " +
+                "inner_events._sync_id=events.original_sync_id AND " +
+                "inner_events.calendar_id=events.calendar_id) WHERE NOT original_id IS NULL AND " +
+                "(SELECT calendar_id FROM events ex_events WHERE " +
+                "ex_events._id=events.original_id) <> calendar_id ");
+    }
+
+    private void upgradeToVersion400(SQLiteDatabase db) {
         db.execSQL("DROP TRIGGER IF EXISTS calendar_color_update");
-        db.execSQL(CREATE_CALENDAR_COLOR_UPDATE_TRIGGER);
+        // CREATE_CALENDAR_COLOR_UPDATE_TRIGGER was inlined
+        db.execSQL("CREATE TRIGGER "
+                + "calendar_color_update" + " UPDATE OF " + Calendars.CALENDAR_COLOR_KEY
+                + " ON " + Tables.CALENDARS + " WHEN new." + Calendars.CALENDAR_COLOR_KEY
+                + " NOT NULL BEGIN " + "UPDATE " + Tables.CALENDARS
+                + " SET calendar_color=(SELECT " + Colors.COLOR + " FROM " + Tables.COLORS
+                + " WHERE " + Colors.ACCOUNT_NAME + "=" + "new." + Calendars.ACCOUNT_NAME + " AND "
+                + Colors.ACCOUNT_TYPE + "=" + "new." + Calendars.ACCOUNT_TYPE + " AND "
+                + Colors.COLOR_KEY + "=" + "new." + Calendars.CALENDAR_COLOR_KEY + " AND "
+                + Colors.COLOR_TYPE + "=" + Colors.TYPE_CALENDAR + ") "
+                + " WHERE " + Calendars._ID + "=" + "old." + Calendars._ID
+                + ";" + " END");
         db.execSQL("DROP TRIGGER IF EXISTS event_color_update");
-        db.execSQL(CREATE_EVENT_COLOR_UPDATE_TRIGGER);
+        // CREATE_EVENT_COLOR_UPDATE_TRIGGER was inlined
+        db.execSQL("CREATE TRIGGER "
+                + "event_color_update" + " UPDATE OF " + Events.EVENT_COLOR_KEY + " ON "
+                + Tables.EVENTS + " WHEN new." + Events.EVENT_COLOR_KEY + " NOT NULL BEGIN "
+                + "UPDATE " + Tables.EVENTS
+                + " SET eventColor=(SELECT " + Colors.COLOR + " FROM " + Tables.COLORS + " WHERE "
+                + Colors.ACCOUNT_NAME + "=" + "(SELECT " + Calendars.ACCOUNT_NAME + " FROM "
+                + Tables.CALENDARS + " WHERE " + Calendars._ID + "=new." + Events.CALENDAR_ID
+                + ") AND " + Colors.ACCOUNT_TYPE + "=" + "(SELECT " + Calendars.ACCOUNT_TYPE
+                + " FROM " + Tables.CALENDARS + " WHERE " + Calendars._ID + "=new."
+                + Events.CALENDAR_ID + ") AND " + Colors.COLOR_KEY + "=" + "new."
+                + Events.EVENT_COLOR_KEY + " AND " + Colors.COLOR_TYPE + "="
+                + Colors.TYPE_EVENT + ") "
+                + " WHERE " + Events._ID + "=" + "old." + Events._ID + ";" + " END");
     }
 
     @VisibleForTesting

@@ -20,7 +20,7 @@
     <string name="upgrade_msg" msgid="2792831029435070926">"Meningkatkan versi basis data Kalender."</string>
     <string name="calendar_default_name" msgid="6924293766625167275">"Default"</string>
     <string name="calendar_info" msgid="6687678621418059281">"Info kalender"</string>
-    <string name="calendar_info_error" msgid="5575162446528419982">"Galat"</string>
+    <string name="calendar_info_error" msgid="5575162446528419982">"Kesalahan"</string>
     <string name="calendar_info_no_calendars" msgid="4287534468186704433">"Tak ada kalender"</string>
     <string name="calendar_info_events" msgid="1805502308105103803">"Acara: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
     <string name="calendar_info_events_dirty" msgid="8879392112564499515">"Acara: <xliff:g id="EVENTS_0">%1$d</xliff:g>, Tak disimpan: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>

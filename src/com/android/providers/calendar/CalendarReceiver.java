@@ -16,13 +16,14 @@
 
 package com.android.providers.calendar;
 
-import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
-import android.os.IBinder;
 import android.util.Log;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * This IntentReceiver executes when the boot completes and ensures that
@@ -33,19 +34,27 @@ import android.util.Log;
  */
 public class CalendarReceiver extends BroadcastReceiver {
     private static final String TAG = "CalendarReceiver";
-
     static final String SCHEDULE = "com.android.providers.calendar.SCHEDULE_ALARM";
+
+    private final ExecutorService executor = Executors.newCachedThreadPool();
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        String action = intent.getAction();
-        ContentResolver cr = context.getContentResolver();
-        if (action.equals(SCHEDULE)) {
-            cr.update(CalendarAlarmManager.SCHEDULE_ALARM_URI, null /* values */, null /* where */,
-                    null /* selectionArgs */);
-        } else if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
-            removeScheduledAlarms(context, cr);
-        }
+        final String action = intent.getAction();
+        final ContentResolver cr = context.getContentResolver();
+        final PendingResult result = goAsync();
+        executor.submit(new Runnable() {
+            @Override
+            public void run() {
+                if (action.equals(SCHEDULE)) {
+                    cr.update(CalendarAlarmManager.SCHEDULE_ALARM_URI, null /* values */,
+                          null /* where */, null /* selectionArgs */);
+                } else if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
+                    removeScheduledAlarms(cr);
+                }
+                result.finish();
+            }
+        });
     }
 
     /*
@@ -56,50 +65,14 @@ public class CalendarReceiver extends BroadcastReceiver {
      * that persists across reboots. See the documentation for
      * scheduleNextAlarmLocked() for more information.
      *
-     * Running this on the main thread has caused ANRs, so we run it on a background
-     * thread and start an "empty service" to encourage the system to keep us alive.
-     *
      * We don't expect this to be called more than once.  If it were, we would have to
      * worry about serializing the use of the service.
      */
-    private void removeScheduledAlarms(Context context, ContentResolver resolver) {
-        context.startService(new Intent(context, RemoveScheduledAlarmsEmptyService.class));
-
-        RemoveScheduledAlarmsThread thread = new RemoveScheduledAlarmsThread(context, resolver);
-        thread.start();
-    }
-
-    /**
-     * Background thread that handles cleanup of scheduled alarms.
-     */
-    private static class RemoveScheduledAlarmsThread extends Thread {
-        private Context mContext;
-        private ContentResolver mResolver;
-
-        RemoveScheduledAlarmsThread(Context context, ContentResolver resolver) {
-            mContext = context;
-            mResolver = resolver;
+    private void removeScheduledAlarms(ContentResolver resolver) {
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "Removing scheduled alarms");
         }
-
-        @Override
-        public void run() {
-            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                Log.d(TAG, "Removing scheduled alarms");
-            }
-            mResolver.update(CalendarAlarmManager.SCHEDULE_ALARM_REMOVE_URI, null /* values */,
-                    null /* where */, null /* selectionArgs */);
-            mContext.stopService(new Intent(mContext, RemoveScheduledAlarmsEmptyService.class));
-        }
-    }
-
-    /**
-     * Background {@link Service} that is used to keep our process alive long enough
-     * for background threads to finish.  Used for cleanup of scheduled alarms.
-     */
-    public static class RemoveScheduledAlarmsEmptyService extends Service {
-        @Override
-        public IBinder onBind(Intent intent) {
-            return null;
-        }
+        resolver.update(CalendarAlarmManager.SCHEDULE_ALARM_REMOVE_URI, null /* values */,
+                null /* where */, null /* selectionArgs */);
     }
 }

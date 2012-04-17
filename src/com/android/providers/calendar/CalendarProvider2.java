@@ -4763,6 +4763,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sAttendeesProjectionMap.put(Attendees.ATTENDEE_STATUS, "attendeeStatus");
         sAttendeesProjectionMap.put(Attendees.ATTENDEE_RELATIONSHIP, "attendeeRelationship");
         sAttendeesProjectionMap.put(Attendees.ATTENDEE_TYPE, "attendeeType");
+        sAttendeesProjectionMap.put(Attendees.ATTENDEE_IDENTITY, "attendeeIdentity");
+        sAttendeesProjectionMap.put(Attendees.ATTENDEE_ID_NAMESPACE, "attendeeIdNamespace");
         sAttendeesProjectionMap.put(Events.DELETED, "Events.deleted AS deleted");
         sAttendeesProjectionMap.put(Events._SYNC_ID, "Events._sync_id AS _sync_id");
 

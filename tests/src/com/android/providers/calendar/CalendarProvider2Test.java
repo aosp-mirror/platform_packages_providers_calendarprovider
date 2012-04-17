@@ -51,6 +51,7 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.TimeZone;
 
 /**
@@ -1867,12 +1868,16 @@ public class CalendarProvider2Test extends AndroidTestCase {
         attendee.put(CalendarContract.Attendees.ATTENDEE_RELATIONSHIP,
                 CalendarContract.Attendees.RELATIONSHIP_ORGANIZER);
         attendee.put(CalendarContract.Attendees.EVENT_ID, eventId);
+        attendee.put(CalendarContract.Attendees.ATTENDEE_IDENTITY, "ID1");
+        attendee.put(CalendarContract.Attendees.ATTENDEE_ID_NAMESPACE, "IDNS1");
         Uri attendeesUri = mResolver.insert(CalendarContract.Attendees.CONTENT_URI, attendee);
 
         Cursor cursor = mResolver.query(CalendarContract.Attendees.CONTENT_URI, null,
                 "event_id=" + eventId, null, null);
         assertEquals("Created event is missing - cannot find EventUri = " + eventUri, 1,
                 cursor.getCount());
+        Set<String> attendeeColumns = attendee.keySet();
+        verifyContentValueAgainstCursor(attendee, attendeeColumns, cursor);
         cursor.close();
 
         cursor = mResolver.query(eventUri, null, null, null, null);
@@ -1885,11 +1890,23 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertEquals(CalendarContract.Attendees.ATTENDEE_STATUS_ACCEPTED, selfAttendeeStatus);
         cursor.close();
 
-        // Change status to declined
+        // Update status to declined and change identity
+        ContentValues attendeeUpdate = new ContentValues();
+        attendeeUpdate.put(CalendarContract.Attendees.ATTENDEE_IDENTITY, "ID2");
+        attendee.put(CalendarContract.Attendees.ATTENDEE_IDENTITY, "ID2");
+        attendeeUpdate.put(CalendarContract.Attendees.ATTENDEE_STATUS,
+                CalendarContract.Attendees.ATTENDEE_STATUS_DECLINED);
         attendee.put(CalendarContract.Attendees.ATTENDEE_STATUS,
                 CalendarContract.Attendees.ATTENDEE_STATUS_DECLINED);
-        mResolver.update(attendeesUri, attendee, null, null);
+        mResolver.update(attendeesUri, attendeeUpdate, null, null);
 
+        // Check in attendees table
+        cursor = mResolver.query(attendeesUri, null, null, null, null);
+        cursor.moveToNext();
+        verifyContentValueAgainstCursor(attendee, attendeeColumns, cursor);
+        cursor.close();
+
+        // Test that the self status in events table is updated
         cursor = mResolver.query(eventUri, null, null, null, null);
         cursor.moveToNext();
         selfAttendeeStatus = cursor.getInt(selfColumn);
@@ -1912,6 +1929,16 @@ public class CalendarProvider2Test extends AndroidTestCase {
         cursor.moveToNext();
         selfAttendeeStatus = cursor.getInt(selfColumn);
         assertEquals(CalendarContract.Attendees.ATTENDEE_STATUS_DECLINED, selfAttendeeStatus);
+        cursor.close();
+    }
+
+    private void verifyContentValueAgainstCursor(ContentValues cv,
+            Set<String> keys, Cursor cursor) {
+        cursor.moveToFirst();
+        for (String key : keys) {
+            assertEquals(cv.get(key).toString(),
+                    cursor.getString(cursor.getColumnIndex(key)));
+        }
         cursor.close();
     }
 

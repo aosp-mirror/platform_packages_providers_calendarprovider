@@ -464,9 +464,21 @@ public class CalendarDatabaseHelperTest extends TestCase {
                 "tbl_name,sql" /* orderBy */);
 
         while (goodCursor.moveToNext()) {
-            assertTrue("Should have same number of tables", badCursor.moveToNext());
+            String goodTableName = goodCursor.getString(0);
+            // Ignore tables that do not belong to calendar
+            if (goodTableName.startsWith("sqlite_") || goodTableName.equals("android_metadata")) {
+                continue;
+            }
+
+            // Ignore tables that do not belong to calendar
+            String badTableName;
+            do {
+                assertTrue("Should have same number of tables", badCursor.moveToNext());
+                badTableName = badCursor.getString(0);
+            } while (badTableName.startsWith("sqlite_") || badTableName.equals("android_metadata"));
+
             assertEquals("Table names different between upgraded schema and freshly-created scheme",
-                    goodCursor.getString(0), badCursor.getString(0));
+                    goodTableName, badTableName);
 
             String badString = badCursor.getString(1);
             String goodString = goodCursor.getString(1);

@@ -70,7 +70,7 @@ import java.util.TimeZone;
     // 4xx for JB
     // 5xx for K
     // Bump this to the next hundred at each major release.
-    static final int DATABASE_VERSION = 401;
+    static final int DATABASE_VERSION = 402;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -121,7 +121,9 @@ import java.util.TimeZone;
             Attendees.ATTENDEE_EMAIL + "," +
             Attendees.ATTENDEE_STATUS + "," +
             Attendees.ATTENDEE_RELATIONSHIP + "," +
-            Attendees.ATTENDEE_TYPE;
+            Attendees.ATTENDEE_TYPE + "," +
+            Attendees.ATTENDEE_IDENTITY + "," +
+            Attendees.ATTENDEE_ID_NAMESPACE;
 
     // columns used to duplicate an extended property row
     private static final String LAST_SYNCED_EXTENDED_PROPERTY_COLUMNS =
@@ -426,7 +428,9 @@ import java.util.TimeZone;
                 CalendarContract.Attendees.ATTENDEE_EMAIL + " TEXT," +
                 CalendarContract.Attendees.ATTENDEE_STATUS + " INTEGER," +
                 CalendarContract.Attendees.ATTENDEE_RELATIONSHIP + " INTEGER," +
-                CalendarContract.Attendees.ATTENDEE_TYPE + " INTEGER" +
+                CalendarContract.Attendees.ATTENDEE_TYPE + " INTEGER," +
+                CalendarContract.Attendees.ATTENDEE_IDENTITY + " TEXT," +
+                CalendarContract.Attendees.ATTENDEE_ID_NAMESPACE + " TEXT" +
                 ");");
 
         db.execSQL("CREATE INDEX attendeesEventIdIndex ON " + Tables.ATTENDEES + " (" +
@@ -1368,6 +1372,11 @@ import java.util.TimeZone;
                 createEventsView = true;
                 oldVersion = 401;
             }
+            if (oldVersion == 401) {
+                upgradeToVersion402(db);
+                createEventsView = true;
+                oldVersion = 402;
+            }
             if (createEventsView) {
                 createEventsView(db);
             }
@@ -1442,6 +1451,16 @@ import java.util.TimeZone;
     /**********************************************************/
     /* 4xx db version is for J release
     /**********************************************************/
+
+    @VisibleForTesting
+    void upgradeToVersion402(SQLiteDatabase db) {
+        /*
+         * Changes from version 401 to 402:
+         * - add identity and namespace to Attendees table
+         */
+        db.execSQL("ALTER TABLE Attendees ADD COLUMN attendeeIdentity TEXT;");
+        db.execSQL("ALTER TABLE Attendees ADD COLUMN attendeeIdNamespace TEXT;");
+    }
 
     /*
      * Changes from version 309 to 401:

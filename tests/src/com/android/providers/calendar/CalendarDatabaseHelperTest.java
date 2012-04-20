@@ -425,6 +425,7 @@ public class CalendarDatabaseHelperTest extends TestCase {
         addVersion50Events();
         // Run the upgrade on the bad events
         CalendarDatabaseHelper cDbHelper = new CalendarDatabaseHelper(new MockContext());
+        cDbHelper.mInTestMode = true;
         cDbHelper.onUpgrade(mBadDb, 50, CalendarDatabaseHelper.DATABASE_VERSION);
         Cursor badCursor = null;
         Cursor goodCursor = null;
@@ -454,6 +455,7 @@ public class CalendarDatabaseHelperTest extends TestCase {
     public void testSchemasEqualForAllTables() {
 
         CalendarDatabaseHelper cDbHelper = new CalendarDatabaseHelper(new MockContext());
+        cDbHelper.mInTestMode = true;
         bootstrapDbVersion50(mBadDb);
         cDbHelper.onCreate(mGoodDb);
         cDbHelper.onUpgrade(mBadDb, 50, CalendarDatabaseHelper.DATABASE_VERSION);

@@ -56,6 +56,9 @@ import java.util.TimeZone;
 
     private static final boolean LOGD = false;
 
+    @VisibleForTesting
+    public boolean mInTestMode = false;
+
     private static final String DATABASE_NAME = "calendar.db";
 
     private static final int DAY_IN_SECONDS = 24 * 60 * 60;
@@ -70,7 +73,7 @@ import java.util.TimeZone;
     // 4xx for JB
     // 5xx for K
     // Bump this to the next hundred at each major release.
-    static final int DATABASE_VERSION = 402;
+    static final int DATABASE_VERSION = 403;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -108,7 +111,9 @@ import java.util.TimeZone;
             Events.GUESTS_CAN_MODIFY + "," +
             Events.GUESTS_CAN_INVITE_OTHERS + "," +
             Events.GUESTS_CAN_SEE_GUESTS + "," +
-            Events.ORGANIZER;
+            Events.ORGANIZER + "," +
+            Events.CUSTOM_APP_PACKAGE + "," +
+            Events.CUSTOM_APP_URI;
 
     // columns used to duplicate a reminder row
     private static final String LAST_SYNCED_REMINDER_COLUMNS =
@@ -556,6 +561,8 @@ import java.util.TimeZone;
                 CalendarContract.Events.DELETED + " INTEGER NOT NULL DEFAULT 0," +
                 // timezone for event with allDay events are in local timezone
                 CalendarContract.Events.EVENT_END_TIMEZONE + " TEXT," +
+                CalendarContract.Events.CUSTOM_APP_PACKAGE + " TEXT," +
+                CalendarContract.Events.CUSTOM_APP_URI + " TEXT," +
                 // SYNC_DATAX columns are available for use by sync adapters
                 CalendarContract.Events.SYNC_DATA1 + " TEXT," +
                 CalendarContract.Events.SYNC_DATA2 + " TEXT," +
@@ -1377,6 +1384,12 @@ import java.util.TimeZone;
                 createEventsView = true;
                 oldVersion = 402;
             }
+            if (oldVersion == 402) {
+                upgradeToVersion403(db);
+                createEventsView = true; // This is needed if the calendars or events schema changed
+                oldVersion = 403;
+            }
+
             if (createEventsView) {
                 createEventsView(db);
             }
@@ -1390,6 +1403,10 @@ import java.util.TimeZone;
                 removeOrphans(db);
             }
         } catch (SQLiteException e) {
+            if (mInTestMode) {
+                // We do want to crash if we are in test mode.
+                throw e;
+            }
             Log.e(TAG, "onUpgrade: SQLiteException, recreating db. ", e);
             Log.e(TAG, "(oldVersion was " + oldVersion + ")");
             dropTables(db);
@@ -1452,8 +1469,16 @@ import java.util.TimeZone;
     /* 4xx db version is for J release
     /**********************************************************/
 
-    @VisibleForTesting
-    void upgradeToVersion402(SQLiteDatabase db) {
+    private void upgradeToVersion403(SQLiteDatabase db) {
+        /*
+         * Changes from version 402 to 403:
+         * - add custom app package name and uri Events table
+         */
+        db.execSQL("ALTER TABLE Events ADD COLUMN customAppPackage TEXT;");
+        db.execSQL("ALTER TABLE Events ADD COLUMN customAppUri TEXT;");
+    }
+
+    private void upgradeToVersion402(SQLiteDatabase db) {
         /*
          * Changes from version 401 to 402:
          * - add identity and namespace to Attendees table
@@ -1505,8 +1530,7 @@ import java.util.TimeZone;
                 + " WHERE " + Events._ID + "=" + "old." + Events._ID + ";" + " END");
     }
 
-    @VisibleForTesting
-    void upgradeToVersion308(SQLiteDatabase db) {
+    private void upgradeToVersion308(SQLiteDatabase db) {
         /*
          * Changes from version 307 to 308:
          * - add Colors table to db
@@ -1532,8 +1556,7 @@ import java.util.TimeZone;
         createColorsTriggers(db);
     }
 
-    @VisibleForTesting
-    void upgradeToVersion307(SQLiteDatabase db) {
+    private void upgradeToVersion307(SQLiteDatabase db) {
         /*
          * Changes from version 306 to 307:
          * - Changed _id field to AUTOINCREMENT
@@ -1607,8 +1630,7 @@ import java.util.TimeZone;
         db.execSQL(CREATE_SYNC_ID_UPDATE_TRIGGER);
     }
 
-    @VisibleForTesting
-    void upgradeToVersion306(SQLiteDatabase db) {
+    private void upgradeToVersion306(SQLiteDatabase db) {
         /*
         * The following changes are for google.com accounts only.
         *
@@ -1634,8 +1656,7 @@ import java.util.TimeZone;
         db.execSQL("DELETE FROM _sync_state WHERE account_type = 'com.google'");
     }
 
-    @VisibleForTesting
-    void upgradeToVersion305(SQLiteDatabase db) {
+    private void upgradeToVersion305(SQLiteDatabase db) {
         /*
          * Changes from version 304 to 305:
          * -Add CAL_SYNC columns up to 10
@@ -1840,8 +1861,7 @@ import java.util.TimeZone;
         db.execSQL(CREATE_SYNC_ID_UPDATE_TRIGGER);
     }
 
-    @VisibleForTesting
-    void upgradeToVersion304(SQLiteDatabase db) {
+    private void upgradeToVersion304(SQLiteDatabase db) {
         /*
          * Changes from version 303 to 304:
          * - add canPartiallyUpdate to Calendars table
@@ -1853,8 +1873,7 @@ import java.util.TimeZone;
         db.execSQL("ALTER TABLE Events ADD COLUMN lastSynced INTEGER DEFAULT 0;");
     }
 
-    @VisibleForTesting
-    void upgradeToVersion303(SQLiteDatabase db) {
+    private void upgradeToVersion303(SQLiteDatabase db) {
         /*
          * Changes from version 302 to 303:
          * - change SYNCx columns to CAL_SYNCx
@@ -1929,8 +1948,7 @@ import java.util.TimeZone;
         db.execSQL("DROP TABLE Calendars_Backup;");
     }
 
-    @VisibleForTesting
-    void upgradeToVersion302(SQLiteDatabase db) {
+    private void upgradeToVersion302(SQLiteDatabase db) {
         /*
          * Changes from version 301 to 302
          * - Move Exchange eventEndTimezone values to SYNC_DATA1
@@ -1942,8 +1960,7 @@ import java.util.TimeZone;
                 + "(SELECT _id FROM Calendars WHERE account_type='com.android.exchange');");
     }
 
-    @VisibleForTesting
-    void upgradeToVersion301(SQLiteDatabase db) {
+    private void upgradeToVersion301(SQLiteDatabase db) {
         /*
          * Changes from version 300 to 301
          * - Added original_id column to Events table
@@ -1964,8 +1981,7 @@ import java.util.TimeZone;
         db.execSQL(CREATE_SYNC_ID_UPDATE_TRIGGER);
     }
 
-    @VisibleForTesting
-    void upgradeToVersion300(SQLiteDatabase db) {
+    private void upgradeToVersion300(SQLiteDatabase db) {
 
         /*
          * Changes from version 205 to 300:
@@ -2163,8 +2179,7 @@ import java.util.TimeZone;
 
     }
 
-    @VisibleForTesting
-    void upgradeToVersion205(SQLiteDatabase db) {
+    private void upgradeToVersion205(SQLiteDatabase db) {
         /*
          * Changes from version 204 to 205:
          * - rename+reorder "_sync_mark" to "sync6" (and change type from INTEGER to TEXT)
@@ -2246,8 +2261,7 @@ import java.util.TimeZone;
         db.execSQL("DROP TABLE Calendars_Backup;");
     }
 
-    @VisibleForTesting
-    void upgradeToVersion203(SQLiteDatabase db) {
+    private void upgradeToVersion203(SQLiteDatabase db) {
         // Same as Gingerbread version 100
         Cursor cursor = db.rawQuery("SELECT value FROM CalendarCache WHERE key=?",
                 new String[] {"timezoneDatabaseVersion"});
@@ -2268,8 +2282,7 @@ import java.util.TimeZone;
         updateCalendarCacheTableTo203(db);
     }
 
-    @VisibleForTesting
-    void upgradeToVersion202(SQLiteDatabase db) {
+    private void upgradeToVersion202(SQLiteDatabase db) {
         // We will drop the "hidden" column from the calendar schema and add the "sync5" column
         db.execSQL("ALTER TABLE Calendars RENAME TO Calendars_Backup;");
 
@@ -2337,13 +2350,11 @@ import java.util.TimeZone;
         db.execSQL("DROP TABLE Calendars_Backup;");
     }
 
-    @VisibleForTesting
-    void upgradeToVersion201(SQLiteDatabase db) {
+    private void upgradeToVersion201(SQLiteDatabase db) {
         db.execSQL("ALTER TABLE Calendars ADD COLUMN sync4 TEXT;");
     }
 
-    @VisibleForTesting
-    void upgradeToVersion200(SQLiteDatabase db) {
+    private void upgradeToVersion200(SQLiteDatabase db) {
         // we cannot use here a Calendar.Calendars,URL constant for "url" as we are trying to make
         // it disappear so we are keeping the hardcoded name "url" in all the SQLs
         db.execSQL("ALTER TABLE Calendars RENAME TO Calendars_Backup;");
@@ -2438,7 +2449,7 @@ import java.util.TimeZone;
     }
 
     @VisibleForTesting
-    static void upgradeToVersion69(SQLiteDatabase db) {
+    public static void upgradeToVersion69(SQLiteDatabase db) {
         // Clean up allDay events which could be in an invalid state from an earlier version
         // Some allDay events had hour, min, sec not set to zero, which throws elsewhere. This
         // will go through the allDay events and make sure they have proper values and are in the
@@ -3121,6 +3132,8 @@ import java.util.TimeZone;
                 + CalendarContract.Events.GUESTS_CAN_MODIFY + ","
                 + CalendarContract.Events.GUESTS_CAN_SEE_GUESTS + ","
                 + CalendarContract.Events.ORGANIZER + ","
+                + CalendarContract.Events.CUSTOM_APP_PACKAGE + ","
+                + CalendarContract.Events.CUSTOM_APP_URI + ","
                 + CalendarContract.Events.SYNC_DATA1 + ","
                 + CalendarContract.Events.SYNC_DATA2 + ","
                 + CalendarContract.Events.SYNC_DATA3 + ","
@@ -3217,7 +3230,6 @@ import java.util.TimeZone;
      *      http://www.google.com/calendar/feeds/default/allcalendars/full/joe%40joe.com
      *      http://www.google.com/calendar/feeds/default/allcalendars/full/joe%40joe.com
      */
-    @VisibleForTesting
     private static String getAllCalendarsUrlFromEventsUrl(String url) {
         if (url == null) {
             if (Log.isLoggable(TAG, Log.DEBUG)) {

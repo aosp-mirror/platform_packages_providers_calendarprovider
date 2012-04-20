@@ -498,6 +498,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
         String mOriginalTitle;
         long mOriginalInstance;
         int mSyncId;
+        String mCustomAppPackage;
+        String mCustomAppUri;
 
         // Constructor for normal events, using the default timezone
         public EventInfo(String title, String startDate, String endDate,
@@ -528,6 +530,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
             mDuration = null;
             mRrule = null;
             mAllDay = allDay;
+            mCustomAppPackage = "CustomAppPackage-" + mTitle;
+            mCustomAppUri = "CustomAppUri-" + mTitle;
         }
 
         // Constructor for repeating events, using the default timezone
@@ -575,18 +579,23 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
         // Constructor for recurrence exceptions, using the default timezone
         public EventInfo(String originalTitle, String originalInstance, String title,
-                String description, String startDate, String endDate, boolean allDay) {
+                String description, String startDate, String endDate, boolean allDay,
+                String customPackageName, String customPackageUri) {
             init(originalTitle, originalInstance,
-                    title, description, startDate, endDate, allDay, DEFAULT_TIMEZONE);
+                    title, description, startDate, endDate, allDay, DEFAULT_TIMEZONE,
+                    customPackageName, customPackageUri);
         }
 
         public void init(String originalTitle, String originalInstance,
                 String title, String description, String startDate, String endDate,
-                boolean allDay, String timezone) {
+                boolean allDay, String timezone, String customPackageName,
+                String customPackageUri) {
             mOriginalTitle = originalTitle;
             Time time = new Time(timezone);
             time.parse3339(originalInstance);
             mOriginalInstance = time.toMillis(false /* use isDst */);
+            mCustomAppPackage = customPackageName;
+            mCustomAppUri = customPackageUri;
             init(title, description, startDate, endDate, null /* rrule */, allDay, timezone);
         }
     }
@@ -660,19 +669,19 @@ public class CalendarProvider2Test extends AndroidTestCase {
                     "FREQ=MONTHLY;WKST=SU;BYMONTHDAY=31", false),
             new EventInfo("daily0", "2008-05-01T00:00:00",
                     "except0", "daily0 exception for 5/1/2008 12am, change to 5/1/2008 2am to 3am",
-                    "2008-05-01T02:00:00", "2008-05-01T01:03:00", false),
+                    "2008-05-01T02:00:00", "2008-05-01T01:03:00", false, "AppPkg1", "AppUri1"),
             new EventInfo("daily0", "2008-05-03T00:00:00",
                     "except1", "daily0 exception for 5/3/2008 12am, change to 5/3/2008 2am to 3am",
-                    "2008-05-03T02:00:00", "2008-05-03T01:03:00", false),
+                    "2008-05-03T02:00:00", "2008-05-03T01:03:00", false, "AppPkg2", "AppUri2"),
             new EventInfo("daily0", "2008-05-02T00:00:00",
                     "except2", "daily0 exception for 5/2/2008 12am, change to 1/2/2008",
-                    "2008-01-02T00:00:00", "2008-01-02T01:00:00", false),
+                    "2008-01-02T00:00:00", "2008-01-02T01:00:00", false, "AppPkg3", "AppUri3"),
             new EventInfo("weekly0", "2008-05-13T13:00:00",
                     "except3", "daily0 exception for 5/11/2008 1pm, change to 12/11/2008 1pm",
-                    "2008-12-11T13:00:00", "2008-12-11T14:00:00", false),
+                    "2008-12-11T13:00:00", "2008-12-11T14:00:00", false, "AppPkg4", "AppUri4"),
             new EventInfo("weekly0", "2008-05-13T13:00:00",
                     "cancel0", "weekly0 exception for 5/13/2008 1pm",
-                    "2008-05-13T13:00:00", "2008-05-13T14:00:00", false),
+                    "2008-05-13T13:00:00", "2008-05-13T14:00:00", false, "AppPkg5", "AppUri5"),
             new EventInfo("yearly0", "yearly on 5/1/2008 from 1pm to 2pm",
                     "2008-05-01T13:00:00", "2008-05-01T14:00:00",
                     "FREQ=YEARLY;WKST=SU", false),
@@ -1094,10 +1103,33 @@ public class CalendarProvider2Test extends AndroidTestCase {
     }
 
     private Uri insertEvent(int calId, EventInfo event) {
+        return insertEvent(calId, event, null);
+    }
+
+    private Uri insertEvent(int calId, EventInfo event, ContentValues cv) {
         if (mWipe) {
             // Wipe instance table so it will be regenerated
             mMetaData.clearInstanceRange();
         }
+
+        if (cv == null) {
+            cv = eventInfoToContentValues(calId, event);
+        }
+
+        Uri url = mResolver.insert(mEventsUri, cv);
+
+        // Create a fake _sync_id and add it to the event.  Update the database
+        // directly so that we don't trigger any validation checks in the
+        // CalendarProvider.
+        long id = ContentUris.parseId(url);
+        mDb.execSQL("UPDATE Events SET _sync_id=" + mGlobalSyncId + " WHERE _id=" + id);
+        event.mSyncId = mGlobalSyncId;
+        mGlobalSyncId += 1;
+
+        return url;
+    }
+
+    private ContentValues eventInfoToContentValues(int calId, EventInfo event) {
         ContentValues m = new ContentValues();
         m.put(Events.CALENDAR_ID, calId);
         m.put(Events.TITLE, event.mTitle);
@@ -1122,6 +1154,12 @@ public class CalendarProvider2Test extends AndroidTestCase {
         if (event.mTimezone != null) {
             m.put(Events.EVENT_TIMEZONE, event.mTimezone);
         }
+        if (event.mCustomAppPackage != null) {
+            m.put(Events.CUSTOM_APP_PACKAGE, event.mCustomAppPackage);
+        }
+        if (event.mCustomAppUri != null) {
+            m.put(Events.CUSTOM_APP_URI, event.mCustomAppUri);
+        }
 
         if (event.mOriginalTitle != null) {
             // This is a recurrence exception.
@@ -1132,17 +1170,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             m.put(Events.ORIGINAL_ALL_DAY, recur.mAllDay ? 1 : 0);
             m.put(Events.ORIGINAL_INSTANCE_TIME, event.mOriginalInstance);
         }
-        Uri url = mResolver.insert(mEventsUri, m);
-
-        // Create a fake _sync_id and add it to the event.  Update the database
-        // directly so that we don't trigger any validation checks in the
-        // CalendarProvider.
-        long id = ContentUris.parseId(url);
-        mDb.execSQL("UPDATE Events SET _sync_id=" + mGlobalSyncId + " WHERE _id=" + id);
-        event.mSyncId = mGlobalSyncId;
-        mGlobalSyncId += 1;
-
-        return url;
+        return m;
     }
 
     /**
@@ -1309,30 +1337,28 @@ public class CalendarProvider2Test extends AndroidTestCase {
     }
 
     public void testInsertNormalEvents() throws Exception {
-        Cursor cursor;
-        Uri url = null;
-
-        int calId = insertCal("Calendar0", DEFAULT_TIMEZONE);
-
-        cursor = mResolver.query(mEventsUri, null, null, null, null);
+        final int calId = insertCal("Calendar0", DEFAULT_TIMEZONE);
+        Cursor cursor = mResolver.query(mEventsUri, null, null, null, null);
         assertEquals(0, cursor.getCount());
         cursor.close();
 
         // Keep track of the number of normal events
-        int numEvents = 0;
+        int numOfInserts = 0;
 
         // "begin" is the earliest start time of all the normal events,
         // and "end" is the latest end time of all the normal events.
         long begin = 0, end = 0;
 
         int len = mEvents.length;
+        Uri[] uris = new Uri[len];
+        ContentValues[] cvs = new ContentValues[len];
         for (int ii = 0; ii < len; ii++) {
             EventInfo event = mEvents[ii];
             // Skip repeating events and recurrence exceptions
             if (event.mRrule != null || event.mOriginalTitle != null) {
                 continue;
             }
-            if (numEvents == 0) {
+            if (numOfInserts == 0) {
                 begin = event.mDtstart;
                 end = event.mDtend;
             } else {
@@ -1343,24 +1369,31 @@ public class CalendarProvider2Test extends AndroidTestCase {
                     end = event.mDtend;
                 }
             }
-            url = insertEvent(calId, event);
-            numEvents += 1;
+
+            cvs[ii] = eventInfoToContentValues(calId, event);
+            uris[ii] = insertEvent(calId, event, cvs[ii]);
+            numOfInserts += 1;
         }
 
-        // query one
-        cursor = mResolver.query(url, null, null, null, null);
-        assertEquals(1, cursor.getCount());
-        cursor.close();
+        // Verify
+        for (int i = 0; i < len; i++) {
+            if (cvs[i] == null) continue;
+            assertNotNull(uris[i]);
+            cursor = mResolver.query(uris[i], null, null, null, null);
+            assertEquals("Item " + i + " not found", 1, cursor.getCount());
+            verifyContentValueAgainstCursor(cvs[i], cvs[i].keySet(), cursor);
+            cursor.close();
+        }
 
         // query all
         cursor = mResolver.query(mEventsUri, null, null, null, null);
-        assertEquals(numEvents, cursor.getCount());
+        assertEquals(numOfInserts, cursor.getCount());
         cursor.close();
 
         // Check that the Instances table has one instance of each of the
         // normal events.
         cursor = queryInstances(begin, end);
-        assertEquals(numEvents, cursor.getCount());
+        assertEquals(numOfInserts, cursor.getCount());
         cursor.close();
     }
 
@@ -1375,27 +1408,35 @@ public class CalendarProvider2Test extends AndroidTestCase {
         cursor.close();
 
         // Keep track of the number of repeating events
-        int numEvents = 0;
+        int numOfInserts = 0;
 
         int len = mEvents.length;
+        Uri[] uris = new Uri[len];
+        ContentValues[] cvs = new ContentValues[len];
         for (int ii = 0; ii < len; ii++) {
             EventInfo event = mEvents[ii];
             // Skip normal events
             if (event.mRrule == null) {
                 continue;
             }
-            url = insertEvent(calId, event);
-            numEvents += 1;
+            cvs[ii] = eventInfoToContentValues(calId, event);
+            uris[ii] = insertEvent(calId, event, cvs[ii]);
+            numOfInserts += 1;
         }
 
-        // query one
-        cursor = mResolver.query(url, null, null, null, null);
-        assertEquals(1, cursor.getCount());
-        cursor.close();
+        // Verify
+        for (int i = 0; i < len; i++) {
+            if (cvs[i] == null) continue;
+            assertNotNull(uris[i]);
+            cursor = mResolver.query(uris[i], null, null, null, null);
+            assertEquals("Item " + i + " not found", 1, cursor.getCount());
+            verifyContentValueAgainstCursor(cvs[i], cvs[i].keySet(), cursor);
+            cursor.close();
+        }
 
         // query all
         cursor = mResolver.query(mEventsUri, null, null, null, null);
-        assertEquals(numEvents, cursor.getCount());
+        assertEquals(numOfInserts, cursor.getCount());
         cursor.close();
     }
 
@@ -1845,6 +1886,26 @@ public class CalendarProvider2Test extends AndroidTestCase {
             cursor.close();
         }
     }
+
+
+//    TODO Reenable this when we are ready to work on this
+//
+//    public void testToShowInsertIsSlowForRecurringEvents() throws Exception {
+//        mCalendarId = insertCal("CalendarTestToShowInsertIsSlowForRecurringEvents", DEFAULT_TIMEZONE);
+//        String calendarIdString = Integer.toString(mCalendarId);
+//        long testStart = System.currentTimeMillis();
+//
+//        final int testTrials = 100;
+//
+//        for (int i = 0; i < testTrials; i++) {
+//            checkEvents(i, mDb, calendarIdString);
+//            long insertStartTime = System.currentTimeMillis();
+//            Uri eventUri = insertEvent(mCalendarId, findEvent("daily0"));
+//            Log.e(TAG, i + ") insertion time " + (System.currentTimeMillis() - insertStartTime));
+//        }
+//        Log.e(TAG, " Avg insertion time = " + (System.currentTimeMillis() - testStart)/testTrials);
+//    }
+
     /**
      * Test attendee processing
      * @throws Exception
@@ -1853,10 +1914,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         mCalendarId = insertCal("CalendarTestAttendees", DEFAULT_TIMEZONE);
         String calendarIdString = Integer.toString(mCalendarId);
         checkEvents(0, mDb, calendarIdString);
-        Uri eventUri = insertEvent(mCalendarId, findEvent("daily0"));
-        // TODO This has a race condition that causes checkEvents to not find
-        // the just added event
-        Thread.sleep(200);
+        Uri eventUri = insertEvent(mCalendarId, findEvent("normal0"));
         checkEvents(1, mDb, calendarIdString);
         long eventId = ContentUris.parseId(eventUri);
 
@@ -1921,7 +1979,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         mResolver.insert(CalendarContract.Attendees.CONTENT_URI, attendee);
 
         cursor = mResolver.query(CalendarContract.Attendees.CONTENT_URI, null,
-                "event_id=" + mCalendarId, null, null);
+                "event_id=" + eventId, null, null);
         assertEquals(2, cursor.getCount());
         cursor.close();
 

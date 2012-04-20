@@ -410,6 +410,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         ALLOWED_IN_EXCEPTION.add(Events.GUESTS_CAN_INVITE_OTHERS);
         ALLOWED_IN_EXCEPTION.add(Events.GUESTS_CAN_SEE_GUESTS);
         ALLOWED_IN_EXCEPTION.add(Events.ORGANIZER);
+        ALLOWED_IN_EXCEPTION.add(Events.CUSTOM_APP_PACKAGE);
+        ALLOWED_IN_EXCEPTION.add(Events.CUSTOM_APP_URI);
         // deleted, original_id, alerts
     }
 
@@ -570,7 +572,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
             verifyAccounts();
 
-            doUpdateTimezoneDependentFields();
+            try {
+                doUpdateTimezoneDependentFields();
+            } catch (IllegalStateException e) {
+                // Added this because tests would fail if the provider is
+                // closed by the time this is executed
+
+                // Nothing actionable here anyways.
+            }
         }
     }
 
@@ -4629,6 +4638,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Events.GUESTS_CAN_MODIFY, Events.GUESTS_CAN_MODIFY);
         sEventsProjectionMap.put(Events.GUESTS_CAN_SEE_GUESTS, Events.GUESTS_CAN_SEE_GUESTS);
         sEventsProjectionMap.put(Events.ORGANIZER, Events.ORGANIZER);
+        sEventsProjectionMap.put(Events.CUSTOM_APP_PACKAGE, Events.CUSTOM_APP_PACKAGE);
+        sEventsProjectionMap.put(Events.CUSTOM_APP_URI, Events.CUSTOM_APP_URI);
         sEventsProjectionMap.put(Events.DELETED, Events.DELETED);
         sEventsProjectionMap.put(Events._SYNC_ID, Events._SYNC_ID);
 
@@ -4718,6 +4729,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_MODIFY, Events.GUESTS_CAN_MODIFY);
         sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_SEE_GUESTS, Events.GUESTS_CAN_SEE_GUESTS);
         sEventEntitiesProjectionMap.put(Events.ORGANIZER, Events.ORGANIZER);
+        sEventEntitiesProjectionMap.put(Events.CUSTOM_APP_PACKAGE, Events.CUSTOM_APP_PACKAGE);
+        sEventEntitiesProjectionMap.put(Events.CUSTOM_APP_URI, Events.CUSTOM_APP_URI);
         sEventEntitiesProjectionMap.put(Events.DELETED, Events.DELETED);
         sEventEntitiesProjectionMap.put(Events._ID, Events._ID);
         sEventEntitiesProjectionMap.put(Events._SYNC_ID, Events._SYNC_ID);

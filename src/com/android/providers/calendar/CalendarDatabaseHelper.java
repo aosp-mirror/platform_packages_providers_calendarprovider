@@ -2267,14 +2267,20 @@ import java.util.TimeZone;
                 new String[] {"timezoneDatabaseVersion"});
 
         String oldTimezoneDbVersion = null;
-        if (cursor != null && cursor.moveToNext()) {
+        if (cursor != null) {
             try {
-                oldTimezoneDbVersion = cursor.getString(0);
+                if (cursor.moveToNext()) {
+                    oldTimezoneDbVersion = cursor.getString(0);
+                    cursor.close();
+                    cursor = null;
+                    // Also clean the CalendarCache table
+                    db.execSQL("DELETE FROM CalendarCache;");
+                }
             } finally {
-                cursor.close();
+                if (cursor != null) {
+                    cursor.close();
+                }
             }
-            // Also clean the CalendarCache table
-            db.execSQL("DELETE FROM CalendarCache;");
         }
         initCalendarCacheTable203(db, oldTimezoneDbVersion);
 
@@ -2423,21 +2429,22 @@ import java.util.TimeZone;
                 "WHERE _id=?;";
 
         Cursor cursor = db.rawQuery(selectSql, null /* selection args */);
-        if (cursor != null && cursor.getCount() > 0) {
+        if (cursor != null) {
             try {
-                Object[] bindArgs = new Object[3];
+                if (cursor.getCount() > 0) {
+                    Object[] bindArgs = new Object[3];
+                    while (cursor.moveToNext()) {
+                        Long id = cursor.getLong(0);
+                        String url = cursor.getString(1);
+                        String selfUrl = getSelfUrlFromEventsUrl(url);
+                        String editUrl = getEditUrlFromEventsUrl(url);
 
-                while (cursor.moveToNext()) {
-                    Long id = cursor.getLong(0);
-                    String url = cursor.getString(1);
-                    String selfUrl = getSelfUrlFromEventsUrl(url);
-                    String editUrl = getEditUrlFromEventsUrl(url);
+                        bindArgs[0] = editUrl;
+                        bindArgs[1] = selfUrl;
+                        bindArgs[2] = id;
 
-                    bindArgs[0] = editUrl;
-                    bindArgs[1] = selfUrl;
-                    bindArgs[2] = id;
-
-                    db.execSQL(updateSql, bindArgs);
+                        db.execSQL(updateSql, bindArgs);
+                    }
                 }
             } finally {
                 cursor.close();

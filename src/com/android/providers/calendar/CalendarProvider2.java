@@ -2004,6 +2004,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                                         new String[] { String.valueOf(newEventId), accountName },
                                         null, null, null);
                                 DatabaseUtils.dumpCursor(debugCursor);
+                                if (debugCursor != null) {
+                                    debugCursor.close();
+                                }
                             }
                             throw new RuntimeException("Status update WTF");
                         }

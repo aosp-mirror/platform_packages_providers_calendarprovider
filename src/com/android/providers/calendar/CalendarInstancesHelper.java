@@ -917,5 +917,8 @@ public class CalendarInstancesHelper {
     private static void dumpInstancesTable(SQLiteDatabase db) {
         Cursor cursor = db.query(Tables.INSTANCES, null, null, null, null, null, null);
         DatabaseUtils.dumpCursor(cursor);
+        if (cursor != null) {
+            cursor.close();
+        }
     }
 }

@@ -4798,6 +4798,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sCalendarAlertsProjectionMap.put(CalendarAlerts.BEGIN, "begin");
         sCalendarAlertsProjectionMap.put(CalendarAlerts.END, "end");
         sCalendarAlertsProjectionMap.put(CalendarAlerts.ALARM_TIME, "alarmTime");
+        sCalendarAlertsProjectionMap.put(CalendarAlerts.NOTIFY_TIME, "notifyTime");
         sCalendarAlertsProjectionMap.put(CalendarAlerts.STATE, "state");
         sCalendarAlertsProjectionMap.put(CalendarAlerts.MINUTES, "minutes");
 

@@ -20,6 +20,7 @@ import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.os.PowerManager;
 import android.util.Log;
 
 import java.util.concurrent.ExecutorService;
@@ -37,9 +38,17 @@ public class CalendarReceiver extends BroadcastReceiver {
     static final String SCHEDULE = "com.android.providers.calendar.SCHEDULE_ALARM";
 
     private final ExecutorService executor = Executors.newCachedThreadPool();
+    private PowerManager.WakeLock mWakeLock;
 
     @Override
     public void onReceive(Context context, Intent intent) {
+        if (mWakeLock == null) {
+            PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+            mWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CalendarReceiver_Provider");
+            mWakeLock.setReferenceCounted(true);
+        }
+        mWakeLock.acquire();
+
         final String action = intent.getAction();
         final ContentResolver cr = context.getContentResolver();
         final PendingResult result = goAsync();
@@ -53,6 +62,7 @@ public class CalendarReceiver extends BroadcastReceiver {
                     removeScheduledAlarms(cr);
                 }
                 result.finish();
+                mWakeLock.release();
             }
         });
     }

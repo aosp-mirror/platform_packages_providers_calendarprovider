@@ -3493,6 +3493,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                  */
                 if (table.equals(Tables.ATTENDEES)) {
                     updateEventAttendeeStatus(mDb, values);
+                    sendUpdateNotification(eventId, callerIsSyncAdapter);
                 }
             }
         } finally {

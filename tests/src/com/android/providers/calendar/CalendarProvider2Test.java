@@ -1072,7 +1072,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         return bob.toString();
     }
 
-    private long insertColor(long colorType, String colorKey, long color) {
+    private Uri insertColor(long colorType, String colorKey, long color) {
         ContentValues m = new ContentValues();
         m.put(Colors.ACCOUNT_NAME, DEFAULT_ACCOUNT);
         m.put(Colors.ACCOUNT_TYPE, DEFAULT_ACCOUNT_TYPE);
@@ -1083,9 +1083,31 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
         Uri uri = CalendarContract.Colors.CONTENT_URI;
 
-        uri = mResolver.insert(addSyncQueryParams(uri, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE), m);
-        String id = uri.getLastPathSegment();
-        return Long.parseLong(id);
+        return mResolver.insert(addSyncQueryParams(uri, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE), m);
+    }
+
+    private void updateAndCheckColor(long colorId, long colorType, String colorKey, long color) {
+
+        Uri uri = CalendarContract.Colors.CONTENT_URI;
+
+        final String where = Colors.ACCOUNT_NAME + "=? AND " + Colors.ACCOUNT_TYPE + "=? AND "
+                + Colors.COLOR_TYPE + "=? AND " + Colors.COLOR_KEY + "=?";
+
+        String[] selectionArgs = new String[] {
+                DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE, Long.toString(colorType), colorKey
+        };
+
+        ContentValues cv = new ContentValues();
+        cv.put(Colors.COLOR, color);
+        cv.put(Colors.DATA, obsToString(colorType, colorKey, color));
+
+        int count = mResolver.update(
+                addSyncQueryParams(uri, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE), cv, where,
+                selectionArgs);
+
+        checkColor(colorId, colorType, colorKey, color);
+
+        assertEquals(1, count);
     }
 
     /**
@@ -1293,19 +1315,42 @@ public class CalendarProvider2Test extends AndroidTestCase {
         mMetaData.clearInstanceRange();
     }
 
-    public void testInsertColor() throws Exception {
-        checkColor(Colors.TYPE_EVENT, "1" /* color key */, 11 /* color */);
+    public void testInsertAndUpdateColor() throws Exception {
+        // Calendar Color
+        long colorType = Colors.TYPE_CALENDAR;
+        String colorKey = "123";
+        long colorValue = 11;
+        long colorId = insertAndCheckColor(colorType, colorKey, colorValue);
+
         try {
-            checkColor(Colors.TYPE_EVENT, "1" /* color key */, 11 /* color */);
+            insertAndCheckColor(colorType, colorKey, colorValue);
             fail("Expected to fail with duplicate insertion");
         } catch (IllegalArgumentException iae) {
             // good
         }
 
-        checkColor(Colors.TYPE_CALENDAR, "1" /* color key */, 22 /* color */);
+        // Test Update
+        colorValue += 11;
+        updateAndCheckColor(colorId, colorType, colorKey, colorValue);
+
+        // Event Color
+        colorType = Colors.TYPE_EVENT;
+        colorValue += 11;
+
+        colorId = insertAndCheckColor(colorType, colorKey, colorValue);
+        try {
+            insertAndCheckColor(colorType, colorKey, colorValue);
+            fail("Expected to fail with duplicate insertion");
+        } catch (IllegalArgumentException iae) {
+            // good
+        }
+
+        // Test Update
+        colorValue += 11;
+        updateAndCheckColor(colorId, colorType, colorKey, colorValue);
     }
 
-    private void checkColor(long colorType, String colorKey, long color) {
+    private void checkColor(long colorId, long colorType, String colorKey, long color) {
         String[] projection = new String[] {
                 Colors.ACCOUNT_NAME, // 0
                 Colors.ACCOUNT_TYPE, // 1
@@ -1315,8 +1360,6 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 Colors._ID,          // 5
                 Colors.DATA,         // 6
         };
-
-        long color1Id = insertColor(colorType, colorKey, color);
 
         Cursor cursor = mResolver.query(Colors.CONTENT_URI, projection, Colors.COLOR_KEY
                 + "=? AND " + Colors.COLOR_TYPE + "=?", new String[] {
@@ -1331,9 +1374,17 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertEquals(colorType, cursor.getLong(2));
         assertEquals(colorKey, cursor.getString(3));
         assertEquals(color, cursor.getLong(4));
-        assertEquals(color1Id, cursor.getLong(5));
+        assertEquals(colorId, cursor.getLong(5));
         assertEquals(obsToString(colorType, colorKey, color), cursor.getString(6));
         cursor.close();
+    }
+
+    private long insertAndCheckColor(long colorType, String colorKey, long color) {
+        Uri uri = insertColor(colorType, colorKey, color);
+        long id = Long.parseLong(uri.getLastPathSegment());
+
+        checkColor(id, colorType, colorKey, color);
+        return id;
     }
 
     public void testInsertNormalEvents() throws Exception {

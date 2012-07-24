@@ -203,8 +203,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final String SQL_WHERE_CALENDAR_COLOR = Calendars.ACCOUNT_NAME + "=? AND "
             + Calendars.ACCOUNT_TYPE + "=? AND " + Calendars.CALENDAR_COLOR_KEY + "=?";
 
-    private static final String SQL_WHERE_EVENT_COLOR = Events.ACCOUNT_NAME + "=? AND "
-            + Events.ACCOUNT_TYPE + "=? AND " + Events.EVENT_COLOR_KEY + "=?";
+    private static final String SQL_WHERE_EVENT_COLOR = Calendars._ID + " in (SELECT _id from "
+            + Tables.CALENDARS + " WHERE " + Events.ACCOUNT_NAME + "=? AND " + Events.ACCOUNT_TYPE
+            + "=?) AND " + Events.EVENT_COLOR_KEY + "=?";
 
     protected static final String SQL_WHERE_ID = GENERIC_ID + "=?";
     private static final String SQL_WHERE_EVENT_ID = GENERIC_EVENT_ID + "=?";
@@ -3875,10 +3876,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
 
             case COLORS:
-                Integer color = values.getAsInteger(Colors.COLOR);
-                if (values.size() > 1 || (values.size() == 1 && color == null)) {
-                    throw new UnsupportedOperationException("You may only change the COLOR "
-                            + "for an existing Colors entry.");
+                int validValues = 0;
+                if (values.getAsInteger(Colors.COLOR) != null) {
+                    validValues++;
+                }
+                if (values.getAsString(Colors.DATA) != null) {
+                    validValues++;
+                }
+
+                if (values.size() != validValues) {
+                    throw new UnsupportedOperationException("You may only change the COLOR and"
+                            + " DATA columns for an existing Colors entry.");
                 }
                 return handleUpdateColors(values, appendAccountToSelection(uri, selection,
                         Calendars.ACCOUNT_NAME, Calendars.ACCOUNT_TYPE),

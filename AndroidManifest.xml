@@ -44,6 +44,7 @@
         <provider android:name="CalendarProvider2" android:authorities="com.android.calendar"
                 android:label="@string/provider_label"
                 android:multiprocess="false"
+                android:exported="true"
                 android:readPermission="android.permission.READ_CALENDAR"
                 android:writePermission="android.permission.WRITE_CALENDAR" />
 

@@ -16,8 +16,8 @@
 
 package com.android.providers.calendar;
 
-import com.android.calendarcommon.ICalendar;
-import com.android.calendarcommon.RecurrenceSet;
+import com.android.calendarcommon2.ICalendar;
+import com.android.calendarcommon2.RecurrenceSet;
 
 import android.content.ContentValues;
 import android.provider.CalendarContract;

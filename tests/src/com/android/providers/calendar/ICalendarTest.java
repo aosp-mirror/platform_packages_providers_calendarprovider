@@ -1,7 +1,7 @@
 // Copyright 2007 The Android Open Source Project
 package com.android.providers.calendar;
 
-import com.android.calendarcommon.ICalendar;
+import com.android.calendarcommon2.ICalendar;
 
 import android.test.suitebuilder.annotation.SmallTest;
 import junit.framework.TestCase;

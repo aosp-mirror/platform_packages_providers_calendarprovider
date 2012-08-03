@@ -54,11 +54,11 @@ import android.util.Log;
 import android.util.TimeFormatException;
 import android.util.TimeUtils;
 
-import com.android.calendarcommon.DateException;
-import com.android.calendarcommon.Duration;
-import com.android.calendarcommon.EventRecurrence;
-import com.android.calendarcommon.RecurrenceProcessor;
-import com.android.calendarcommon.RecurrenceSet;
+import com.android.calendarcommon2.DateException;
+import com.android.calendarcommon2.Duration;
+import com.android.calendarcommon2.EventRecurrence;
+import com.android.calendarcommon2.RecurrenceProcessor;
+import com.android.calendarcommon2.RecurrenceSet;
 import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
 import com.android.providers.calendar.CalendarDatabaseHelper.Views;
 import com.google.android.collect.Sets;

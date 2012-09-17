@@ -73,7 +73,7 @@ import java.util.TimeZone;
     // 5xx for JB MR1
     // 6xx for K
     // Bump this to the next hundred at each major release.
-    static final int DATABASE_VERSION = 501;
+    static final int DATABASE_VERSION = 502;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -114,7 +114,8 @@ import java.util.TimeZone;
             Events.ORGANIZER + "," +
             Events.IS_ORGANIZER + "," +
             Events.CUSTOM_APP_PACKAGE + "," +
-            Events.CUSTOM_APP_URI;
+            Events.CUSTOM_APP_URI + "," +
+            Events.UID_2445;
 
     // columns used to duplicate a reminder row
     private static final String LAST_SYNCED_REMINDER_COLUMNS =
@@ -565,6 +566,7 @@ import java.util.TimeZone;
                 CalendarContract.Events.EVENT_END_TIMEZONE + " TEXT," +
                 CalendarContract.Events.CUSTOM_APP_PACKAGE + " TEXT," +
                 CalendarContract.Events.CUSTOM_APP_URI + " TEXT," +
+                CalendarContract.Events.UID_2445 + " TEXT," +
                 // SYNC_DATAX columns are available for use by sync adapters
                 CalendarContract.Events.SYNC_DATA1 + " TEXT," +
                 CalendarContract.Events.SYNC_DATA2 + " TEXT," +
@@ -1389,14 +1391,18 @@ import java.util.TimeZone;
             }
             if (oldVersion == 402) {
                 upgradeToVersion403(db);
-                createEventsView = true; // This is needed if the calendars or events schema changed
+                createEventsView = true;
                 oldVersion = 403;
             }
-
             if (oldVersion == 403) {
                 upgradeToVersion501(db);
-                createEventsView = true; // This is needed if the calendars or events schema changed
+                createEventsView = true;
                 oldVersion = 501;
+            }
+            if (oldVersion == 501) {
+                upgradeToVersion502(db);
+                createEventsView = true; // This is needed if the calendars or events schema changed
+                oldVersion = 502;
             }
 
             if (createEventsView) {
@@ -1486,6 +1492,14 @@ import java.util.TimeZone;
          */
         db.execSQL("ALTER TABLE Events ADD COLUMN isOrganizer INTEGER;");
         db.execSQL("ALTER TABLE Calendars ADD COLUMN isPrimary INTEGER;");
+    }
+
+    private void upgradeToVersion502(SQLiteDatabase db) {
+        /*
+         * Changes from version 501 to 502:
+         * - add UID for events added from the RFC 2445 iCalendar format.
+         */
+        db.execSQL("ALTER TABLE Events ADD COLUMN uid2445 TEXT;");
     }
 
     /**********************************************************/
@@ -3167,6 +3181,7 @@ import java.util.TimeZone;
                 + ") AS " + Events.IS_ORGANIZER + ","
                 + CalendarContract.Events.CUSTOM_APP_PACKAGE + ","
                 + CalendarContract.Events.CUSTOM_APP_URI + ","
+                + CalendarContract.Events.UID_2445 + ","
                 + CalendarContract.Events.SYNC_DATA1 + ","
                 + CalendarContract.Events.SYNC_DATA2 + ","
                 + CalendarContract.Events.SYNC_DATA3 + ","

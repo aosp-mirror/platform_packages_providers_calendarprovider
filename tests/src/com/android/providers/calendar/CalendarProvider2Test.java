@@ -500,6 +500,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         int mSyncId;
         String mCustomAppPackage;
         String mCustomAppUri;
+        String mUid2445;
 
         // Constructor for normal events, using the default timezone
         public EventInfo(String title, String startDate, String endDate,
@@ -532,6 +533,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             mAllDay = allDay;
             mCustomAppPackage = "CustomAppPackage-" + mTitle;
             mCustomAppUri = "CustomAppUri-" + mTitle;
+            mUid2445 = null;
         }
 
         // Constructor for repeating events, using the default timezone
@@ -580,22 +582,23 @@ public class CalendarProvider2Test extends AndroidTestCase {
         // Constructor for recurrence exceptions, using the default timezone
         public EventInfo(String originalTitle, String originalInstance, String title,
                 String description, String startDate, String endDate, boolean allDay,
-                String customPackageName, String customPackageUri) {
+                String customPackageName, String customPackageUri, String mUid2445) {
             init(originalTitle, originalInstance,
                     title, description, startDate, endDate, allDay, DEFAULT_TIMEZONE,
-                    customPackageName, customPackageUri);
+                    customPackageName, customPackageUri, mUid2445);
         }
 
         public void init(String originalTitle, String originalInstance,
                 String title, String description, String startDate, String endDate,
                 boolean allDay, String timezone, String customPackageName,
-                String customPackageUri) {
+                String customPackageUri, String uid2445) {
             mOriginalTitle = originalTitle;
             Time time = new Time(timezone);
             time.parse3339(originalInstance);
             mOriginalInstance = time.toMillis(false /* use isDst */);
             mCustomAppPackage = customPackageName;
             mCustomAppUri = customPackageUri;
+            mUid2445 = uid2445;
             init(title, description, startDate, endDate, null /* rrule */, allDay, timezone);
         }
     }
@@ -669,19 +672,24 @@ public class CalendarProvider2Test extends AndroidTestCase {
                     "FREQ=MONTHLY;WKST=SU;BYMONTHDAY=31", false),
             new EventInfo("daily0", "2008-05-01T00:00:00",
                     "except0", "daily0 exception for 5/1/2008 12am, change to 5/1/2008 2am to 3am",
-                    "2008-05-01T02:00:00", "2008-05-01T01:03:00", false, "AppPkg1", "AppUri1"),
+                    "2008-05-01T02:00:00", "2008-05-01T01:03:00", false, "AppPkg1", "AppUri1",
+                    "uid2445-1"),
             new EventInfo("daily0", "2008-05-03T00:00:00",
                     "except1", "daily0 exception for 5/3/2008 12am, change to 5/3/2008 2am to 3am",
-                    "2008-05-03T02:00:00", "2008-05-03T01:03:00", false, "AppPkg2", "AppUri2"),
+                    "2008-05-03T02:00:00", "2008-05-03T01:03:00", false, "AppPkg2", "AppUri2",
+                    null),
             new EventInfo("daily0", "2008-05-02T00:00:00",
                     "except2", "daily0 exception for 5/2/2008 12am, change to 1/2/2008",
-                    "2008-01-02T00:00:00", "2008-01-02T01:00:00", false, "AppPkg3", "AppUri3"),
+                    "2008-01-02T00:00:00", "2008-01-02T01:00:00", false, "AppPkg3", "AppUri3",
+                    "12345@uid2445"),
             new EventInfo("weekly0", "2008-05-13T13:00:00",
                     "except3", "daily0 exception for 5/11/2008 1pm, change to 12/11/2008 1pm",
-                    "2008-12-11T13:00:00", "2008-12-11T14:00:00", false, "AppPkg4", "AppUri4"),
+                    "2008-12-11T13:00:00", "2008-12-11T14:00:00", false, "AppPkg4", "AppUri4",
+                    null),
             new EventInfo("weekly0", "2008-05-13T13:00:00",
                     "cancel0", "weekly0 exception for 5/13/2008 1pm",
-                    "2008-05-13T13:00:00", "2008-05-13T14:00:00", false, "AppPkg5", "AppUri5"),
+                    "2008-05-13T13:00:00", "2008-05-13T14:00:00", false, "AppPkg5", "AppUri5",
+                    null),
             new EventInfo("yearly0", "yearly on 5/1/2008 from 1pm to 2pm",
                     "2008-05-01T13:00:00", "2008-05-01T14:00:00",
                     "FREQ=YEARLY;WKST=SU", false),
@@ -1181,6 +1189,9 @@ public class CalendarProvider2Test extends AndroidTestCase {
         }
         if (event.mCustomAppUri != null) {
             m.put(Events.CUSTOM_APP_URI, event.mCustomAppUri);
+        }
+        if (event.mUid2445 != null) {
+            m.put(Events.UID_2445, event.mUid2445);
         }
 
         if (event.mOriginalTitle != null) {
@@ -1873,7 +1884,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
         assertEquals(0, deletes);
     }
-
+    
     public void testCalendarAlerts() throws Exception {
         // This projection is from AlertActivity; want to make sure it works.
         String[] projection = new String[] {

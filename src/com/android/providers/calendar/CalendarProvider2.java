@@ -413,6 +413,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         ALLOWED_IN_EXCEPTION.add(Events.ORGANIZER);
         ALLOWED_IN_EXCEPTION.add(Events.CUSTOM_APP_PACKAGE);
         ALLOWED_IN_EXCEPTION.add(Events.CUSTOM_APP_URI);
+        ALLOWED_IN_EXCEPTION.add(Events.UID_2445);
         // deleted, original_id, alerts
     }
 
@@ -4698,6 +4699,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Events.IS_ORGANIZER, Events.IS_ORGANIZER);
         sEventsProjectionMap.put(Events.CUSTOM_APP_PACKAGE, Events.CUSTOM_APP_PACKAGE);
         sEventsProjectionMap.put(Events.CUSTOM_APP_URI, Events.CUSTOM_APP_URI);
+        sEventsProjectionMap.put(Events.UID_2445, Events.UID_2445);
         sEventsProjectionMap.put(Events.DELETED, Events.DELETED);
         sEventsProjectionMap.put(Events._SYNC_ID, Events._SYNC_ID);
 
@@ -4790,6 +4792,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventEntitiesProjectionMap.put(Events.IS_ORGANIZER, Events.IS_ORGANIZER);
         sEventEntitiesProjectionMap.put(Events.CUSTOM_APP_PACKAGE, Events.CUSTOM_APP_PACKAGE);
         sEventEntitiesProjectionMap.put(Events.CUSTOM_APP_URI, Events.CUSTOM_APP_URI);
+        sEventEntitiesProjectionMap.put(Events.UID_2445, Events.UID_2445);
         sEventEntitiesProjectionMap.put(Events.DELETED, Events.DELETED);
         sEventEntitiesProjectionMap.put(Events._ID, Events._ID);
         sEventEntitiesProjectionMap.put(Events._SYNC_ID, Events._SYNC_ID);

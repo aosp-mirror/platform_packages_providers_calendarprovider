@@ -876,12 +876,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             case CALENDARS:
             case CALENDAR_ENTITIES:
                 qb.setTables(Tables.CALENDARS);
+                qb.setProjectionMap(sCalendarsProjectionMap);
                 selection = appendAccountToSelection(uri, selection, Calendars.ACCOUNT_NAME,
                         Calendars.ACCOUNT_TYPE);
                 break;
             case CALENDARS_ID:
             case CALENDAR_ENTITIES_ID:
                 qb.setTables(Tables.CALENDARS);
+                qb.setProjectionMap(sCalendarsProjectionMap);
                 selectionArgs = insertSelectionArg(selectionArgs, uri.getPathSegments().get(1));
                 qb.appendWhere(SQL_WHERE_ID);
                 break;
@@ -4553,6 +4555,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final UriMatcher sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
     private static final HashMap<String, String> sInstancesProjectionMap;
     private static final HashMap<String, String> sColorsProjectionMap;
+    protected static final HashMap<String, String> sCalendarsProjectionMap;
     protected static final HashMap<String, String> sEventsProjectionMap;
     private static final HashMap<String, String> sEventEntitiesProjectionMap;
     private static final HashMap<String, String> sAttendeesProjectionMap;
@@ -4614,6 +4617,48 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sColorsProjectionMap.put(Colors.COLOR_TYPE, Colors.COLOR_TYPE);
         sColorsProjectionMap.put(Colors.COLOR, Colors.COLOR);
 
+        sCalendarsProjectionMap = new HashMap<String, String>();
+        sCalendarsProjectionMap.put(Calendars._ID, Calendars._ID);
+        sCalendarsProjectionMap.put(Calendars.ACCOUNT_NAME, Calendars.ACCOUNT_NAME);
+        sCalendarsProjectionMap.put(Calendars.ACCOUNT_TYPE, Calendars.ACCOUNT_TYPE);
+        sCalendarsProjectionMap.put(Calendars._SYNC_ID, Calendars._SYNC_ID);
+        sCalendarsProjectionMap.put(Calendars.DIRTY, Calendars.DIRTY);
+        sCalendarsProjectionMap.put(Calendars.NAME, Calendars.NAME);
+        sCalendarsProjectionMap.put(
+                Calendars.CALENDAR_DISPLAY_NAME, Calendars.CALENDAR_DISPLAY_NAME);
+        sCalendarsProjectionMap.put(Calendars.CALENDAR_COLOR, Calendars.CALENDAR_COLOR);
+        sCalendarsProjectionMap.put(Calendars.CALENDAR_COLOR_KEY, Calendars.CALENDAR_COLOR_KEY);
+        sCalendarsProjectionMap.put(Calendars.CALENDAR_ACCESS_LEVEL,
+                Calendars.CALENDAR_ACCESS_LEVEL);
+        sCalendarsProjectionMap.put(Calendars.VISIBLE, Calendars.VISIBLE);
+        sCalendarsProjectionMap.put(Calendars.SYNC_EVENTS, Calendars.SYNC_EVENTS);
+        sCalendarsProjectionMap.put(Calendars.CALENDAR_LOCATION, Calendars.CALENDAR_LOCATION);
+        sCalendarsProjectionMap.put(Calendars.CALENDAR_TIME_ZONE, Calendars.CALENDAR_TIME_ZONE);
+        sCalendarsProjectionMap.put(Calendars.OWNER_ACCOUNT, Calendars.OWNER_ACCOUNT);
+        sCalendarsProjectionMap.put(Calendars.IS_PRIMARY,
+                "COALESCE(" + Events.IS_PRIMARY + ", "
+                        + Calendars.OWNER_ACCOUNT + " = " + Calendars.ACCOUNT_NAME + ")");
+        sCalendarsProjectionMap.put(Calendars.CAN_ORGANIZER_RESPOND,
+                Calendars.CAN_ORGANIZER_RESPOND);
+        sCalendarsProjectionMap.put(Calendars.CAN_MODIFY_TIME_ZONE, Calendars.CAN_MODIFY_TIME_ZONE);
+        sCalendarsProjectionMap.put(Calendars.CAN_PARTIALLY_UPDATE, Calendars.CAN_PARTIALLY_UPDATE);
+        sCalendarsProjectionMap.put(Calendars.MAX_REMINDERS, Calendars.MAX_REMINDERS);
+        sCalendarsProjectionMap.put(Calendars.ALLOWED_REMINDERS, Calendars.ALLOWED_REMINDERS);
+        sCalendarsProjectionMap.put(Calendars.ALLOWED_AVAILABILITY, Calendars.ALLOWED_AVAILABILITY);
+        sCalendarsProjectionMap.put(Calendars.ALLOWED_ATTENDEE_TYPES,
+                Calendars.ALLOWED_ATTENDEE_TYPES);
+        sCalendarsProjectionMap.put(Calendars.DELETED, Calendars.DELETED);
+        sCalendarsProjectionMap.put(Calendars.CAL_SYNC1, Calendars.CAL_SYNC1);
+        sCalendarsProjectionMap.put(Calendars.CAL_SYNC2, Calendars.CAL_SYNC2);
+        sCalendarsProjectionMap.put(Calendars.CAL_SYNC3, Calendars.CAL_SYNC3);
+        sCalendarsProjectionMap.put(Calendars.CAL_SYNC4, Calendars.CAL_SYNC4);
+        sCalendarsProjectionMap.put(Calendars.CAL_SYNC5, Calendars.CAL_SYNC5);
+        sCalendarsProjectionMap.put(Calendars.CAL_SYNC6, Calendars.CAL_SYNC6);
+        sCalendarsProjectionMap.put(Calendars.CAL_SYNC7, Calendars.CAL_SYNC7);
+        sCalendarsProjectionMap.put(Calendars.CAL_SYNC8, Calendars.CAL_SYNC8);
+        sCalendarsProjectionMap.put(Calendars.CAL_SYNC9, Calendars.CAL_SYNC9);
+        sCalendarsProjectionMap.put(Calendars.CAL_SYNC10, Calendars.CAL_SYNC10);
+
         sEventsProjectionMap = new HashMap<String, String>();
         // Events columns
         sEventsProjectionMap.put(Events.ACCOUNT_NAME, Events.ACCOUNT_NAME);
@@ -4650,6 +4695,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Events.GUESTS_CAN_MODIFY, Events.GUESTS_CAN_MODIFY);
         sEventsProjectionMap.put(Events.GUESTS_CAN_SEE_GUESTS, Events.GUESTS_CAN_SEE_GUESTS);
         sEventsProjectionMap.put(Events.ORGANIZER, Events.ORGANIZER);
+        sEventsProjectionMap.put(Events.IS_ORGANIZER, Events.IS_ORGANIZER);
         sEventsProjectionMap.put(Events.CUSTOM_APP_PACKAGE, Events.CUSTOM_APP_PACKAGE);
         sEventsProjectionMap.put(Events.CUSTOM_APP_URI, Events.CUSTOM_APP_URI);
         sEventsProjectionMap.put(Events.DELETED, Events.DELETED);
@@ -4741,6 +4787,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_MODIFY, Events.GUESTS_CAN_MODIFY);
         sEventEntitiesProjectionMap.put(Events.GUESTS_CAN_SEE_GUESTS, Events.GUESTS_CAN_SEE_GUESTS);
         sEventEntitiesProjectionMap.put(Events.ORGANIZER, Events.ORGANIZER);
+        sEventEntitiesProjectionMap.put(Events.IS_ORGANIZER, Events.IS_ORGANIZER);
         sEventEntitiesProjectionMap.put(Events.CUSTOM_APP_PACKAGE, Events.CUSTOM_APP_PACKAGE);
         sEventEntitiesProjectionMap.put(Events.CUSTOM_APP_URI, Events.CUSTOM_APP_URI);
         sEventEntitiesProjectionMap.put(Events.DELETED, Events.DELETED);

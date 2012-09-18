@@ -16,10 +16,6 @@
 
 package com.android.providers.calendar;
 
-import com.google.common.annotations.VisibleForTesting;
-
-import com.android.common.content.SyncStateContentProviderHelper;
-
 import android.accounts.Account;
 import android.content.ContentResolver;
 import android.content.ContentValues;
@@ -41,6 +37,9 @@ import android.provider.SyncStateContract;
 import android.text.TextUtils;
 import android.text.format.Time;
 import android.util.Log;
+
+import com.android.common.content.SyncStateContentProviderHelper;
+import com.google.common.annotations.VisibleForTesting;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
@@ -71,9 +70,10 @@ import java.util.TimeZone;
     // 2xx for Honeycomb
     // 3xx for ICS
     // 4xx for JB
-    // 5xx for K
+    // 5xx for JB MR1
+    // 6xx for K
     // Bump this to the next hundred at each major release.
-    static final int DATABASE_VERSION = 403;
+    static final int DATABASE_VERSION = 501;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -112,6 +112,7 @@ import java.util.TimeZone;
             Events.GUESTS_CAN_INVITE_OTHERS + "," +
             Events.GUESTS_CAN_SEE_GUESTS + "," +
             Events.ORGANIZER + "," +
+            Events.IS_ORGANIZER + "," +
             Events.CUSTOM_APP_PACKAGE + "," +
             Events.CUSTOM_APP_URI;
 
@@ -558,6 +559,7 @@ import java.util.TimeZone;
                 CalendarContract.Events.GUESTS_CAN_INVITE_OTHERS + " INTEGER NOT NULL DEFAULT 1," +
                 CalendarContract.Events.GUESTS_CAN_SEE_GUESTS + " INTEGER NOT NULL DEFAULT 1," +
                 CalendarContract.Events.ORGANIZER + " STRING," +
+                CalendarContract.Events.IS_ORGANIZER + " INTEGER," +
                 CalendarContract.Events.DELETED + " INTEGER NOT NULL DEFAULT 0," +
                 // timezone for event with allDay events are in local timezone
                 CalendarContract.Events.EVENT_END_TIMEZONE + " TEXT," +
@@ -773,6 +775,7 @@ import java.util.TimeZone;
                 Calendars.CALENDAR_LOCATION + " TEXT," +
                 Calendars.CALENDAR_TIME_ZONE + " TEXT," +
                 Calendars.OWNER_ACCOUNT + " TEXT, " +
+                Calendars.IS_PRIMARY + " INTEGER, " +
                 Calendars.CAN_ORGANIZER_RESPOND + " INTEGER NOT NULL DEFAULT 1," +
                 Calendars.CAN_MODIFY_TIME_ZONE + " INTEGER DEFAULT 1," +
                 Calendars.CAN_PARTIALLY_UPDATE + " INTEGER DEFAULT 0," +
@@ -1390,6 +1393,12 @@ import java.util.TimeZone;
                 oldVersion = 403;
             }
 
+            if (oldVersion == 403) {
+                upgradeToVersion501(db);
+                createEventsView = true; // This is needed if the calendars or events schema changed
+                oldVersion = 501;
+            }
+
             if (createEventsView) {
                 createEventsView(db);
             }
@@ -1462,8 +1471,22 @@ import java.util.TimeZone;
     /**********************************************************/
 
     /**********************************************************/
-    /* 5xx db version is for K release
+    /* 6xx db version is for K release
     /**********************************************************/
+
+    /**********************************************************/
+    /* 5xx db version is for JB MR1 release
+    /**********************************************************/
+
+    private void upgradeToVersion501(SQLiteDatabase db) {
+        /*
+         * Changes from version 403 to 501:
+         * - add isOrganizer column to Events table
+         * - add isPrimary column to Calendars table
+         */
+        db.execSQL("ALTER TABLE Events ADD COLUMN isOrganizer INTEGER;");
+        db.execSQL("ALTER TABLE Calendars ADD COLUMN isPrimary INTEGER;");
+    }
 
     /**********************************************************/
     /* 4xx db version is for J release
@@ -3139,6 +3162,9 @@ import java.util.TimeZone;
                 + CalendarContract.Events.GUESTS_CAN_MODIFY + ","
                 + CalendarContract.Events.GUESTS_CAN_SEE_GUESTS + ","
                 + CalendarContract.Events.ORGANIZER + ","
+                + "COALESCE("
+                + Events.IS_ORGANIZER + ", " + Events.ORGANIZER + " = " + Calendars.OWNER_ACCOUNT
+                + ") AS " + Events.IS_ORGANIZER + ","
                 + CalendarContract.Events.CUSTOM_APP_PACKAGE + ","
                 + CalendarContract.Events.CUSTOM_APP_URI + ","
                 + CalendarContract.Events.SYNC_DATA1 + ","

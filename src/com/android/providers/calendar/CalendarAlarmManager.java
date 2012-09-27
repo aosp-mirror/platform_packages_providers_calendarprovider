@@ -193,9 +193,13 @@ public class CalendarAlarmManager {
      * @param db TODO
      */
     void runScheduleNextAlarm(boolean removeAlarms, CalendarProvider2 cp2) {
+        SQLiteDatabase db = cp2.mDb;
+        if (db == null) {
+            return;
+        }
+
         // Reset so that we can accept other schedules of next alarm
         mNextAlarmCheckScheduled.set(false);
-        SQLiteDatabase db = cp2.mDb;
         db.beginTransaction();
         try {
             if (removeAlarms) {

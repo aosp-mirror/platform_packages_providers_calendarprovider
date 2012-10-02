@@ -203,7 +203,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final String SQL_WHERE_CALENDAR_COLOR = Calendars.ACCOUNT_NAME + "=? AND "
             + Calendars.ACCOUNT_TYPE + "=? AND " + Calendars.CALENDAR_COLOR_KEY + "=?";
 
-    private static final String SQL_WHERE_EVENT_COLOR = Calendars._ID + " in (SELECT _id from "
+    private static final String SQL_WHERE_EVENT_COLOR = "calendar_id in (SELECT _id from "
             + Tables.CALENDARS + " WHERE " + Events.ACCOUNT_NAME + "=? AND " + Events.ACCOUNT_TYPE
             + "=?) AND " + Events.EVENT_COLOR_KEY + "=?";
 

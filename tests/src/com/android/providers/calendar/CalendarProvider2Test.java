@@ -83,6 +83,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
     private static final String[] WHERE_CALENDARS_ARGS = {
         "1"
     };
+    private static final String WHERE_COLOR_ACCOUNT_AND_INDEX = Colors.ACCOUNT_NAME + "=? AND "
+            + Colors.ACCOUNT_TYPE + "=? AND " + Colors.COLOR_KEY + "=?";
     private static final String DEFAULT_SORT_ORDER = "begin ASC";
 
     private CalendarProvider2ForTesting mProvider;
@@ -1326,7 +1328,19 @@ public class CalendarProvider2Test extends AndroidTestCase {
         mMetaData.clearInstanceRange();
     }
 
-    public void testInsertAndUpdateColor() throws Exception {
+    /**
+     * Creates an updated URI that includes query parameters that identify the source as a
+     * sync adapter.
+     */
+    static Uri asSyncAdapter(Uri uri, String account, String accountType) {
+        return uri.buildUpon()
+                .appendQueryParameter(android.provider.CalendarContract.CALLER_IS_SYNCADAPTER,
+                        "true")
+                .appendQueryParameter(Calendars.ACCOUNT_NAME, account)
+                .appendQueryParameter(Calendars.ACCOUNT_TYPE, accountType).build();
+    }
+    
+    public void testInsertUpdateDeleteColor() throws Exception {
         // Calendar Color
         long colorType = Colors.TYPE_CALENDAR;
         String colorKey = "123";
@@ -1347,7 +1361,6 @@ public class CalendarProvider2Test extends AndroidTestCase {
         // Event Color
         colorType = Colors.TYPE_EVENT;
         colorValue += 11;
-
         colorId = insertAndCheckColor(colorType, colorKey, colorValue);
         try {
             insertAndCheckColor(colorType, colorKey, colorValue);
@@ -1356,9 +1369,63 @@ public class CalendarProvider2Test extends AndroidTestCase {
             // good
         }
 
+        // Create an event with the old color value.
+        int calendarId0 = insertCal("Calendar0", DEFAULT_TIMEZONE);
+        String title = "colorTest";
+        ContentValues cv = this.eventInfoToContentValues(calendarId0, mEvents[0]);
+        cv.put(Events.EVENT_COLOR_KEY, colorKey);
+        cv.put(Events.TITLE, title);
+        Uri uri = insertEvent(calendarId0, mEvents[0], cv);
+        Cursor c = mResolver.query(uri, new String[] {Events.EVENT_COLOR},  null, null, null);
+        try {
+            // Confirm the color is set.
+            c.moveToFirst();
+            assertEquals(colorValue, c.getInt(0));
+        } finally {
+            if (c != null) {
+                c.close();
+            }
+        }
+
         // Test Update
         colorValue += 11;
         updateAndCheckColor(colorId, colorType, colorKey, colorValue);
+
+        // Check if color was updated in event.
+        c = mResolver.query(uri, new String[] {Events.EVENT_COLOR}, null, null, null);
+        try {
+            c.moveToFirst();
+            assertEquals(colorValue, c.getInt(0));
+        } finally {
+            if (c != null) {
+                c.close();
+            }
+        }
+
+        // Test Delete
+        Uri colSyncUri = asSyncAdapter(Colors.CONTENT_URI, DEFAULT_ACCOUNT,
+                DEFAULT_ACCOUNT_TYPE);
+        try {
+            // Delete should fail if color referenced by an event.
+            mResolver.delete(colSyncUri, WHERE_COLOR_ACCOUNT_AND_INDEX,
+                    new String[] {DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE, colorKey});
+            fail("Should not allow deleting referenced color");
+        } catch (UnsupportedOperationException e) {
+            // Exception expected.
+        }
+        Cursor cursor = mResolver.query(Colors.CONTENT_URI, new String[] {Colors.COLOR_KEY},
+                Colors.COLOR_KEY + "=? AND " + Colors.COLOR_TYPE + "=?",
+                new String[] {colorKey, Long.toString(colorType)}, null);
+        assertEquals(1, cursor.getCount());
+
+        // Try again, by deleting the event, then the color.
+        assertEquals(1, deleteMatchingEvents(title, DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE));
+        mResolver.delete(colSyncUri, WHERE_COLOR_ACCOUNT_AND_INDEX,
+                new String[] {DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE, colorKey});
+        cursor = mResolver.query(Colors.CONTENT_URI, new String[] {Colors.COLOR_KEY},
+                Colors.COLOR_KEY + "=? AND " + Colors.COLOR_TYPE + "=?",
+                new String[] {colorKey, Long.toString(colorType)}, null);
+        assertEquals(0, cursor.getCount());
     }
 
     private void checkColor(long colorId, long colorType, String colorKey, long color) {
@@ -1371,7 +1438,6 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 Colors._ID,          // 5
                 Colors.DATA,         // 6
         };
-
         Cursor cursor = mResolver.query(Colors.CONTENT_URI, projection, Colors.COLOR_KEY
                 + "=? AND " + Colors.COLOR_TYPE + "=?", new String[] {
                 colorKey, Long.toString(colorType)

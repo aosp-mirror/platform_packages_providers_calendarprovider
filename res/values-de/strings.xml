@@ -30,5 +30,5 @@
     <string name="debug_tool_message" msgid="4862486669932821937">"Sie sind im Begriff, 1) eine Kopie Ihrer Kalenderdatenbank auf der SD-Karte bzw. dem USB-Speicher zu speichern, die von jeder App gelesen werden kann, und sie 2) per E-Mail zu versenden. Löschen Sie die Kopie unbedingt, sobald sie vom Gerät kopiert oder die E-Mail erhalten wurde."</string>
     <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Wählen Sie ein Programm zum Senden Ihrer Datei aus."</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Kalender-Debug angehängt"</string>
-    <string name="debug_tool_email_body" msgid="4835949635324134017">"Beigefügt ist meine Kalenderdatenbank mit allen meinen Terminen und persönlichen Informationen. Bitte gehen Sie sorgfältig damit um."</string>
+    <string name="debug_tool_email_body" msgid="4835949635324134017">"Beigefügt ist meine Kalenderdatenbank mit allen meinen Terminen und personenbezogenen Daten. Bitte gehen Sie sorgfältig damit um."</string>
 </resources>

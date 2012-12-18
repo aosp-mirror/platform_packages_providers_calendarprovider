@@ -73,7 +73,7 @@ import java.util.TimeZone;
     // 5xx for JB MR1
     // 6xx for K
     // Bump this to the next hundred at each major release.
-    static final int DATABASE_VERSION = 502;
+    static final int DATABASE_VERSION = 600;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -522,6 +522,7 @@ import java.util.TimeZone;
                 CalendarContract.Events._ID + " INTEGER PRIMARY KEY AUTOINCREMENT," +
                 CalendarContract.Events._SYNC_ID + " TEXT," +
                 CalendarContract.Events.DIRTY + " INTEGER," +
+                CalendarContract.Events.MUTATORS + " TEXT," +
                 CalendarContract.Events.LAST_SYNCED + " INTEGER DEFAULT 0," +
                 CalendarContract.Events.CALENDAR_ID + " INTEGER NOT NULL," +
                 CalendarContract.Events.TITLE + " TEXT," +
@@ -767,6 +768,7 @@ import java.util.TimeZone;
                 Calendars.ACCOUNT_TYPE + " TEXT," +
                 Calendars._SYNC_ID + " TEXT," +
                 Calendars.DIRTY + " INTEGER," +
+                Calendars.MUTATORS + " TEXT," +
                 Calendars.NAME + " TEXT," +
                 Calendars.CALENDAR_DISPLAY_NAME + " TEXT," +
                 Calendars.CALENDAR_COLOR + " INTEGER," +
@@ -1404,6 +1406,11 @@ import java.util.TimeZone;
                 createEventsView = true; // This is needed if the calendars or events schema changed
                 oldVersion = 502;
             }
+            if (oldVersion < 600) {
+                upgradeToVersion600(db);
+                createEventsView = true; // This is needed if the calendars or events schema changed
+                oldVersion = 600;
+            }
 
             if (createEventsView) {
                 createEventsView(db);
@@ -1479,6 +1486,15 @@ import java.util.TimeZone;
     /**********************************************************/
     /* 6xx db version is for K release
     /**********************************************************/
+
+    private void upgradeToVersion600(SQLiteDatabase db) {
+        /*
+         * Changes from version 5xx to 600:
+         * - add mutator columns to Events & calendars
+         */
+        db.execSQL("ALTER TABLE Events ADD COLUMN mutators TEXT;");
+        db.execSQL("ALTER TABLE Calendars ADD COLUMN mutators TEXT;");
+    }
 
     /**********************************************************/
     /* 5xx db version is for JB MR1 release
@@ -3198,6 +3214,8 @@ import java.util.TimeZone;
                 + " AS " + CalendarContract.Events._SYNC_ID + ","
                 + Tables.EVENTS + "." + CalendarContract.Events.DIRTY
                 + " AS " + CalendarContract.Events.DIRTY + ","
+                + Tables.EVENTS + "." + Events.MUTATORS
+                + " AS " + Events.MUTATORS + ","
                 + CalendarContract.Events.LAST_SYNCED + ","
                 + Tables.CALENDARS + "." + Calendars.ACCOUNT_NAME
                 + " AS " + CalendarContract.Events.ACCOUNT_NAME + ","

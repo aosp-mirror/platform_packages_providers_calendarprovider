@@ -34,6 +34,7 @@
     <uses-permission android:name="android.permission.SUBSCRIBED_FEEDS_WRITE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.UPDATE_APP_OPS_STATS" />
 
     <application android:label="@string/calendar_storage"
                  android:icon="@drawable/app_icon">

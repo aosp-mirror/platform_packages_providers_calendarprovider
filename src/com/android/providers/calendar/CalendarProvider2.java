@@ -20,6 +20,7 @@ package com.android.providers.calendar;
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.accounts.OnAccountsUpdateListener;
+import android.app.AppOpsManager;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentUris;
@@ -512,6 +513,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     @Override
     public boolean onCreate() {
         super.onCreate();
+        setAppOps(AppOpsManager.OP_READ_CALENDAR, AppOpsManager.OP_WRITE_CALENDAR);
         try {
             return initialize();
         } catch (RuntimeException e) {

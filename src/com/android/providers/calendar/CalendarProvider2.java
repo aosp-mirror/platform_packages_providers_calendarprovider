@@ -4809,6 +4809,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventEntitiesProjectionMap.put(Events.DESCRIPTION, Events.DESCRIPTION);
         sEventEntitiesProjectionMap.put(Events.STATUS, Events.STATUS);
         sEventEntitiesProjectionMap.put(Events.EVENT_COLOR, Events.EVENT_COLOR);
+        sEventEntitiesProjectionMap.put(Events.EVENT_COLOR_KEY, Events.EVENT_COLOR_KEY);
         sEventEntitiesProjectionMap.put(Events.SELF_ATTENDEE_STATUS, Events.SELF_ATTENDEE_STATUS);
         sEventEntitiesProjectionMap.put(Events.DTSTART, Events.DTSTART);
         sEventEntitiesProjectionMap.put(Events.DTEND, Events.DTEND);

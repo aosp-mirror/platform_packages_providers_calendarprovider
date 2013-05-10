@@ -28,6 +28,8 @@ LOCAL_SRC_FILES += \
 
 LOCAL_PACKAGE_NAME := CalendarProvider
 
+LOCAL_PRIVILEGED_MODULE := true
+
 # The Emma tool analyzes code coverage when running unit tests on the
 # application. This configuration line selects which packages will be analyzed,
 # leaving out code which is tested by other means (e.g. static libraries) that

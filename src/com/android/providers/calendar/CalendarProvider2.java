@@ -1844,9 +1844,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     values.put(Events.STATUS, Events.STATUS_TENTATIVE);
                 }
 
-                // We're converting from recurring to non-recurring.  Clear out RRULE and replace
-                // DURATION with DTEND.
+                // We're converting from recurring to non-recurring.
+                // Clear out RRULE, RDATE, EXRULE & EXDATE
+                // Replace DURATION with DTEND.
                 values.remove(Events.RRULE);
+                values.remove(Events.RDATE);
+                values.remove(Events.EXRULE);
+                values.remove(Events.EXDATE);
 
                 Duration duration = new Duration();
                 String durationStr = values.getAsString(Events.DURATION);

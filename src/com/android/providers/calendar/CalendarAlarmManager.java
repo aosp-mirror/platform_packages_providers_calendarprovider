@@ -495,7 +495,7 @@ public class CalendarAlarmManager {
     }
 
     public void set(int type, long triggerAtTime, PendingIntent operation) {
-        mAlarmManager.set(type, triggerAtTime, operation);
+        mAlarmManager.setExact(type, triggerAtTime, operation);
     }
 
     public void cancel(PendingIntent operation) {

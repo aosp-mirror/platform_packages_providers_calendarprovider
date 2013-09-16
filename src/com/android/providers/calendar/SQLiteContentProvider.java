@@ -26,6 +26,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.database.sqlite.SQLiteTransactionListener;
 import android.net.Uri;
+import android.os.Binder;
 import android.provider.CalendarContract;
 
 import java.util.ArrayList;
@@ -92,6 +93,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
         if (!applyingBatch) {
             mDb = mOpenHelper.getWritableDatabase();
             mDb.beginTransactionWithListener(this);
+            final long identity = Binder.clearCallingIdentity();
             try {
                 result = insertInTransaction(uri, values, isCallerSyncAdapter);
                 if (result != null) {
@@ -99,6 +101,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
                 }
                 mDb.setTransactionSuccessful();
             } finally {
+                Binder.restoreCallingIdentity(identity);
                 mDb.endTransaction();
             }
 
@@ -118,6 +121,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
         boolean isCallerSyncAdapter = getIsCallerSyncAdapter(uri);
         mDb = mOpenHelper.getWritableDatabase();
         mDb.beginTransactionWithListener(this);
+        final long identity = Binder.clearCallingIdentity();
         try {
             for (int i = 0; i < numValues; i++) {
                 Uri result = insertInTransaction(uri, values[i], isCallerSyncAdapter);
@@ -128,6 +132,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
             }
             mDb.setTransactionSuccessful();
         } finally {
+            Binder.restoreCallingIdentity(identity);
             mDb.endTransaction();
         }
 
@@ -143,6 +148,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
         if (!applyingBatch) {
             mDb = mOpenHelper.getWritableDatabase();
             mDb.beginTransactionWithListener(this);
+            final long identity = Binder.clearCallingIdentity();
             try {
                 count = updateInTransaction(uri, values, selection, selectionArgs,
                             isCallerSyncAdapter);
@@ -151,6 +157,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
                 }
                 mDb.setTransactionSuccessful();
             } finally {
+                Binder.restoreCallingIdentity(identity);
                 mDb.endTransaction();
             }
 
@@ -174,6 +181,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
         if (!applyingBatch) {
             mDb = mOpenHelper.getWritableDatabase();
             mDb.beginTransactionWithListener(this);
+            final long identity = Binder.clearCallingIdentity();
             try {
                 count = deleteInTransaction(uri, selection, selectionArgs, isCallerSyncAdapter);
                 if (count > 0) {
@@ -181,6 +189,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
                 }
                 mDb.setTransactionSuccessful();
             } finally {
+                Binder.restoreCallingIdentity(identity);
                 mDb.endTransaction();
             }
 
@@ -213,6 +222,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
         mDb = mOpenHelper.getWritableDatabase();
         mDb.beginTransactionWithListener(this);
         final boolean isCallerSyncAdapter = getIsCallerSyncAdapter(operations.get(0).getUri());
+        final long identity = Binder.clearCallingIdentity();
         try {
             mApplyingBatch.set(true);
             final ContentProviderResult[] results = new ContentProviderResult[numOperations];
@@ -229,6 +239,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
             mApplyingBatch.set(false);
             mDb.endTransaction();
             onEndTransaction(isCallerSyncAdapter);
+            Binder.restoreCallingIdentity(identity);
         }
     }
 

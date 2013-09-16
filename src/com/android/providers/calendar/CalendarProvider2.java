@@ -823,6 +823,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return queryInternal(uri, projection, selection, selectionArgs, sortOrder);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    private Cursor queryInternal(Uri uri, String[] projection, String selection,
+            String[] selectionArgs, String sortOrder) {
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "query uri - " + uri);
         }

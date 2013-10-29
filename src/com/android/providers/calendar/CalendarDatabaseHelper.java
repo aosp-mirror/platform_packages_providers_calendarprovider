@@ -24,6 +24,7 @@ import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteDoneException;
 import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Bundle;
@@ -3367,12 +3368,21 @@ import java.util.TimeZone;
      */
     protected void duplicateEvent(final long id) {
         final SQLiteDatabase db = getWritableDatabase();
-        final long canPartiallyUpdate = DatabaseUtils.longForQuery(db, "SELECT "
-                + Calendars.CAN_PARTIALLY_UPDATE + " FROM " + Views.EVENTS
-                + " WHERE " + Events._ID + " = ?", new String[] {
-            String.valueOf(id)
-        });
-        if (canPartiallyUpdate == 0) {
+        try {
+            final long canPartiallyUpdate = DatabaseUtils.longForQuery(db, "SELECT "
+                    + Calendars.CAN_PARTIALLY_UPDATE + " FROM " + Views.EVENTS
+                    + " WHERE " + Events._ID + " = ?", new String[] {
+                String.valueOf(id)
+            });
+            if (canPartiallyUpdate == 0) {
+                return;
+            }
+        } catch (SQLiteDoneException e) {
+            // b/11392862
+            // If no results are returned, this will be thrown. This can happen if the Events View
+            // has no rows for the provided id. This might happen for example if someone inserts a
+            // reminder that refers to a non existent event id.
+            // Return without doing anything because there is no event to duplicate.
             return;
         }
 

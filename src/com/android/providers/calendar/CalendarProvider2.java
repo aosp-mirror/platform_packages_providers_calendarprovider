@@ -820,6 +820,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         mContentResolver.notifyChange(CalendarContract.CONTENT_URI, null, syncToNetwork);
     }
 
+    /**
+     * ALERT table is maintained locally so don't request a sync for changes in it
+     */
+    @Override
+    protected boolean shouldSyncFor(Uri uri) {
+        final int match = sUriMatcher.match(uri);
+        return !(match == CALENDAR_ALERTS ||
+                match == CALENDAR_ALERTS_ID ||
+                match == CALENDAR_ALERTS_BY_INSTANCE);
+    }
+
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {

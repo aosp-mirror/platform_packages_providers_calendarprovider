@@ -4,6 +4,7 @@ import android.accounts.Account;
 import android.app.PendingIntent;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.net.Uri;
 import android.os.PowerManager;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -37,6 +38,11 @@ public class CalendarProvider2ForTesting extends CalendarProvider2 {
     protected void initCalendarAlarm() {
         mCalendarAlarm = new MockCalendarAlarmManager(getContext());
         mCalendarAlarm.getScheduleNextAlarmWakeLock();
+    }
+
+    @Override
+    protected boolean shouldSyncFor(Uri uri) {
+        return true;
     }
 
     private static class MockCalendarAlarmManager extends CalendarAlarmManager {

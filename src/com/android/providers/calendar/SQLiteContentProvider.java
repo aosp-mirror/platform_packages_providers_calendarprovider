@@ -105,7 +105,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
                 mDb.endTransaction();
             }
 
-            onEndTransaction(isCallerSyncAdapter);
+            onEndTransaction(!isCallerSyncAdapter && shouldSyncFor(uri));
         } else {
             result = insertInTransaction(uri, values, isCallerSyncAdapter);
             if (result != null) {
@@ -136,7 +136,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
             mDb.endTransaction();
         }
 
-        onEndTransaction(isCallerSyncAdapter);
+        onEndTransaction(!isCallerSyncAdapter);
         return numValues;
     }
 
@@ -161,7 +161,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
                 mDb.endTransaction();
             }
 
-            onEndTransaction(isCallerSyncAdapter);
+            onEndTransaction(!isCallerSyncAdapter && shouldSyncFor(uri));
         } else {
             count = updateInTransaction(uri, values, selection, selectionArgs,
                         isCallerSyncAdapter);
@@ -193,7 +193,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
                 mDb.endTransaction();
             }
 
-            onEndTransaction(isCallerSyncAdapter);
+            onEndTransaction(!isCallerSyncAdapter && shouldSyncFor(uri));
         } else {
             count = deleteInTransaction(uri, selection, selectionArgs, isCallerSyncAdapter);
             if (count > 0) {
@@ -238,7 +238,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
         } finally {
             mApplyingBatch.set(false);
             mDb.endTransaction();
-            onEndTransaction(isCallerSyncAdapter);
+            onEndTransaction(!isCallerSyncAdapter);
             Binder.restoreCallingIdentity(identity);
         }
     }
@@ -262,11 +262,16 @@ public abstract class SQLiteContentProvider extends ContentProvider
     protected void beforeTransactionCommit() {
     }
 
-    protected void onEndTransaction(boolean isCallerSyncAdapter) {
+    protected void onEndTransaction(boolean syncToNetwork) {
         if (mNotifyChange) {
             mNotifyChange = false;
             // We sync to network if the caller was not the sync adapter
-            notifyChange(!isCallerSyncAdapter);
+            notifyChange(syncToNetwork);
         }
     }
+
+    /**
+     * Some URI's are maintained locally so we should not request a sync for them
+     */
+    protected abstract boolean shouldSyncFor(Uri uri);
 }

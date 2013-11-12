@@ -561,12 +561,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     protected void initCalendarAlarm() {
         mCalendarAlarm = getOrCreateCalendarAlarmManager();
-        mCalendarAlarm.getScheduleNextAlarmWakeLock();
     }
 
     synchronized CalendarAlarmManager getOrCreateCalendarAlarmManager() {
         if (mCalendarAlarm == null) {
             mCalendarAlarm = new CalendarAlarmManager(mContext);
+            Log.i(TAG, "Created " + mCalendarAlarm + "(" + this + ")");
         }
         return mCalendarAlarm;
     }

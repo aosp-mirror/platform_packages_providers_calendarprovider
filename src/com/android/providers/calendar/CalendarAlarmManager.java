@@ -119,7 +119,7 @@ public class CalendarAlarmManager {
     /**
      * Used to keep the process from getting killed while scheduling alarms
      */
-    private WakeLock mScheduleNextAlarmWakeLock;
+    private final WakeLock mScheduleNextAlarmWakeLock;
 
     @VisibleForTesting
     protected Context mContext;
@@ -127,6 +127,17 @@ public class CalendarAlarmManager {
 
     public CalendarAlarmManager(Context context) {
         initializeWithContext(context);
+
+        PowerManager powerManager = (PowerManager) mContext.getSystemService(
+                Context.POWER_SERVICE);
+        // Create a wake lock that will be used when we are actually
+        // scheduling the next alarm
+        mScheduleNextAlarmWakeLock = powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK, SCHEDULE_NEXT_ALARM_WAKE_LOCK);
+        // We want the Wake Lock to be reference counted (so that we dont
+        // need to take care
+        // about its reference counting)
+        mScheduleNextAlarmWakeLock.setReferenceCounted(true);
     }
 
     protected void initializeWithContext(Context context) {
@@ -165,18 +176,6 @@ public class CalendarAlarmManager {
     }
 
     PowerManager.WakeLock getScheduleNextAlarmWakeLock() {
-        if (mScheduleNextAlarmWakeLock == null) {
-            PowerManager powerManager = (PowerManager) mContext.getSystemService(
-                    Context.POWER_SERVICE);
-            // Create a wake lock that will be used when we are actually
-            // scheduling the next alarm
-            mScheduleNextAlarmWakeLock = powerManager.newWakeLock(
-                    PowerManager.PARTIAL_WAKE_LOCK, SCHEDULE_NEXT_ALARM_WAKE_LOCK);
-            // We want the Wake Lock to be reference counted (so that we dont
-            // need to take care
-            // about its reference counting)
-            mScheduleNextAlarmWakeLock.setReferenceCounted(true);
-        }
         return mScheduleNextAlarmWakeLock;
     }
 

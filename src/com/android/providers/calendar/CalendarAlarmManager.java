@@ -184,7 +184,14 @@ public class CalendarAlarmManager {
     }
 
     void releaseScheduleNextAlarmWakeLock() {
-        getScheduleNextAlarmWakeLock().release();
+        try {
+            getScheduleNextAlarmWakeLock().release();
+        } catch (RuntimeException e) {
+            if (!e.getMessage().startsWith("WakeLock under-locked ")) {
+              throw e;
+            }
+            Log.w(TAG, "WakeLock under-locked ignored.");
+        }
     }
 
     void rescheduleMissedAlarms() {

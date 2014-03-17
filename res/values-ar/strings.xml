@@ -27,7 +27,7 @@
     <string name="provider_label" msgid="2306513350843464739">"التقويم"</string>
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"حذف الآن"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"بدء"</string>
-    <string name="debug_tool_message" msgid="4862486669932821937">"أنت على وشك 1) إجراء نسخة من قاعدة بيانات التقويم إلى وحدة تخزين بطاقة SD أو USB والتي يمكن قراءتها بواسطة أي تطبيق و2) إرسالها في رسالة إلكترونية. وتذكر حذفها بمجرد نسخها إلى الجهاز أو تلقيها بنجاح."</string>
+    <string name="debug_tool_message" msgid="4862486669932821937">"‏أنت على وشك 1) إجراء نسخة من قاعدة بيانات التقويم إلى وحدة تخزين بطاقة SD أو USB والتي يمكن قراءتها بواسطة أي تطبيق و2) إرسالها في رسالة إلكترونية. وتذكر حذفها بمجرد نسخها إلى الجهاز أو تلقيها بنجاح."</string>
     <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"اختر أحد البرامج لإرسال الملف"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"تم إرفاق قاعدة بيانات التقويم"</string>
     <string name="debug_tool_email_body" msgid="4835949635324134017">"تم إرفاق قاعدة بيانات التقويم وبها جميع المواعيد والمعلومات الشخصية. تعامل معها بحذر."</string>

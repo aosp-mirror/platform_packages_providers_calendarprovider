@@ -37,7 +37,8 @@
     <uses-permission android:name="android.permission.UPDATE_APP_OPS_STATS" />
 
     <application android:label="@string/calendar_storage"
-                 android:icon="@drawable/app_icon">
+                 android:icon="@drawable/app_icon"
+                 android:requiredForProfile="all">
         <!-- TODO: Remove dependency of application on the test runner
              (android.test) library. -->
         <uses-library android:name="android.test.runner" />

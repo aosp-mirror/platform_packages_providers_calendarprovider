@@ -364,8 +364,8 @@ public class CalendarAlarmManager {
                 String.valueOf(currentMillis) };
 
         String instancesTimezone = cp2.mCalendarCache.readTimezoneInstances();
-        boolean isHomeTimezone = cp2.mCalendarCache.readTimezoneType().equals(
-                CalendarCache.TIMEZONE_TYPE_HOME);
+        final String timezoneType = cp2.mCalendarCache.readTimezoneType();
+        boolean isHomeTimezone = CalendarCache.TIMEZONE_TYPE_HOME.equals(timezoneType);
         // expand this range by a day on either end to account for all day
         // events
         cp2.acquireInstanceRangeLocked(

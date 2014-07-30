@@ -773,8 +773,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     private boolean isHomeTimezone() {
-        String type = mCalendarCache.readTimezoneType();
-        return type.equals(CalendarCache.TIMEZONE_TYPE_HOME);
+        final String type = mCalendarCache.readTimezoneType();
+        return CalendarCache.TIMEZONE_TYPE_HOME.equals(type);
     }
 
     private void regenerateInstancesTable() {
@@ -1089,6 +1089,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             String sort, boolean searchByDay, boolean forceExpansion,
             String instancesTimezone, boolean isHomeTimezone) {
 
+        mDb = mDbHelper.getWritableDatabase();
         qb.setTables(INSTANCE_QUERY_TABLES);
         qb.setProjectionMap(sInstancesProjectionMap);
         if (searchByDay) {
@@ -1256,6 +1257,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             long rangeBegin, long rangeEnd, String query, String[] projection,
             String selection, String[] selectionArgs, String sort, boolean searchByDay,
             String instancesTimezone, boolean isHomeTimezone) {
+        mDb = mDbHelper.getWritableDatabase();
         qb.setTables(INSTANCE_SEARCH_QUERY_TABLES);
         qb.setProjectionMap(sInstancesProjectionMap);
 
@@ -1311,6 +1313,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private Cursor handleEventDayQuery(SQLiteQueryBuilder qb, int begin, int end,
             String[] projection, String selection, String instancesTimezone,
             boolean isHomeTimezone) {
+        mDb = mDbHelper.getWritableDatabase();
         qb.setTables(INSTANCE_QUERY_TABLES);
         qb.setProjectionMap(sInstancesProjectionMap);
         // Convert the first and last Julian day range to a range that uses
@@ -1428,14 +1431,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
             mMetaData.writeLocked(instancesTimezone, expandBegin, expandEnd);
 
-            String timezoneType = mCalendarCache.readTimezoneType();
+            final String timezoneType = mCalendarCache.readTimezoneType();
             // This may cause some double writes but guarantees the time zone in
             // the db and the time zone the instances are in is the same, which
             // future changes may affect.
             mCalendarCache.writeTimezoneInstances(instancesTimezone);
 
             // If we're in auto check if we need to fix the previous tz value
-            if (timezoneType.equals(CalendarCache.TIMEZONE_TYPE_AUTO)) {
+            if (CalendarCache.TIMEZONE_TYPE_AUTO.equals(timezoneType)) {
                 String prevTZ = mCalendarCache.readTimezoneInstancesPrevious();
                 if (TextUtils.equals(TIMEZONE_GMT, prevTZ)) {
                     mCalendarCache.writeTimezoneInstancesPrevious(instancesTimezone);
@@ -2113,6 +2116,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         final int match = sUriMatcher.match(uri);
         verifyTransactionAllowed(TRANSACTION_INSERT, uri, values, callerIsSyncAdapter, match,
                 null /* selection */, null /* selection args */);
+        mDb = mDbHelper.getWritableDatabase();
 
         long id = 0;
 
@@ -3062,6 +3066,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         final int match = sUriMatcher.match(uri);
         verifyTransactionAllowed(TRANSACTION_DELETE, uri, null, callerIsSyncAdapter, match,
                 selection, selectionArgs);
+        mDb = mDbHelper.getWritableDatabase();
 
         switch (match) {
             case SYNCSTATE:
@@ -3926,6 +3931,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         final int match = sUriMatcher.match(uri);
         verifyTransactionAllowed(TRANSACTION_UPDATE, uri, values, callerIsSyncAdapter, match,
                 selection, selectionArgs);
+        mDb = mDbHelper.getWritableDatabase();
 
         switch (match) {
             case SYNCSTATE:
@@ -4983,9 +4989,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * Makes sure there are no entries for accounts that no longer exist.
      */
     private void removeStaleAccounts(Account[] accounts) {
-        if (mDb == null) {
-            mDb = mDbHelper.getWritableDatabase();
-        }
+        mDb = mDbHelper.getWritableDatabase();
         if (mDb == null) {
             return;
         }

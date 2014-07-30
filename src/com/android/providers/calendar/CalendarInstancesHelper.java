@@ -59,7 +59,6 @@ public class CalendarInstancesHelper {
 
     private static final String TAG = "CalInstances";
     private CalendarDatabaseHelper mDbHelper;
-    private SQLiteDatabase mDb;
     private MetaData mMetaData;
     private CalendarCache mCalendarCache;
 
@@ -130,7 +129,6 @@ public class CalendarInstancesHelper {
 
     public CalendarInstancesHelper(CalendarDatabaseHelper calendarDbHelper, MetaData metaData) {
         mDbHelper = calendarDbHelper;
-        mDb = mDbHelper.getWritableDatabase();
         mMetaData = metaData;
         mCalendarCache = new CalendarCache(mDbHelper);
     }
@@ -592,7 +590,8 @@ public class CalendarInstancesHelper {
                 "0", // Calendars.SYNC_EVENTS
                 "0", // Events.LAST_SYNCED
         };
-        Cursor c = qb.query(mDb, EXPAND_COLUMNS, null /* selection */, selectionArgs,
+        final SQLiteDatabase db = mDbHelper.getReadableDatabase();
+        Cursor c = qb.query(db, EXPAND_COLUMNS, null /* selection */, selectionArgs,
                 null /* groupBy */, null /* having */, null /* sortOrder */);
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "Instance expansion:  got " + c.getCount() + " entries");
@@ -858,7 +857,8 @@ public class CalendarInstancesHelper {
             Log.v(TAG, "Retrieving events to expand: " + qb.toString());
         }
 
-        return qb.query(mDb, EXPAND_COLUMNS, null /* selection */, selectionArgs,
+        final SQLiteDatabase db = mDbHelper.getReadableDatabase();
+        return qb.query(db, EXPAND_COLUMNS, null /* selection */, selectionArgs,
                 null /* groupBy */, null /* having */, null /* sortOrder */);
     }
 

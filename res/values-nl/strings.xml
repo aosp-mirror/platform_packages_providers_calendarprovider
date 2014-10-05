@@ -28,7 +28,7 @@
     <string name="debug_tool_delete_button" msgid="5052706251268452090">"Nu verwijderen"</string>
     <string name="debug_tool_start_button" msgid="5384780896342913563">"Starten"</string>
     <string name="debug_tool_message" msgid="4862486669932821937">"Je staat op het punt 1) een kopie van je agenda-database te maken op de SD-kaart/USB-opslag die kan worden gelezen via een app en 2) deze te e-mailen. Verwijder de kopie zodra je deze van het apparaat hebt gekopieerd of de e-mail is ontvangen."</string>
-    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Selecteer een programma om uw bestand te verzenden"</string>
+    <string name="debug_tool_email_sender_picker" msgid="2000311987477419397">"Selecteer een programma om je bestand te verzenden"</string>
     <string name="debug_tool_email_subject" msgid="2403590332256471194">"Database voor Agenda bijgevoegd"</string>
     <string name="debug_tool_email_body" msgid="4835949635324134017">"Bijgevoegd vindt u mijn Agenda-database met al mijn afspraken en persoonlijke gegevens. Gelieve hier zorgvuldig mee om te gaan."</string>
 </resources>

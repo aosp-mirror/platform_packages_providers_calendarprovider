@@ -27,6 +27,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 import android.database.sqlite.SQLiteTransactionListener;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Process;
 import android.provider.CalendarContract;
 
 import java.util.ArrayList;
@@ -93,7 +94,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
         if (!applyingBatch) {
             mDb = mOpenHelper.getWritableDatabase();
             mDb.beginTransactionWithListener(this);
-            final long identity = Binder.clearCallingIdentity();
+            final long identity = clearCallingIdentityInternal();
             try {
                 result = insertInTransaction(uri, values, isCallerSyncAdapter);
                 if (result != null) {
@@ -101,7 +102,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
                 }
                 mDb.setTransactionSuccessful();
             } finally {
-                Binder.restoreCallingIdentity(identity);
+                restoreCallingIdentityInternal(identity);
                 mDb.endTransaction();
             }
 
@@ -121,7 +122,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
         boolean isCallerSyncAdapter = getIsCallerSyncAdapter(uri);
         mDb = mOpenHelper.getWritableDatabase();
         mDb.beginTransactionWithListener(this);
-        final long identity = Binder.clearCallingIdentity();
+        final long identity = clearCallingIdentityInternal();
         try {
             for (int i = 0; i < numValues; i++) {
                 Uri result = insertInTransaction(uri, values[i], isCallerSyncAdapter);
@@ -132,7 +133,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
             }
             mDb.setTransactionSuccessful();
         } finally {
-            Binder.restoreCallingIdentity(identity);
+            restoreCallingIdentityInternal(identity);
             mDb.endTransaction();
         }
 
@@ -148,7 +149,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
         if (!applyingBatch) {
             mDb = mOpenHelper.getWritableDatabase();
             mDb.beginTransactionWithListener(this);
-            final long identity = Binder.clearCallingIdentity();
+            final long identity = clearCallingIdentityInternal();
             try {
                 count = updateInTransaction(uri, values, selection, selectionArgs,
                             isCallerSyncAdapter);
@@ -157,7 +158,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
                 }
                 mDb.setTransactionSuccessful();
             } finally {
-                Binder.restoreCallingIdentity(identity);
+                restoreCallingIdentityInternal(identity);
                 mDb.endTransaction();
             }
 
@@ -181,7 +182,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
         if (!applyingBatch) {
             mDb = mOpenHelper.getWritableDatabase();
             mDb.beginTransactionWithListener(this);
-            final long identity = Binder.clearCallingIdentity();
+            final long identity = clearCallingIdentityInternal();
             try {
                 count = deleteInTransaction(uri, selection, selectionArgs, isCallerSyncAdapter);
                 if (count > 0) {
@@ -189,7 +190,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
                 }
                 mDb.setTransactionSuccessful();
             } finally {
-                Binder.restoreCallingIdentity(identity);
+                restoreCallingIdentityInternal(identity);
                 mDb.endTransaction();
             }
 
@@ -222,7 +223,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
         mDb = mOpenHelper.getWritableDatabase();
         mDb.beginTransactionWithListener(this);
         final boolean isCallerSyncAdapter = getIsCallerSyncAdapter(operations.get(0).getUri());
-        final long identity = Binder.clearCallingIdentity();
+        final long identity = clearCallingIdentityInternal();
         try {
             mApplyingBatch.set(true);
             final ContentProviderResult[] results = new ContentProviderResult[numOperations];
@@ -239,7 +240,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
             mApplyingBatch.set(false);
             mDb.endTransaction();
             onEndTransaction(!isCallerSyncAdapter);
-            Binder.restoreCallingIdentity(identity);
+            restoreCallingIdentityInternal(identity);
         }
     }
 
@@ -274,4 +275,58 @@ public abstract class SQLiteContentProvider extends ContentProvider
      * Some URI's are maintained locally so we should not request a sync for them
      */
     protected abstract boolean shouldSyncFor(Uri uri);
+
+    /** The package to most recently query(), not including further internally recursive calls. */
+    private final ThreadLocal<String> mCallingPackage = new ThreadLocal<String>();
+
+    /**
+     * The calling Uid when a calling package is cached, so we know when the stack of any
+     * recursive calls to clearCallingIdentity and restoreCallingIdentity is complete.
+     */
+    private final ThreadLocal<Integer> mOriginalCallingUid = new ThreadLocal<Integer>();
+
+
+    protected String getCachedCallingPackage() {
+        return mCallingPackage.get();
+    }
+
+    /**
+     * Call {@link android.os.Binder#clearCallingIdentity()}, while caching the calling package
+     * name, so that it can be saved if this is part of an event mutation.
+     */
+    protected long clearCallingIdentityInternal() {
+        // Only set the calling package if the calling UID is not our own.
+        int uid = Process.myUid();
+        int callingUid = Binder.getCallingUid();
+        if (uid != callingUid) {
+            try {
+                mOriginalCallingUid.set(callingUid);
+                String callingPackage = getCallingPackage();
+                mCallingPackage.set(callingPackage);
+            } catch (SecurityException e) {
+                // If this exception is thrown, clearCallingIdentity has already been called, and
+                // calling package is already available.
+            }
+        }
+
+        return Binder.clearCallingIdentity();
+    }
+
+    /**
+     * Call {@link Binder#restoreCallingIdentity(long)}.
+     * </p>
+     * If this is the last restore on the stack of calls to
+     * {@link android.os.Binder#clearCallingIdentity()}, then the cached calling package will also
+     * be cleared.
+     * @param identity
+     */
+    protected void restoreCallingIdentityInternal(long identity) {
+        Binder.restoreCallingIdentity(identity);
+
+        int callingUid = Binder.getCallingUid();
+        if (mOriginalCallingUid.get() != null && mOriginalCallingUid.get() == callingUid) {
+            mCallingPackage.set(null);
+            mOriginalCallingUid.set(null);
+        }
+    }
 }

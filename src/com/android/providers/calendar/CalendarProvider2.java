@@ -834,11 +834,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
-        final long identity = Binder.clearCallingIdentity();
+        final long identity = clearCallingIdentityInternal();
         try {
             return queryInternal(uri, projection, selection, selectionArgs, sortOrder);
         } finally {
-            Binder.restoreCallingIdentity(identity);
+            restoreCallingIdentityInternal(identity);
         }
     }
 
@@ -5074,6 +5074,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     private String getCallingPackageName() {
+        if (getCachedCallingPackage() != null) {
+            // If the calling package is null, use the best available as a fallback.
+            return getCachedCallingPackage();
+        }
+
         final PackageManager pm = getContext().getPackageManager();
         final int uid = Binder.getCallingUid();
         final String[] packages = pm.getPackagesForUid(uid);

@@ -19,9 +19,6 @@
     <!-- Title for the Calendar Storage process. -->
     <string name="calendar_storage">Calendar Storage</string>
 
-    <!-- [CHAR LIMIT=NONE] Boot message while upgrading calendar. -->
-    <string name="upgrade_msg">Upgrading Calendar database.</string>
-
     <!-- Temporary Calendar name to use before we have the calendar name from the server -->
     <string name="calendar_default_name">Default</string>
 

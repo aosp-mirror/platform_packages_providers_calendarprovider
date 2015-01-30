@@ -67,11 +67,6 @@ public class CalendarUpgradeReceiver extends BroadcastReceiver {
                 CalendarDatabaseHelper helper = CalendarDatabaseHelper.getInstance(context);
                 if (context.getDatabasePath(helper.getDatabaseName()).exists()) {
                     Log.i(TAG, "Creating or opening calendar database");
-                    try {
-                        ActivityManagerNative.getDefault().showBootMessage(
-                                context.getText(R.string.upgrade_msg), true);
-                    } catch (RemoteException e) {
-                    }
                     helper.getWritableDatabase();
                 }
                 helper.close();

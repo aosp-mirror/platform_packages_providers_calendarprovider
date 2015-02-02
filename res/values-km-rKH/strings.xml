@@ -17,7 +17,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="calendar_storage" msgid="5387668002987562770">"ឧបករណ៍​ផ្ទុក​ប្រតិទិន"</string>
-    <string name="upgrade_msg" msgid="2792831029435070926">"ធ្វើ​បច្ចុប្បន្នភាព​មូលដ្ឋាន​ទិន្នន័យ​ប្រតិទិន។"</string>
     <string name="calendar_default_name" msgid="6924293766625167275">"លំនាំដើម"</string>
     <string name="calendar_info" msgid="6687678621418059281">"ព័ត៌មាន​ប្រតិទិន"</string>
     <string name="calendar_info_error" msgid="5575162446528419982">"កំហុស"</string>

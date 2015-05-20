@@ -31,6 +31,7 @@ import android.database.MatrixCursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
+import android.provider.BaseColumns;
 import android.provider.CalendarContract;
 import android.provider.CalendarContract.Calendars;
 import android.provider.CalendarContract.Colors;
@@ -3079,4 +3080,48 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 new String[] { Integer.toString(calId1), "Calendar1" });
         checkCalendarCount(0);
     }
+
+    public void testGetColumnIndex_IsPrimary() {
+        checkCalendarCount(0);
+        int calendarId0 = insertCal("Calendar0", DEFAULT_TIMEZONE);
+
+        String[] projection = new String[] {
+            Calendars.ACCOUNT_NAME,
+            Calendars.CALENDAR_DISPLAY_NAME,
+            Calendars.OWNER_ACCOUNT,
+            Calendars.IS_PRIMARY
+        };
+        String selection = "((" + Calendars.ACCOUNT_NAME + " = ? ))";
+        String[] selectionArgs = new String[] {
+            DEFAULT_ACCOUNT
+        };
+        Cursor cursor = mResolver.query(Calendars.CONTENT_URI, projection, selection, selectionArgs,
+                null);
+        assertNotNull(cursor);
+        assertEquals(3, cursor.getColumnIndex(Calendars.IS_PRIMARY));
+        cursor.close();
+        deleteMatchingCalendars(Calendars._ID + "=" + calendarId0, null /* selectionArgs*/);
+        checkCalendarCount(0);
+    }
+
+    public void testGetColumnIndex_Count() {
+        checkCalendarCount(0);
+        int calendarId0 = insertCal("Calendar0", DEFAULT_TIMEZONE);
+
+        String[] projection = new String[] {
+            BaseColumns._COUNT
+        };
+        String selection = "((" + Calendars.ACCOUNT_NAME + " = ? ))";
+        String[] selectionArgs = new String[] {
+            DEFAULT_ACCOUNT
+        };
+        Cursor cursor = mResolver.query(Calendars.CONTENT_URI, projection, selection, selectionArgs,
+                null);
+        assertNotNull(cursor);
+        assertEquals(0, cursor.getColumnIndex(BaseColumns._COUNT));
+        cursor.close();
+        deleteMatchingCalendars(Calendars._ID + "=" + calendarId0, null /* selectionArgs*/);
+        checkCalendarCount(0);
+    }
+
 }

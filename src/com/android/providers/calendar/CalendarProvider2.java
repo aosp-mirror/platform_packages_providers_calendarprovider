@@ -4697,7 +4697,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         /** Contains just BaseColumns._COUNT */
         sCountProjectionMap = new HashMap<String, String>();
-        sCountProjectionMap.put(BaseColumns._COUNT, "COUNT(*)");
+        sCountProjectionMap.put(BaseColumns._COUNT, "COUNT(*) AS " + BaseColumns._COUNT);
 
         sColorsProjectionMap = new HashMap<String, String>();
         sColorsProjectionMap.put(Colors._ID, Colors._ID);
@@ -4729,7 +4729,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sCalendarsProjectionMap.put(Calendars.OWNER_ACCOUNT, Calendars.OWNER_ACCOUNT);
         sCalendarsProjectionMap.put(Calendars.IS_PRIMARY,
                 "COALESCE(" + Events.IS_PRIMARY + ", "
-                        + Calendars.OWNER_ACCOUNT + " = " + Calendars.ACCOUNT_NAME + ")");
+                        + Calendars.OWNER_ACCOUNT + " = " + Calendars.ACCOUNT_NAME + ") AS "
+                        + Calendars.IS_PRIMARY);
         sCalendarsProjectionMap.put(Calendars.CAN_ORGANIZER_RESPOND,
                 Calendars.CAN_ORGANIZER_RESPOND);
         sCalendarsProjectionMap.put(Calendars.CAN_MODIFY_TIME_ZONE, Calendars.CAN_MODIFY_TIME_ZONE);

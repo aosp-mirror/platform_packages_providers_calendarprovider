@@ -23,6 +23,8 @@ import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ProviderInfo;
 import android.content.res.Resources;
 import android.database.Cursor;
 import android.database.MatrixCursor;
@@ -145,6 +147,11 @@ public class CalendarProvider2Test extends AndroidTestCase {
         @Override
         public boolean stopService(Intent service) {
             return false;
+        }
+
+        @Override
+        public PackageManager getPackageManager() {
+            return getContext().getPackageManager();
         }
     }
 
@@ -945,10 +952,21 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 new MockContext2(), // The context that most methods are delegated to
                 getContext(), // The context that file methods are delegated to
                 filenamePrefix);
-        mContext = new IsolatedContext(mResolver, targetContextWrapper);
+        mContext = new IsolatedContext(mResolver, targetContextWrapper) {
+            @Override
+            public Object getSystemService(String name) {
+                // for accessing wakelock.
+                if (Context.POWER_SERVICE.equals(name)) {
+                    return getContext().getSystemService(name);
+                }
+                return super.getSystemService(name);
+            }
+        };
 
         mProvider = new CalendarProvider2ForTesting();
-        mProvider.attachInfo(mContext, null);
+        ProviderInfo info = new ProviderInfo();
+        info.authority = CalendarContract.AUTHORITY;
+        mProvider.attachInfoForTesting(mContext, info);
 
         mResolver.addProvider(CalendarContract.AUTHORITY, mProvider);
         mResolver.addProvider("subscribedfeeds", new MockProvider("subscribedfeeds"));
@@ -1339,7 +1357,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 .appendQueryParameter(Calendars.ACCOUNT_NAME, account)
                 .appendQueryParameter(Calendars.ACCOUNT_TYPE, accountType).build();
     }
-    
+
     public void testInsertUpdateDeleteColor() throws Exception {
         // Calendar Color
         long colorType = Colors.TYPE_CALENDAR;
@@ -1735,26 +1753,20 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
     @SmallTest @Smoke
     public void testConstructSearchArgs() {
-        long rangeBegin = 0;
-        long rangeEnd = 10;
-
         String[] tokens = new String[] {"red"};
-        String[] expected = new String[] {"10", "0", "%red%", "%red%",
+        String[] expected = new String[] {"%red%", "%red%",
                 "%red%", "%red%", "%red%" };
-        assertArrayEquals(expected, mProvider.constructSearchArgs(tokens,
-                rangeBegin, rangeEnd));
+        assertArrayEquals(expected, mProvider.constructSearchArgs(tokens));
 
         tokens = new String[] {"red", "blue"};
-        expected = new String[] { "10", "0", "%red%", "%red%", "%red%",
+        expected = new String[] { "%red%", "%red%", "%red%",
                 "%red%", "%red%", "%blue%", "%blue%",
                 "%blue%", "%blue%","%blue%"};
-        assertArrayEquals(expected, mProvider.constructSearchArgs(tokens,
-                rangeBegin, rangeEnd));
+        assertArrayEquals(expected, mProvider.constructSearchArgs(tokens));
 
         tokens = new String[] {};
-        expected = new String[] {"10", "0" };
-        assertArrayEquals(expected, mProvider.constructSearchArgs(tokens,
-                rangeBegin, rangeEnd));
+        expected = new String[] {};
+        assertArrayEquals(expected, mProvider.constructSearchArgs(tokens));
     }
 
     public void testInstanceSearchQuery() throws Exception {
@@ -1950,7 +1962,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
         assertEquals(0, deletes);
     }
-    
+
     public void testCalendarAlerts() throws Exception {
         // This projection is from AlertActivity; want to make sure it works.
         String[] projection = new String[] {
@@ -1967,11 +1979,17 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 CalendarContract.CalendarAlerts.STATE,            // 10
                 CalendarContract.CalendarAlerts.ALARM_TIME,       // 11
         };
-        testInsertNormalEvents(); // To initialize
 
-        Uri alertUri = CalendarContract.CalendarAlerts.insert(mResolver, 1 /* eventId */,
+        mCalendarId = insertCal("CalendarTestAttendees", DEFAULT_TIMEZONE);
+        String calendarIdString = Integer.toString(mCalendarId);
+        checkEvents(0, mDb, calendarIdString);
+        Uri eventUri = insertEvent(mCalendarId, findEvent("normal0"));
+        checkEvents(1, mDb, calendarIdString);
+        long eventId = ContentUris.parseId(eventUri);
+
+        Uri alertUri = CalendarContract.CalendarAlerts.insert(mResolver, eventId /* eventId */,
                 2 /* begin */, 3 /* end */, 4 /* alarmTime */, 5 /* minutes */);
-        CalendarContract.CalendarAlerts.insert(mResolver, 1 /* eventId */,
+        CalendarContract.CalendarAlerts.insert(mResolver, eventId /* eventId */,
                 2 /* begin */, 7 /* end */, 8 /* alarmTime */, 9 /* minutes */);
 
         // Regular query
@@ -2279,7 +2297,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                             DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE), extended);
             testAndClearDirty(eventId, syncAdapter ? 0 : 1);
             testQueryCount(CalendarContract.ExtendedProperties.CONTENT_URI,
-                    "event_id=" + eventId, 2);
+                    "event_id=" + eventId, 1);
         } else {
             // Confirm that inserting as app fails.
             try {
@@ -2324,7 +2342,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                     null /* where */, null /* selectionArgs */));
             testAndClearDirty(eventId, syncAdapter ? 0 : 1);
             testQueryCount(CalendarContract.ExtendedProperties.CONTENT_URI,
-                    "event_id=" + eventId, 2);
+                    "event_id=" + eventId, 1);
         }
 
         // Now test deletes
@@ -2356,7 +2374,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
                     null /* where */, null /* selectionArgs */));
 
             testAndClearDirty(eventId, syncAdapter ? 0 : 1);
-            testQueryCount(CalendarContract.ExtendedProperties.CONTENT_URI, "event_id=" + eventId, 1);
+            testQueryCount(CalendarContract.ExtendedProperties.CONTENT_URI, "event_id=" + eventId,
+                    0);
         }
     }
 
@@ -2815,8 +2834,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
     public static final Uri PROPERTIES_CONTENT_URI =
             Uri.parse("content://" + CalendarContract.AUTHORITY + "/properties");
 
-    public static final int COLUMN_KEY_INDEX = 1;
-    public static final int COLUMN_VALUE_INDEX = 0;
+    public static final int COLUMN_KEY_INDEX = 0;
+    public static final int COLUMN_VALUE_INDEX = 1;
 
     public void testGetProviderProperties() throws CalendarCache.CacheException {
         CalendarDatabaseHelper helper = (CalendarDatabaseHelper) getProvider().getDatabaseHelper();
@@ -2926,51 +2945,6 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 new String[] {key});
 
         assertEquals(1, result);
-    }
-
-    public void testInsertOriginalTimezoneInExtProperties() throws Exception {
-        int calId = insertCal("Calendar0", DEFAULT_TIMEZONE);
-
-
-        EventInfo[] events = { new EventInfo("normal0",
-                                        "2008-05-01T00:00:00",
-                                        "2008-05-02T00:00:00",
-                                        false,
-                                        DEFAULT_TIMEZONE) };
-
-        Uri eventUri = insertEvent(calId, events[0]);
-        assertNotNull(eventUri);
-
-        long eventId = ContentUris.parseId(eventUri);
-        assertTrue(eventId > -1);
-
-        // check the inserted event
-        checkEvent(1, events[0].mTitle, events[0].mDtstart, events[0].mDtend, events[0].mAllDay);
-
-        // Should have 1 calendars and 1 event
-        testQueryCount(CalendarContract.Calendars.CONTENT_URI, null /* where */, 1);
-        testQueryCount(CalendarContract.Events.CONTENT_URI, null /* where */, 1);
-
-        // Verify that the original timezone is correct
-        Cursor cursor = mResolver.query(CalendarContract.ExtendedProperties.CONTENT_URI,
-                null/* projection */,
-                "event_id=" + eventId,
-                null /* selectionArgs */,
-                null /* sortOrder */);
-        try {
-            // Should have 1 extended property for the original timezone
-            assertEquals(1, cursor.getCount());
-
-            if (cursor.moveToFirst()) {
-                long id = cursor.getLong(1);
-                assertEquals(id, eventId);
-
-                assertEquals(CalendarProvider2.EXT_PROP_ORIGINAL_TIMEZONE, cursor.getString(2));
-                assertEquals(DEFAULT_TIMEZONE, cursor.getString(3));
-            }
-        } finally {
-            cursor.close();
-        }
     }
 
     /**

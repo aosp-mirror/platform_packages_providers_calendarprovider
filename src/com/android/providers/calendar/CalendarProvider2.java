@@ -2174,8 +2174,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 if (updatedValues.containsKey(Events.ORIGINAL_SYNC_ID)
                         && !updatedValues.containsKey(Events.ORIGINAL_ID)) {
-                    long originalId = getOriginalId(updatedValues.getAsString(
-                                    Events.ORIGINAL_SYNC_ID),
+                    long originalId = getOriginalId(updatedValues
+                            .getAsString(Events.ORIGINAL_SYNC_ID),
                             updatedValues.getAsString(Events.CALENDAR_ID));
                     if (originalId != -1) {
                         updatedValues.put(Events.ORIGINAL_ID, originalId);
@@ -2284,10 +2284,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 id = mDbHelper.colorsInsert(values);
                 break;
-            case ATTENDEES:
+            case ATTENDEES: {
                 if (!values.containsKey(Attendees.EVENT_ID)) {
                     throw new IllegalArgumentException("Attendees values must "
                             + "contain an event_id");
+                }
+                Long eventIdObj = values.getAsLong(Reminders.EVENT_ID);
+                if (!doesEventExist(eventIdObj)) {
+                    Log.i(TAG, "Trying to insert a attendee to a non-existent event");
+                    return null;
                 }
                 if (!callerIsSyncAdapter) {
                     final Long eventId = values.getAsLong(Attendees.EVENT_ID);
@@ -2299,13 +2304,18 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // Copy the attendee status value to the Events table.
                 updateEventAttendeeStatus(mDb, values);
                 break;
-            case REMINDERS:
-            {
+            }
+            case REMINDERS: {
                 Long eventIdObj = values.getAsLong(Reminders.EVENT_ID);
                 if (eventIdObj == null) {
                     throw new IllegalArgumentException("Reminders values must "
                             + "contain a numeric event_id");
                 }
+                if (!doesEventExist(eventIdObj)) {
+                    Log.i(TAG, "Trying to insert a reminder to a non-existent event");
+                    return null;
+                }
+
                 if (!callerIsSyncAdapter) {
                     mDbHelper.duplicateEvent(eventIdObj);
                     setEventDirty(eventIdObj);
@@ -2322,19 +2332,31 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
                 break;
             }
-            case CALENDAR_ALERTS:
-                if (!values.containsKey(CalendarAlerts.EVENT_ID)) {
+            case CALENDAR_ALERTS: {
+                Long eventIdObj = values.getAsLong(Reminders.EVENT_ID);
+                if (eventIdObj == null) {
                     throw new IllegalArgumentException("CalendarAlerts values must "
-                            + "contain an event_id");
+                            + "contain a numeric event_id");
+                }
+                if (!doesEventExist(eventIdObj)) {
+                    Log.i(TAG, "Trying to insert an alert to a non-existent event");
+                    return null;
                 }
                 id = mDbHelper.calendarAlertsInsert(values);
                 // Note: dirty bit is not set for Alerts because it is not synced.
                 // It is generated from Reminders, which is synced.
                 break;
-            case EXTENDED_PROPERTIES:
-                if (!values.containsKey(CalendarContract.ExtendedProperties.EVENT_ID)) {
+            }
+            case EXTENDED_PROPERTIES: {
+                Long eventIdObj = values.getAsLong(Reminders.EVENT_ID);
+                if (eventIdObj == null) {
                     throw new IllegalArgumentException("ExtendedProperties values must "
-                            + "contain an event_id");
+                            + "contain a numeric event_id");
+                }
+                if (!doesEventExist(eventIdObj)) {
+                    Log.i(TAG, "Trying to insert extended properties to a non-existent event id = "
+                            + eventIdObj);
+                    return null;
                 }
                 if (!callerIsSyncAdapter) {
                     final Long eventId = values
@@ -2344,6 +2366,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 id = mDbHelper.extendedPropertiesInsert(values);
                 break;
+            }
             case EMMA:
                 // Special target used during code-coverage evaluation.
                 handleEmmaRequest(values);
@@ -2364,8 +2387,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (id < 0) {
             return null;
         }
-
         return ContentUris.withAppendedId(uri, id);
+    }
+
+    private boolean doesEventExist(long eventId) {
+        return DatabaseUtils.queryNumEntries(mDb, Tables.EVENTS, Events._ID + "=?",
+                new String[]{String.valueOf(eventId)}) > 0;
     }
 
     /**

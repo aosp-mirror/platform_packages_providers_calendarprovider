@@ -2014,6 +2014,50 @@ public class CalendarProvider2Test extends AndroidTestCase {
         cursor.close();
     }
 
+    public void testInsertAlertToNonExistentEvent() {
+        Uri alertUri = CalendarContract.CalendarAlerts.insert(mResolver, 1 /* eventId */,
+                2 /* begin */, 3 /* end */, 4 /* alarmTime */, 5 /* minutes */);
+        assertEquals(null, alertUri);
+    }
+
+    public void testInsertReminderToNonExistentEvent() {
+        ContentValues reminder = new ContentValues();
+        reminder.put(CalendarContract.Reminders.MINUTES, 30);
+        reminder.put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_EMAIL);
+        reminder.put(CalendarContract.Attendees.EVENT_ID, 1);
+        Uri reminderUri = mResolver.insert(
+                updatedUri(CalendarContract.Reminders.CONTENT_URI, true, DEFAULT_ACCOUNT,
+                        DEFAULT_ACCOUNT_TYPE), reminder);
+        assertEquals(null, reminderUri);
+    }
+
+    public void testInsertAttendeeToNonExistentEvent() {
+        ContentValues attendee = new ContentValues();
+        attendee.put(CalendarContract.Attendees.ATTENDEE_NAME, "Joe");
+        attendee.put(CalendarContract.Attendees.ATTENDEE_EMAIL, DEFAULT_ACCOUNT);
+        attendee.put(CalendarContract.Attendees.ATTENDEE_TYPE,
+                CalendarContract.Attendees.TYPE_REQUIRED);
+        attendee.put(CalendarContract.Attendees.ATTENDEE_RELATIONSHIP,
+                CalendarContract.Attendees.RELATIONSHIP_ORGANIZER);
+        attendee.put(CalendarContract.Attendees.EVENT_ID, 1);
+        attendee.put(CalendarContract.Attendees.ATTENDEE_IDENTITY, "ID1");
+        attendee.put(CalendarContract.Attendees.ATTENDEE_ID_NAMESPACE, "IDNS1");
+        Uri attendeesUri = mResolver.insert(CalendarContract.Attendees.CONTENT_URI, attendee);
+        assertEquals(null, attendeesUri);
+    }
+
+    public void testInsertExtendedPropertyToNonExistentEvent() {
+        ContentValues extended = new ContentValues();
+        extended.put(CalendarContract.ExtendedProperties.NAME, "foo");
+        extended.put(CalendarContract.ExtendedProperties.VALUE, "bar");
+        extended.put(CalendarContract.ExtendedProperties.EVENT_ID, 1);
+
+        Uri extendedUri = mResolver.insert(
+                updatedUri(CalendarContract.ExtendedProperties.CONTENT_URI, true,
+                        DEFAULT_ACCOUNT, DEFAULT_ACCOUNT_TYPE), extended);
+        assertEquals(null, extendedUri);
+    }
+
     void checkEvents(int count, SQLiteDatabase db) {
         Cursor cursor = db.query("Events", null, null, null, null, null, null);
         try {

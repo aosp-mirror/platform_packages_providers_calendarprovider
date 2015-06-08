@@ -179,14 +179,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private CalendarDatabaseHelper mDbHelper;
     private CalendarInstancesHelper mInstancesHelper;
 
-    // The extended property name for storing an Event original Timezone.
-    // Due to an issue in Calendar Server restricting the length of the name we
-    // had to strip it down
-    // TODO - Better name would be:
-    // "com.android.providers.calendar.CalendarSyncAdapter#originalTimezone"
-    protected static final String EXT_PROP_ORIGINAL_TIMEZONE =
-        "CalendarSyncAdapter#originalTimezone";
-
     private static final String SQL_SELECT_EVENTSRAWTIMES = "SELECT " +
             CalendarContract.EventsRawTimes.EVENT_ID + ", " +
             CalendarContract.EventsRawTimes.DTSTART_2445 + ", " +
@@ -1088,7 +1080,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             long rangeEnd, String[] projection, String selection, String[] selectionArgs,
             String sort, boolean searchByDay, boolean forceExpansion,
             String instancesTimezone, boolean isHomeTimezone) {
-
         mDb = mDbHelper.getWritableDatabase();
         qb.setTables(INSTANCE_QUERY_TABLES);
         qb.setProjectionMap(sInstancesProjectionMap);
@@ -1116,8 +1107,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (selectionArgs == null) {
             selectionArgs = newSelectionArgs;
         } else {
-            // The appendWhere pieces get added first, so put the
-            // newSelectionArgs first.
             selectionArgs = combine(newSelectionArgs, selectionArgs);
         }
         return qb.query(mDb, projection, selection, selectionArgs, null /* groupBy */,
@@ -1237,15 +1226,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     @VisibleForTesting
-    String[] constructSearchArgs(String[] tokens, long rangeBegin, long rangeEnd) {
+    String[] constructSearchArgs(String[] tokens) {
         int numCols = SEARCH_COLUMNS.length;
-        int numArgs = tokens.length * numCols + 2;
-        // the additional two elements here are for begin/end time
+        int numArgs = tokens.length * numCols;
         String[] selectionArgs = new String[numArgs];
-        selectionArgs[0] =  String.valueOf(rangeEnd);
-        selectionArgs[1] =  String.valueOf(rangeBegin);
         for (int j = 0; j < tokens.length; j++) {
-            int start = 2 + numCols * j;
+            int start = numCols * j;
             for (int i = start; i < start + numCols; i++) {
                 selectionArgs[i] = "%" + tokens[j] + "%";
             }
@@ -1262,13 +1248,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         qb.setProjectionMap(sInstancesProjectionMap);
 
         String[] tokens = tokenizeSearchQuery(query);
-        String[] newSelectionArgs = constructSearchArgs(tokens, rangeBegin, rangeEnd);
+        String[] searchArgs = constructSearchArgs(tokens);
+        String[] timeRange = new String[] {String.valueOf(rangeEnd), String.valueOf(rangeBegin)};
         if (selectionArgs == null) {
-            selectionArgs = newSelectionArgs;
+            selectionArgs = combine(timeRange, searchArgs);
         } else {
-            // The appendWhere pieces get added first, so put the
-            // newSelectionArgs first.
-            selectionArgs = combine(newSelectionArgs, selectionArgs);
+            // where clause comes first, so put selectionArgs before searchArgs.
+            selectionArgs = combine(timeRange, selectionArgs, searchArgs);
         }
         // we pass this in as a HAVING instead of a WHERE so the filtering
         // happens after the grouping
@@ -1304,7 +1290,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             );
             qb.appendWhere(SQL_WHERE_INSTANCES_BETWEEN);
         }
-
         return qb.query(mDb, projection, selection, selectionArgs,
                 Tables.INSTANCES + "." + Instances._ID /* groupBy */,
                 searchWhere /* having */, sort);
@@ -2189,8 +2174,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
                 if (updatedValues.containsKey(Events.ORIGINAL_SYNC_ID)
                         && !updatedValues.containsKey(Events.ORIGINAL_ID)) {
-                    long originalId = getOriginalId(updatedValues
-                            .getAsString(Events.ORIGINAL_SYNC_ID),
+                    long originalId = getOriginalId(updatedValues.getAsString(
+                                    Events.ORIGINAL_SYNC_ID),
                             updatedValues.getAsString(Events.CALENDAR_ID));
                     if (originalId != -1) {
                         updatedValues.put(Events.ORIGINAL_ID, originalId);
@@ -3343,13 +3328,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // event that we just duplicated on the previous iteration.
                 if (eventId != prevEventId) {
                     mDbHelper.duplicateEvent(eventId);
-                    prevEventId = eventId;
                 }
                 mDb.delete(table, SQL_WHERE_ID, new String[]{String.valueOf(id)});
                 if (eventId != prevEventId) {
                     mDb.update(Tables.EVENTS, dirtyValues, SQL_WHERE_ID,
                             new String[] { String.valueOf(eventId)} );
                 }
+                prevEventId = eventId;
                 count++;
             }
         } finally {

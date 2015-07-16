@@ -28,6 +28,7 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
+import android.os.Build;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 import android.os.SystemClock;
@@ -57,11 +58,21 @@ public class CalendarAlarmManager {
     // TODO: use a service to schedule alarms rather than private URI
     /* package */static final String SCHEDULE_ALARM_PATH = "schedule_alarms";
     /* package */static final String SCHEDULE_ALARM_REMOVE_PATH = "schedule_alarms_remove";
-    private static final String REMOVE_ALARM_VALUE = "removeAlarms";
+    /* package */static final String KEY_REMOVE_ALARMS = "removeAlarms";
     /* package */static final Uri SCHEDULE_ALARM_REMOVE_URI = Uri.withAppendedPath(
             CalendarContract.CONTENT_URI, SCHEDULE_ALARM_REMOVE_PATH);
     /* package */static final Uri SCHEDULE_ALARM_URI = Uri.withAppendedPath(
             CalendarContract.CONTENT_URI, SCHEDULE_ALARM_PATH);
+
+    /**
+     * If no alarms are scheduled in the next 24h, check for future alarms again after this period
+     * has passed. Scheduling the check 15 minutes earlier than 24h to prevent the scheduler alarm
+     * from using up the alarms quota for reminders during dozing.
+     *
+     * @see AlarmManager#setExactAndAllowWhileIdle
+     */
+    private static final long ALARM_CHECK_WHEN_NO_ALARM_IS_SCHEDULED_INTERVAL_MILLIS =
+            DateUtils.DAY_IN_MILLIS - (15 * DateUtils.MINUTE_IN_MILLIS);
 
     static final String INVALID_CALENDARALERTS_SELECTOR =
     "_id IN (SELECT ca." + CalendarAlerts._ID + " FROM "
@@ -147,7 +158,21 @@ public class CalendarAlarmManager {
         mAlarmLock = new Object();
     }
 
-    void scheduleNextAlarm(boolean removeAlarms) {
+    private Intent getCheckNextAlarmIntent(boolean removeAlarms) {
+        Intent intent = new Intent(CalendarAlarmManager.ACTION_CHECK_NEXT_ALARM);
+        intent.setClass(mContext, CalendarProviderBroadcastReceiver.class);
+        intent.putExtra(KEY_REMOVE_ALARMS, removeAlarms);
+        return intent;
+    }
+
+    /**
+     * Called by CalendarProvider to check the next alarm. A small delay is added before the real
+     * checking happens in order to batch the requests.
+     *
+     * @param removeAlarms Remove scheduled alarms or not. See @{link
+     *                     #removeScheduledAlarmsLocked} for details.
+     */
+    void checkNextAlarm(boolean removeAlarms) {
         // We must always run the following when 'removeAlarms' is true.  Previously it
         // was possible to have a race condition on startup between TIME_CHANGED and
         // BOOT_COMPLETED broadcast actions.  This resulted in alarms being
@@ -158,8 +183,7 @@ public class CalendarAlarmManager {
             if (Log.isLoggable(CalendarProvider2.TAG, Log.DEBUG)) {
                 Log.d(CalendarProvider2.TAG, "Scheduling check of next Alarm");
             }
-            Intent intent = new Intent(ACTION_CHECK_NEXT_ALARM);
-            intent.putExtra(REMOVE_ALARM_VALUE, removeAlarms);
+            Intent intent = getCheckNextAlarmIntent(removeAlarms);
             PendingIntent pending = PendingIntent.getBroadcast(mContext, 0 /* ignored */, intent,
                     PendingIntent.FLAG_NO_CREATE);
             if (pending != null) {
@@ -169,10 +193,40 @@ public class CalendarAlarmManager {
             pending = PendingIntent.getBroadcast(mContext, 0 /* ignored */, intent,
                     PendingIntent.FLAG_CANCEL_CURRENT);
 
-            // Trigger the check in 5s from now
+            // Trigger the check in 5s from now, so that we can have batch processing.
             long triggerAtTime = SystemClock.elapsedRealtime() + ALARM_CHECK_DELAY_MILLIS;
-            set(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtTime, pending);
+            // Given to the short delay, we just use setExact here.
+            setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtTime, pending);
         }
+    }
+
+    /**
+     * Similar to {@link #checkNextAlarm}, but schedule the checking at specific {@code
+     * triggerTime}. In general, we do not need an alarm for scheduling. Instead we set the next
+     * alarm check immediately when a reminder is shown. The only use case for this
+     * is to schedule the next alarm check when there is no reminder within 1 day.
+     *
+     * @param triggerTimeMillis Time to run the next alarm check, in milliseconds.
+     */
+    void scheduleNextAlarmCheck(long triggerTimeMillis) {
+        Intent intent = getCheckNextAlarmIntent(false /* removeAlarms*/);
+        PendingIntent pending = PendingIntent.getBroadcast(
+                mContext, 0, intent, PendingIntent.FLAG_NO_CREATE);
+        if (pending != null) {
+            // Cancel any previous alarms that do the same thing.
+            cancel(pending);
+        }
+        pending = PendingIntent.getBroadcast(
+                mContext, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
+
+        if (Log.isLoggable(CalendarProvider2.TAG, Log.DEBUG)) {
+            Time time = new Time();
+            time.set(triggerTimeMillis);
+            String timeStr = time.format(" %a, %b %d, %Y %I:%M%P");
+            Log.d(CalendarProvider2.TAG,
+                    "scheduleNextAlarmCheck at: " + triggerTimeMillis + timeStr);
+        }
+        setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTimeMillis, pending);
     }
 
     PowerManager.WakeLock getScheduleNextAlarmWakeLock() {
@@ -202,7 +256,8 @@ public class CalendarAlarmManager {
      * This method runs in a background thread and schedules an alarm for the
      * next calendar event, if necessary.
      *
-     * @param db TODO
+     * @param removeAlarms
+     * @param cp2
      */
     void runScheduleNextAlarm(boolean removeAlarms, CalendarProvider2 cp2) {
         SQLiteDatabase db = cp2.mDb;
@@ -222,28 +277,6 @@ public class CalendarAlarmManager {
         } finally {
             db.endTransaction();
         }
-    }
-
-    void scheduleNextAlarmCheck(long triggerTime) {
-        Intent intent = new Intent(CalendarReceiver.SCHEDULE);
-        intent.setClass(mContext, CalendarReceiver.class);
-        PendingIntent pending = PendingIntent.getBroadcast(
-                mContext, 0, intent, PendingIntent.FLAG_NO_CREATE);
-        if (pending != null) {
-            // Cancel any previous alarms that do the same thing.
-            cancel(pending);
-        }
-        pending = PendingIntent.getBroadcast(
-                mContext, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
-
-        if (Log.isLoggable(CalendarProvider2.TAG, Log.DEBUG)) {
-            Time time = new Time();
-            time.set(triggerTime);
-            String timeStr = time.format(" %a, %b %d, %Y %I:%M%P");
-            Log.d(CalendarProvider2.TAG, "scheduleNextAlarmCheck at: " + triggerTime + timeStr);
-        }
-
-        set(AlarmManager.RTC_WAKEUP, triggerTime, pending);
     }
 
     /**
@@ -468,15 +501,12 @@ public class CalendarAlarmManager {
             scheduleAlarm(currentMillis);
         }
 
-        // If we scheduled an event alarm, then schedule the next alarm check
-        // for one minute past that alarm. Otherwise, if there were no
-        // event alarms scheduled, then check again in 24 hours. If a new
+        // No event alarm is scheduled, check again in 24 hours. If a new
         // event is inserted before the next alarm check, then this method
         // will be run again when the new event is inserted.
-        if (nextAlarmTime != Long.MAX_VALUE) {
-            scheduleNextAlarmCheck(nextAlarmTime + DateUtils.MINUTE_IN_MILLIS);
-        } else {
-            scheduleNextAlarmCheck(currentMillis + DateUtils.DAY_IN_MILLIS);
+        if (nextAlarmTime == Long.MAX_VALUE) {
+            scheduleNextAlarmCheck(
+                    currentMillis + ALARM_CHECK_WHEN_NO_ALARM_IS_SCHEDULED_INTERVAL_MILLIS);
         }
     }
 
@@ -500,8 +530,12 @@ public class CalendarAlarmManager {
                 + CalendarAlerts.STATE_SCHEDULED, null /* whereArgs */);
     }
 
-    public void set(int type, long triggerAtTime, PendingIntent operation) {
+    public void setExact(int type, long triggerAtTime, PendingIntent operation) {
         mAlarmManager.setExact(type, triggerAtTime, operation);
+    }
+
+    public void setExactAndAllowWhileIdle(int type, long triggerAtTime, PendingIntent operation) {
+        mAlarmManager.setExactAndAllowWhileIdle(type, triggerAtTime, operation);
     }
 
     public void cancel(PendingIntent operation) {
@@ -509,6 +543,10 @@ public class CalendarAlarmManager {
     }
 
     public void scheduleAlarm(long alarmTime) {
+        // Debug log for investigating dozing related bugs, remove it once we confirm it is stable.
+        if (Build.IS_DEBUGGABLE) {
+            Log.d(TAG, "schedule reminder alarm fired at " + alarmTime);
+        }
         CalendarContract.CalendarAlerts.scheduleAlarm(mContext, mAlarmManager, alarmTime);
     }
 

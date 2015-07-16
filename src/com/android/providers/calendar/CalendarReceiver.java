@@ -35,7 +35,6 @@ import java.util.concurrent.Executors;
  */
 public class CalendarReceiver extends BroadcastReceiver {
     private static final String TAG = "CalendarReceiver";
-    static final String SCHEDULE = "com.android.providers.calendar.SCHEDULE_ALARM";
 
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private PowerManager.WakeLock mWakeLock;
@@ -55,10 +54,7 @@ public class CalendarReceiver extends BroadcastReceiver {
         executor.submit(new Runnable() {
             @Override
             public void run() {
-                if (action.equals(SCHEDULE)) {
-                    cr.update(CalendarAlarmManager.SCHEDULE_ALARM_URI, null /* values */,
-                          null /* where */, null /* selectionArgs */);
-                } else if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
+                if (Intent.ACTION_BOOT_COMPLETED.equals(action)) {
                     removeScheduledAlarms(cr);
                 }
                 result.finish();

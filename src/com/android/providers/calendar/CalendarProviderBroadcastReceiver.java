@@ -20,13 +20,16 @@ import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.provider.CalendarContract;
 import android.util.Log;
 
 public class CalendarProviderBroadcastReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (!CalendarAlarmManager.ACTION_CHECK_NEXT_ALARM.equals(intent.getAction())) {
+        String action = intent.getAction();
+        if (!CalendarAlarmManager.ACTION_CHECK_NEXT_ALARM.equals(action)
+                && !CalendarContract.ACTION_EVENT_REMINDER.equals(action)) {
             setResultCode(Activity.RESULT_CANCELED);
             return;
         }

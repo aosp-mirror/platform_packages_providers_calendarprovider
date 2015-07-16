@@ -101,10 +101,15 @@
            </intent-filter>
        </receiver>
 
-        <receiver android:name="CalendarProviderBroadcastReceiver">
+        <receiver android:name="CalendarProviderBroadcastReceiver"
+                  android:exported="false">
             <intent-filter>
-                <action android:name="com.android.providers.calendar.intent.CalendarProvider2" />
+                <action android:name="com.android.providers.calendar.intent.CalendarProvider2"/>
                 <category android:name="com.android.providers.calendar"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.EVENT_REMINDER"/>
+                <data android:scheme="content" />
             </intent-filter>
         </receiver>
         <service android:name="CalendarProviderIntentService"/>

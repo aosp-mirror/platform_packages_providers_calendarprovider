@@ -17,12 +17,12 @@ package com.android.providers.calendar;
 
 import android.app.IntentService;
 import android.content.Intent;
+import android.provider.CalendarContract;
 import android.util.Log;
 
 public class CalendarProviderIntentService extends IntentService {
 
     private static final String TAG = CalendarProvider2.TAG;
-    private static final String REMOVE_ALARMS_VALUE = "removeAlarms";
 
     public CalendarProviderIntentService() {
         super("CalendarProviderIntentService");
@@ -33,18 +33,19 @@ public class CalendarProviderIntentService extends IntentService {
         if (Log.isLoggable(TAG, Log.DEBUG)) {
             Log.d(TAG, "Received Intent: " + intent);
         }
-        final String action = intent.getAction();
-        if (!CalendarAlarmManager.ACTION_CHECK_NEXT_ALARM.equals(action)) {
-            if (Log.isLoggable(TAG, Log.DEBUG)) {
-               Log.d(TAG, "Invalid Intent action: " + action);
-            }
-            return;
-        }
         final CalendarProvider2 provider = CalendarProvider2.getInstance();
-        // Schedule the next alarm
-        final boolean removeAlarms = intent.getBooleanExtra(REMOVE_ALARMS_VALUE, false);
-        provider.getOrCreateCalendarAlarmManager().runScheduleNextAlarm(removeAlarms, provider);
-        // Release the wake lock that was set in the Broadcast Receiver
-        provider.getOrCreateCalendarAlarmManager().releaseScheduleNextAlarmWakeLock();
+        final String action = intent.getAction();
+        if (CalendarAlarmManager.ACTION_CHECK_NEXT_ALARM.equals(action)
+                || CalendarContract.ACTION_EVENT_REMINDER.equals(action)) {
+            // Schedule the next alarm. Please be noted that for ACTION_EVENT_REMINDER broadcast,
+            // we never remove scheduled alarms.
+            final boolean removeAlarms = intent
+                    .getBooleanExtra(CalendarAlarmManager.KEY_REMOVE_ALARMS, false);
+            provider.getOrCreateCalendarAlarmManager().runScheduleNextAlarm(removeAlarms, provider);
+            // Release the wake lock that was set in the Broadcast Receiver
+            provider.getOrCreateCalendarAlarmManager().releaseScheduleNextAlarmWakeLock();
+        } else if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "Invalid Intent action: " + action);
+        }
     }
 }

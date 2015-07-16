@@ -472,13 +472,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             }
             if (Intent.ACTION_TIMEZONE_CHANGED.equals(action)) {
                 updateTimezoneDependentFields();
-                mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
+                mCalendarAlarm.checkNextAlarm(false /* do not remove alarms */);
             } else if (Intent.ACTION_DEVICE_STORAGE_OK.equals(action)) {
                 // Try to clean up if things were screwy due to a full disk
                 updateTimezoneDependentFields();
-                mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
+                mCalendarAlarm.checkNextAlarm(false /* do not remove alarms */);
             } else if (Intent.ACTION_TIME_CHANGED.equals(action)) {
-                mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
+                mCalendarAlarm.checkNextAlarm(false /* do not remove alarms */);
             }
         }
     };
@@ -2329,7 +2329,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 if (Log.isLoggable(TAG, Log.DEBUG)) {
                     Log.d(TAG, "insertInternal() changing reminder");
                 }
-                mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
+                mCalendarAlarm.checkNextAlarm(false /* do not remove alarms */);
                 break;
             }
             case CALENDAR_ALERTS: {
@@ -3113,7 +3113,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         long id = cursor.getLong(0);
                         result += deleteEventInternal(id, callerIsSyncAdapter, true /* isBatch */);
                     }
-                    mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
+                    mCalendarAlarm.checkNextAlarm(false /* do not remove alarms */);
                     sendUpdateNotification(callerIsSyncAdapter);
                 } finally {
                     cursor.close();
@@ -3311,7 +3311,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
 
         if (!isBatch) {
-            mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
+            mCalendarAlarm.checkNextAlarm(false /* do not remove alarms */);
             sendUpdateNotification(callerIsSyncAdapter);
         }
         return result;
@@ -3918,14 +3918,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         if (Log.isLoggable(TAG, Log.DEBUG)) {
                             Log.d(TAG, "updateInternal() changing event");
                         }
-                        mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
+                        mCalendarAlarm.checkNextAlarm(false /* do not remove alarms */);
                     }
 
                     sendUpdateNotification(id, callerIsSyncAdapter);
                 }
             } else {
                 deleteEventInternal(id, callerIsSyncAdapter, true /* isBatch */);
-                mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
+                mCalendarAlarm.checkNextAlarm(false /* do not remove alarms */);
                 sendUpdateNotification(callerIsSyncAdapter);
             }
         }
@@ -4038,7 +4038,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         // scheduleNextAlarmLocked will remove any alarms for
                         // non-visible events anyways. removeScheduledAlarmsLocked
                         // does not actually have the effect we want
-                        mCalendarAlarm.scheduleNextAlarm(false);
+                        mCalendarAlarm.checkNextAlarm(false);
                     }
                     // update the widget
                     sendUpdateNotification(callerIsSyncAdapter);
@@ -4114,22 +4114,15 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 if (Log.isLoggable(TAG, Log.DEBUG)) {
                     Log.d(TAG, "updateInternal() changing reminder");
                 }
-                mCalendarAlarm.scheduleNextAlarm(false /* do not remove alarms */);
+                mCalendarAlarm.checkNextAlarm(false /* do not remove alarms */);
                 return count;
             }
 
             case EXTENDED_PROPERTIES_ID:
                 return updateEventRelatedTable(uri, Tables.EXTENDED_PROPERTIES, true, values,
                         null, null, callerIsSyncAdapter);
-
-            // TODO: replace the SCHEDULE_ALARM private URIs with a
-            // service
-            case SCHEDULE_ALARM: {
-                mCalendarAlarm.scheduleNextAlarm(false);
-                return 0;
-            }
             case SCHEDULE_ALARM_REMOVE: {
-                mCalendarAlarm.scheduleNextAlarm(true);
+                mCalendarAlarm.checkNextAlarm(true);
                 return 0;
             }
 
@@ -4630,7 +4623,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final int EVENT_ENTITIES = 18;
     private static final int EVENT_ENTITIES_ID = 19;
     private static final int EVENT_DAYS = 20;
-    private static final int SCHEDULE_ALARM = 21;
     private static final int SCHEDULE_ALARM_REMOVE = 22;
     private static final int TIME = 23;
     private static final int CALENDAR_ENTITIES = 24;
@@ -4683,8 +4675,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                            CALENDAR_ALERTS_BY_INSTANCE);
         sUriMatcher.addURI(CalendarContract.AUTHORITY, "syncstate", SYNCSTATE);
         sUriMatcher.addURI(CalendarContract.AUTHORITY, "syncstate/#", SYNCSTATE_ID);
-        sUriMatcher.addURI(CalendarContract.AUTHORITY, CalendarAlarmManager.SCHEDULE_ALARM_PATH,
-                SCHEDULE_ALARM);
         sUriMatcher.addURI(CalendarContract.AUTHORITY,
                 CalendarAlarmManager.SCHEDULE_ALARM_REMOVE_PATH, SCHEDULE_ALARM_REMOVE);
         sUriMatcher.addURI(CalendarContract.AUTHORITY, "time/#", TIME);

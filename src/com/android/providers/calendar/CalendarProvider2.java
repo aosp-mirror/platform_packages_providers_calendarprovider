@@ -89,7 +89,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
 
     protected static final String TAG = "CalendarProvider2";
-    static final boolean DEBUG_INSTANCES = false;
+    // Turn on for b/22449592
+    static final boolean DEBUG_INSTANCES = Log.isLoggable(TAG, Log.DEBUG);
 
     private static final String TIMEZONE_GMT = "GMT";
     private static final String ACCOUNT_SELECTION_PREFIX = Calendars.ACCOUNT_NAME + "=? AND "

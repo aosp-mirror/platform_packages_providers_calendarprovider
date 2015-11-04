@@ -4584,6 +4584,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private void doSendUpdateNotification() {
         Intent intent = new Intent(Intent.ACTION_PROVIDER_CHANGED,
                 CalendarContract.CONTENT_URI);
+        intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
         if (Log.isLoggable(TAG, Log.INFO)) {
             Log.i(TAG, "Sending notification intent: " + intent);
         }

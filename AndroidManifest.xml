@@ -34,19 +34,18 @@
     <uses-permission android:name="android.permission.SUBSCRIBED_FEEDS_WRITE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.UPDATE_APP_OPS_STATS" />
 
     <application android:label="@string/calendar_storage"
                  android:allowBackup="false"
                  android:icon="@drawable/app_icon"
-                 android:usesCleartextTraffic="false">
+                 android:usesCleartextTraffic="true">
         <!-- TODO: Remove dependency of application on the test runner
              (android.test) library. -->
         <uses-library android:name="android.test.runner" />
 
         <provider android:name="CalendarProvider2" android:authorities="com.android.calendar"
                 android:label="@string/provider_label"
-                android:multiprocess="false"
+                android:multiprocess="true"
                 android:exported="true"
                 android:readPermission="android.permission.READ_CALENDAR"
                 android:writePermission="android.permission.WRITE_CALENDAR" />
@@ -70,27 +69,7 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
-
-        <activity android:name="CalendarDebug" android:label="@string/calendar_info">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
-        <activity android:name="CalendarDebugActivity" android:label="@string/calendar_info"
-                android:theme="@android:style/Theme.Holo.Dialog">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
-        <receiver android:name="CalendarDebugReceiver">
-            <intent-filter>
-                 <action android:name="android.provider.Telephony.SECRET_CODE" />
-                 <data android:scheme="android_secret_code" android:host="225" />
-            </intent-filter>
-       </receiver>
-
+        
        <!-- Handles database upgrades after OTAs, then disables itself -->
        <receiver android:name="CalendarUpgradeReceiver">
            <!-- This broadcast is sent after the core system has finished

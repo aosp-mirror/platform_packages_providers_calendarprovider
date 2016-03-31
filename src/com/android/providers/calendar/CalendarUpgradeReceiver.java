@@ -69,7 +69,6 @@ public class CalendarUpgradeReceiver extends BroadcastReceiver {
                     Log.i(TAG, "Creating or opening calendar database");
                     helper.getWritableDatabase();
                 }
-                helper.close();
 
                 // Log the total time taken for the receiver to perform the operation
                 EventLogTags.writeCalendarUpgradeReceiver(System.currentTimeMillis() - startTime);

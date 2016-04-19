@@ -955,13 +955,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 int startDay;
                 int endDay;
                 try {
-                    startDay = Integer.valueOf(uri.getPathSegments().get(2));
+                    startDay = Integer.parseInt(uri.getPathSegments().get(2));
                 } catch (NumberFormatException nfe) {
                     throw new IllegalArgumentException("Cannot parse start day "
                             + uri.getPathSegments().get(2));
                 }
                 try {
-                    endDay = Integer.valueOf(uri.getPathSegments().get(3));
+                    endDay = Integer.parseInt(uri.getPathSegments().get(3));
                 } catch (NumberFormatException nfe) {
                     throw new IllegalArgumentException("Cannot parse end day "
                             + uri.getPathSegments().get(3));

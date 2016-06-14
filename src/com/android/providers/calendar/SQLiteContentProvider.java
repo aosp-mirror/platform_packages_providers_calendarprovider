@@ -29,6 +29,7 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Process;
 import android.provider.CalendarContract;
+import android.util.Log;
 
 import java.util.ArrayList;
 
@@ -304,8 +305,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
                 String callingPackage = getCallingPackage();
                 mCallingPackage.set(callingPackage);
             } catch (SecurityException e) {
-                // If this exception is thrown, clearCallingIdentity has already been called, and
-                // calling package is already available.
+                Log.e(TAG, "Error getting the calling package.", e);
             }
         }
 

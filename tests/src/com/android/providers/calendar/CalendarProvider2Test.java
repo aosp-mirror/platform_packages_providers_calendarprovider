@@ -2879,9 +2879,6 @@ public class CalendarProvider2Test extends AndroidTestCase {
     public static final Uri PROPERTIES_CONTENT_URI =
             Uri.parse("content://" + CalendarContract.AUTHORITY + "/properties");
 
-    public static final int COLUMN_KEY_INDEX = 0;
-    public static final int COLUMN_VALUE_INDEX = 1;
-
     public void testGetProviderProperties() throws CalendarCache.CacheException {
         CalendarDatabaseHelper helper = (CalendarDatabaseHelper) getProvider().getDatabaseHelper();
         cleanCalendarDataTable(helper);
@@ -2895,14 +2892,13 @@ public class CalendarProvider2Test extends AndroidTestCase {
         Cursor cursor = mResolver.query(PROPERTIES_CONTENT_URI, null, null, null, null);
         assertEquals(4, cursor.getCount());
 
-        assertEquals(CalendarCache.COLUMN_NAME_KEY, cursor.getColumnName(COLUMN_KEY_INDEX));
-        assertEquals(CalendarCache.COLUMN_NAME_VALUE, cursor.getColumnName(COLUMN_VALUE_INDEX));
-
+        final int keyColumnIndex = cursor.getColumnIndex(CalendarCache.COLUMN_NAME_KEY);
+        final int valueColumnIndex = cursor.getColumnIndex(CalendarCache.COLUMN_NAME_VALUE);
         Map<String, String> map = new HashMap<String, String>();
 
         while (cursor.moveToNext()) {
-            String key = cursor.getString(COLUMN_KEY_INDEX);
-            String value = cursor.getString(COLUMN_VALUE_INDEX);
+            String key = cursor.getString(keyColumnIndex);
+            String value = cursor.getString(valueColumnIndex);
             map.put(key, value);
         }
 
@@ -2941,8 +2937,10 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
         assertEquals(1, cursor.getCount());
         assertTrue(cursor.moveToFirst());
-        assertEquals(cursor.getString(COLUMN_KEY_INDEX), key);
-        assertEquals(cursor.getString(COLUMN_VALUE_INDEX), value);
+        assertEquals(cursor.getString(cursor.getColumnIndex(CalendarCache.COLUMN_NAME_KEY)),
+                key);
+        assertEquals(cursor.getString(cursor.getColumnIndex(CalendarCache.COLUMN_NAME_VALUE)),
+                value);
 
         cursor.close();
     }

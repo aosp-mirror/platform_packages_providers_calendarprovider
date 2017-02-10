@@ -113,7 +113,6 @@
                 <data android:scheme="content" />
             </intent-filter>
         </receiver>
-        <service android:name="CalendarProviderIntentService"/>
 
     </application>
 </manifest>

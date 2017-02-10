@@ -127,10 +127,6 @@ public class CalendarAlarmManager {
      */
     @VisibleForTesting
     protected Object mAlarmLock;
-    /**
-     * Used to keep the process from getting killed while scheduling alarms
-     */
-    private final WakeLock mScheduleNextAlarmWakeLock;
 
     @VisibleForTesting
     protected Context mContext;
@@ -141,14 +137,6 @@ public class CalendarAlarmManager {
 
         PowerManager powerManager = (PowerManager) mContext.getSystemService(
                 Context.POWER_SERVICE);
-        // Create a wake lock that will be used when we are actually
-        // scheduling the next alarm
-        mScheduleNextAlarmWakeLock = powerManager.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK, SCHEDULE_NEXT_ALARM_WAKE_LOCK);
-        // We want the Wake Lock to be reference counted (so that we dont
-        // need to take care
-        // about its reference counting)
-        mScheduleNextAlarmWakeLock.setReferenceCounted(true);
     }
 
     protected void initializeWithContext(Context context) {
@@ -227,25 +215,6 @@ public class CalendarAlarmManager {
                     "scheduleNextAlarmCheck at: " + triggerTimeMillis + timeStr);
         }
         setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTimeMillis, pending);
-    }
-
-    PowerManager.WakeLock getScheduleNextAlarmWakeLock() {
-        return mScheduleNextAlarmWakeLock;
-    }
-
-    void acquireScheduleNextAlarmWakeLock() {
-        getScheduleNextAlarmWakeLock().acquire();
-    }
-
-    void releaseScheduleNextAlarmWakeLock() {
-        try {
-            getScheduleNextAlarmWakeLock().release();
-        } catch (RuntimeException e) {
-            if (!e.getMessage().startsWith("WakeLock under-locked ")) {
-              throw e;
-            }
-            Log.w(TAG, "WakeLock under-locked ignored.");
-        }
     }
 
     void rescheduleMissedAlarms() {

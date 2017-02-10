@@ -77,19 +77,5 @@ public class CalendarProvider2ForTesting extends CalendarProvider2 {
         @Override
         public void rescheduleMissedAlarms(ContentResolver cr) {
         }
-
-
-        @Override
-        PowerManager.WakeLock getScheduleNextAlarmWakeLock() {
-            return null;
-        }
-
-        @Override
-        void acquireScheduleNextAlarmWakeLock() {
-        }
-
-        @Override
-        void releaseScheduleNextAlarmWakeLock() {
-        }
     }
 }

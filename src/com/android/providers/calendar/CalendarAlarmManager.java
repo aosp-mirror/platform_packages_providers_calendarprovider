@@ -499,6 +499,10 @@ public class CalendarAlarmManager {
                 + CalendarAlerts.STATE_SCHEDULED, null /* whereArgs */);
     }
 
+    public void set(int type, long triggerAtTime, PendingIntent operation) {
+        mAlarmManager.set(type, triggerAtTime, operation);
+    }
+
     public void setExact(int type, long triggerAtTime, PendingIntent operation) {
         mAlarmManager.setExact(type, triggerAtTime, operation);
     }

@@ -58,6 +58,10 @@ public class CalendarProvider2ForTesting extends CalendarProvider2 {
         }
 
         @Override
+        public void set(int type, long triggerAtTime, PendingIntent operation) {
+        }
+
+        @Override
         public void setExact(int type, long triggerAtTime, PendingIntent operation) {
         }
 

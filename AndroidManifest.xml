@@ -54,13 +54,6 @@
                 android:readPermission="android.permission.READ_CALENDAR"
                 android:writePermission="android.permission.WRITE_CALENDAR" />
 
-        <!-- This is used to keep the provider alive long enough to send update
-             intent broadcasts. -->
-        <service android:name=".EmptyService" />
-        <!-- This is used to keep the provider alive long enough to clean up scheduled
-             alarms after boot. -->
-        <service android:name=".CalendarReceiver$RemoveScheduledAlarmsEmptyService" />
-
         <activity android:name="CalendarContentProviderTests" android:label="Calendar Content Provider"
                 android:exported="false">
             <intent-filter>

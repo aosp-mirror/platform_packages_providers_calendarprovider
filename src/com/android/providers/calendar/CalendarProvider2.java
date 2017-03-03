@@ -39,8 +39,6 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
 import android.os.Binder;
-import android.os.Handler;
-import android.os.Message;
 import android.os.Process;
 import android.os.SystemClock;
 import android.provider.BaseColumns;
@@ -444,8 +442,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private Context mContext;
     private ContentResolver mContentResolver;
 
-    private static CalendarProvider2 mInstance;
-
     @VisibleForTesting
     protected CalendarAlarmManager mCalendarAlarm;
 
@@ -478,10 +474,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         return CalendarDatabaseHelper.getInstance(context);
     }
 
-    protected static CalendarProvider2 getInstance() {
-        return mInstance;
-    }
-
     @Override
     public void shutdown() {
         if (mDbHelper != null) {
@@ -506,8 +498,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     private boolean initialize() {
-        mInstance = this;
-
         mContext = getContext();
         mContentResolver = mContext.getContentResolver();
 

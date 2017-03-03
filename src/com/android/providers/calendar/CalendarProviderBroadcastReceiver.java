@@ -18,10 +18,13 @@ package com.android.providers.calendar;
 
 import android.app.Activity;
 import android.content.BroadcastReceiver;
+import android.content.ContentProvider;
 import android.content.Context;
+import android.content.IContentProvider;
 import android.content.Intent;
 import android.provider.CalendarContract;
 import android.util.Log;
+import android.util.Slog;
 
 public class CalendarProviderBroadcastReceiver extends BroadcastReceiver {
     private static final String TAG = CalendarProvider2.TAG;
@@ -38,7 +41,16 @@ public class CalendarProviderBroadcastReceiver extends BroadcastReceiver {
         if (Log.isLoggable(TAG, Log.DEBUG)) {
             Log.d(TAG, "Received intent: " + intent);
         }
-        final CalendarProvider2 provider = CalendarProvider2.getInstance();
+        final IContentProvider iprovider =
+                context.getContentResolver().acquireProvider(CalendarContract.AUTHORITY);
+        final ContentProvider cprovider = ContentProvider.coerceToLocalContentProvider(iprovider);
+
+        if (!(cprovider instanceof CalendarProvider2)) {
+            Slog.wtf(TAG, "CalendarProvider2 not found in CalendarProviderBroadcastReceiver.");
+            return;
+        }
+
+        final CalendarProvider2 provider = (CalendarProvider2) cprovider;
 
         final PendingResult result = goAsync();
 
@@ -53,6 +65,7 @@ public class CalendarProviderBroadcastReceiver extends BroadcastReceiver {
                 Log.d(TAG, "Next alarm set.");
             }
 
+            result.setResultCode(Activity.RESULT_OK);
             result.finish();
         }).start();
 

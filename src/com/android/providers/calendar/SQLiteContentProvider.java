@@ -329,4 +329,12 @@ public abstract class SQLiteContentProvider extends ContentProvider
             mOriginalCallingUid.set(null);
         }
     }
+
+    SQLiteDatabase getReadableDatabase() {
+        return mOpenHelper != null ? mOpenHelper.getReadableDatabase() : null;
+    }
+
+    SQLiteDatabase getWritableDatabase() {
+        return mOpenHelper != null ? mOpenHelper.getWritableDatabase() : null;
+    }
 }

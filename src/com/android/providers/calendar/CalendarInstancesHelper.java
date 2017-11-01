@@ -58,9 +58,9 @@ public class CalendarInstancesHelper {
     }
 
     private static final String TAG = "CalInstances";
-    private CalendarDatabaseHelper mDbHelper;
-    private MetaData mMetaData;
-    private CalendarCache mCalendarCache;
+    private final CalendarDatabaseHelper mDbHelper;
+    private final MetaData mMetaData;
+    private final CalendarCache mCalendarCache;
 
     private static final String SQL_WHERE_GET_EVENTS_ENTRIES =
             "((" + Events.DTSTART + " <= ? AND "

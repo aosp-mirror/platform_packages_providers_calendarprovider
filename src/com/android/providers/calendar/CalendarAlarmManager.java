@@ -30,7 +30,6 @@ import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
-import android.os.PowerManager.WakeLock;
 import android.os.SystemClock;
 import android.provider.CalendarContract;
 import android.provider.CalendarContract.CalendarAlerts;
@@ -127,10 +126,6 @@ public class CalendarAlarmManager {
      */
     @VisibleForTesting
     protected Object mAlarmLock;
-    /**
-     * Used to keep the process from getting killed while scheduling alarms
-     */
-    private final WakeLock mScheduleNextAlarmWakeLock;
 
     @VisibleForTesting
     protected Context mContext;
@@ -141,14 +136,6 @@ public class CalendarAlarmManager {
 
         PowerManager powerManager = (PowerManager) mContext.getSystemService(
                 Context.POWER_SERVICE);
-        // Create a wake lock that will be used when we are actually
-        // scheduling the next alarm
-        mScheduleNextAlarmWakeLock = powerManager.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK, SCHEDULE_NEXT_ALARM_WAKE_LOCK);
-        // We want the Wake Lock to be reference counted (so that we dont
-        // need to take care
-        // about its reference counting)
-        mScheduleNextAlarmWakeLock.setReferenceCounted(true);
     }
 
     protected void initializeWithContext(Context context) {
@@ -158,9 +145,10 @@ public class CalendarAlarmManager {
         mAlarmLock = new Object();
     }
 
-    private Intent getCheckNextAlarmIntent(boolean removeAlarms) {
+    @VisibleForTesting
+    static Intent getCheckNextAlarmIntent(Context context, boolean removeAlarms) {
         Intent intent = new Intent(CalendarAlarmManager.ACTION_CHECK_NEXT_ALARM);
-        intent.setClass(mContext, CalendarProviderBroadcastReceiver.class);
+        intent.setClass(context, CalendarProviderBroadcastReceiver.class);
         intent.putExtra(KEY_REMOVE_ALARMS, removeAlarms);
         return intent;
     }
@@ -183,7 +171,7 @@ public class CalendarAlarmManager {
             if (Log.isLoggable(CalendarProvider2.TAG, Log.DEBUG)) {
                 Log.d(CalendarProvider2.TAG, "Scheduling check of next Alarm");
             }
-            Intent intent = getCheckNextAlarmIntent(removeAlarms);
+            Intent intent = getCheckNextAlarmIntent(mContext, removeAlarms);
             PendingIntent pending = PendingIntent.getBroadcast(mContext, 0 /* ignored */, intent,
                     PendingIntent.FLAG_NO_CREATE);
             if (pending != null) {
@@ -209,7 +197,7 @@ public class CalendarAlarmManager {
      * @param triggerTimeMillis Time to run the next alarm check, in milliseconds.
      */
     void scheduleNextAlarmCheck(long triggerTimeMillis) {
-        Intent intent = getCheckNextAlarmIntent(false /* removeAlarms*/);
+        Intent intent = getCheckNextAlarmIntent(mContext, false /* removeAlarms*/);
         PendingIntent pending = PendingIntent.getBroadcast(
                 mContext, 0, intent, PendingIntent.FLAG_NO_CREATE);
         if (pending != null) {
@@ -229,25 +217,6 @@ public class CalendarAlarmManager {
         setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTimeMillis, pending);
     }
 
-    PowerManager.WakeLock getScheduleNextAlarmWakeLock() {
-        return mScheduleNextAlarmWakeLock;
-    }
-
-    void acquireScheduleNextAlarmWakeLock() {
-        getScheduleNextAlarmWakeLock().acquire();
-    }
-
-    void releaseScheduleNextAlarmWakeLock() {
-        try {
-            getScheduleNextAlarmWakeLock().release();
-        } catch (RuntimeException e) {
-            if (!e.getMessage().startsWith("WakeLock under-locked ")) {
-              throw e;
-            }
-            Log.w(TAG, "WakeLock under-locked ignored.");
-        }
-    }
-
     void rescheduleMissedAlarms() {
         rescheduleMissedAlarms(mContext.getContentResolver());
     }
@@ -260,8 +229,9 @@ public class CalendarAlarmManager {
      * @param cp2
      */
     void runScheduleNextAlarm(boolean removeAlarms, CalendarProvider2 cp2) {
-        SQLiteDatabase db = cp2.mDb;
+        SQLiteDatabase db = cp2.getWritableDatabase();
         if (db == null) {
+            Log.wtf(CalendarProvider2.TAG, "Unable to get the database.");
             return;
         }
 
@@ -528,6 +498,10 @@ public class CalendarAlarmManager {
         }
         db.delete(CalendarAlerts.TABLE_NAME, CalendarAlerts.STATE + "="
                 + CalendarAlerts.STATE_SCHEDULED, null /* whereArgs */);
+    }
+
+    public void set(int type, long triggerAtTime, PendingIntent operation) {
+        mAlarmManager.set(type, triggerAtTime, operation);
     }
 
     public void setExact(int type, long triggerAtTime, PendingIntent operation) {

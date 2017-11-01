@@ -20,7 +20,9 @@ package com.android.providers.calendar;
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.accounts.OnAccountsUpdateListener;
+import android.app.AlarmManager;
 import android.app.AppOpsManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentUris;
@@ -37,9 +39,8 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
 import android.os.Binder;
-import android.os.Handler;
-import android.os.Message;
 import android.os.Process;
+import android.os.SystemClock;
 import android.provider.BaseColumns;
 import android.provider.CalendarContract;
 import android.provider.CalendarContract.Attendees;
@@ -441,27 +442,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private Context mContext;
     private ContentResolver mContentResolver;
 
-    private static CalendarProvider2 mInstance;
-
     @VisibleForTesting
     protected CalendarAlarmManager mCalendarAlarm;
-
-    private final Handler mBroadcastHandler = new Handler() {
-        @Override
-        public void handleMessage(Message msg) {
-            Context context = CalendarProvider2.this.mContext;
-            if (msg.what == UPDATE_BROADCAST_MSG) {
-                // Broadcast a provider changed intent
-                doSendUpdateNotification();
-                // Because the handler does not guarantee message delivery in
-                // the case that the provider is killed, we need to make sure
-                // that the provider stays alive long enough to deliver the
-                // notification. This empty service is sufficient to "wedge" the
-                // process until we stop it here.
-                context.stopService(new Intent(context, EmptyService.class));
-            }
-        }
-    };
 
     /**
      * Listens for timezone changes and disk-no-longer-full events
@@ -492,10 +474,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         return CalendarDatabaseHelper.getInstance(context);
     }
 
-    protected static CalendarProvider2 getInstance() {
-        return mInstance;
-    }
-
     @Override
     public void shutdown() {
         if (mDbHelper != null) {
@@ -520,8 +498,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     private boolean initialize() {
-        mInstance = this;
-
         mContext = getContext();
         mContentResolver = mContext.getContentResolver();
 
@@ -4537,11 +4513,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     /**
-     * Call this to trigger a broadcast of the ACTION_PROVIDER_CHANGED intent.
+     * Call this to trigger a broadcast of the ACTION_PROVIDER_CHANGED intent with a delay.
      * This also provides a timeout, so any calls to this method will be batched
-     * over a period of BROADCAST_TIMEOUT_MILLIS defined in this class.  The
-     * actual sending of the intent is done in
-     * {@link #doSendUpdateNotification()}.
+     * over a period of BROADCAST_TIMEOUT_MILLIS defined in this class.
      *
      * TODO add support for eventId
      *
@@ -4550,47 +4524,24 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      */
     private void sendUpdateNotification(long eventId,
             boolean callerIsSyncAdapter) {
-        // Are there any pending broadcast requests?
-        if (mBroadcastHandler.hasMessages(UPDATE_BROADCAST_MSG)) {
-            // Delete any pending requests, before requeuing a fresh one
-            mBroadcastHandler.removeMessages(UPDATE_BROADCAST_MSG);
-        } else {
-            // Because the handler does not guarantee message delivery in
-            // the case that the provider is killed, we need to make sure
-            // that the provider stays alive long enough to deliver the
-            // notification. This empty service is sufficient to "wedge" the
-            // process until we stop it here.
-            mContext.startService(new Intent(mContext, EmptyService.class));
-        }
         // We use a much longer delay for sync-related updates, to prevent any
         // receivers from slowing down the sync
-        long delay = callerIsSyncAdapter ?
+        final long delay = callerIsSyncAdapter ?
                 SYNC_UPDATE_BROADCAST_TIMEOUT_MILLIS :
                 UPDATE_BROADCAST_TIMEOUT_MILLIS;
-        // Despite the fact that we actually only ever use one message at a time
-        // for now, it is really important to call obtainMessage() to get a
-        // clean instance.  This avoids potentially infinite loops resulting
-        // adding the same instance to the message queue twice, since the
-        // message queue implements its linked list using a field from Message.
-        Message msg = mBroadcastHandler.obtainMessage(UPDATE_BROADCAST_MSG);
-        mBroadcastHandler.sendMessageDelayed(msg, delay);
+
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "sendUpdateNotification: delay=" + delay);
+        }
+
+        mCalendarAlarm.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + delay,
+                PendingIntent.getBroadcast(mContext, 0, createProviderChangedBroadcast(),
+                        PendingIntent.FLAG_UPDATE_CURRENT));
     }
 
-    /**
-     * This method should not ever be called directly, to prevent sending too
-     * many potentially expensive broadcasts.  Instead, call
-     * {@link #sendUpdateNotification(boolean)} instead.
-     *
-     * @see #sendUpdateNotification(boolean)
-     */
-    private void doSendUpdateNotification() {
-        Intent intent = new Intent(Intent.ACTION_PROVIDER_CHANGED,
-                CalendarContract.CONTENT_URI);
-        intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
-        if (Log.isLoggable(TAG, Log.INFO)) {
-            Log.i(TAG, "Sending notification intent: " + intent);
-        }
-        mContext.sendBroadcast(intent, null);
+    private Intent createProviderChangedBroadcast() {
+        return new Intent(Intent.ACTION_PROVIDER_CHANGED, CalendarContract.CONTENT_URI)
+                .addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
     }
 
     private static final int TRANSACTION_QUERY = 0;

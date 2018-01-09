@@ -805,6 +805,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
+        CalendarSanityChecker.getInstance(mContext).checkLastCheckTime();
+
         final long identity = clearCallingIdentityInternal();
         try {
             return queryInternal(uri, projection, selection, selectionArgs, sortOrder);
@@ -2076,6 +2078,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "insertInTransaction: " + uri);
         }
+        CalendarSanityChecker.getInstance(mContext).checkLastCheckTime();
+
         validateUriParameters(uri.getQueryParameterNames());
         final int match = sUriMatcher.match(uri);
         verifyTransactionAllowed(TRANSACTION_INSERT, uri, values, callerIsSyncAdapter, match,
@@ -3053,6 +3057,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "deleteInTransaction: " + uri);
         }
+        CalendarSanityChecker.getInstance(mContext).checkLastCheckTime();
+
         validateUriParameters(uri.getQueryParameterNames());
         final int match = sUriMatcher.match(uri);
         verifyTransactionAllowed(TRANSACTION_DELETE, uri, null, callerIsSyncAdapter, match,
@@ -3918,6 +3924,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "updateInTransaction: " + uri);
         }
+        CalendarSanityChecker.getInstance(mContext).checkLastCheckTime();
+
         validateUriParameters(uri.getQueryParameterNames());
         final int match = sUriMatcher.match(uri);
         verifyTransactionAllowed(TRANSACTION_UPDATE, uri, values, callerIsSyncAdapter, match,

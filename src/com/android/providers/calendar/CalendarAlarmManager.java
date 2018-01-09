@@ -106,6 +106,10 @@ public class CalendarAlarmManager {
             "com.android.providers.calendar.intent.CalendarProvider2";
     static final int ALARM_CHECK_DELAY_MILLIS = 5000;
 
+    /** 24 hours - 15 minutes. */
+    static final long NEXT_ALARM_CHECK_TIME_MS = DateUtils.DAY_IN_MILLIS -
+            (15 * DateUtils.MINUTE_IN_MILLIS);
+
     /**
      * Used for tracking if the next alarm is already scheduled
      */
@@ -123,9 +127,6 @@ public class CalendarAlarmManager {
 
     public CalendarAlarmManager(Context context) {
         initializeWithContext(context);
-
-        PowerManager powerManager = (PowerManager) mContext.getSystemService(
-                Context.POWER_SERVICE);
     }
 
     protected void initializeWithContext(Context context) {
@@ -207,6 +208,10 @@ public class CalendarAlarmManager {
         setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTimeMillis, pending);
     }
 
+    void scheduleNextAlarmCheckRightNow() {
+        scheduleNextAlarmCheck(System.currentTimeMillis());
+    }
+
     void rescheduleMissedAlarms() {
         rescheduleMissedAlarms(mContext.getContentResolver());
     }
@@ -264,6 +269,8 @@ public class CalendarAlarmManager {
      * @param cp2 TODO
      */
     private void scheduleNextAlarmLocked(SQLiteDatabase db, CalendarProvider2 cp2) {
+        CalendarSanityChecker.getInstance(mContext).updateLastCheckTime();
+
         Time time = new Time();
 
         final long currentMillis = System.currentTimeMillis();
@@ -473,7 +480,7 @@ public class CalendarAlarmManager {
         // inserted before the next alarm check, then this method will
         // be run again when the new event is inserted.
         if (!alarmScheduled) {
-            scheduleNextAlarmCheck(end - (15 * DateUtils.MINUTE_IN_MILLIS));
+            scheduleNextAlarmCheck(currentMillis + NEXT_ALARM_CHECK_TIME_MS);
         }
     }
 

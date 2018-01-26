@@ -44,9 +44,6 @@
                  android:allowBackup="false"
                  android:icon="@drawable/app_icon"
                  android:usesCleartextTraffic="false">
-        <!-- TODO: Remove dependency of application on the test runner
-             (android.test) library. -->
-        <uses-library android:name="android.test.runner" />
 
         <provider android:name="CalendarProvider2" android:authorities="com.android.calendar"
                 android:label="@string/provider_label"

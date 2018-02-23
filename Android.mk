@@ -27,6 +27,7 @@ LOCAL_SRC_FILES += \
         src/com/android/providers/calendar/EventLogTags.logtags
 
 LOCAL_PACKAGE_NAME := CalendarProvider
+LOCAL_PRIVATE_PLATFORM_APIS := true
 
 LOCAL_PRIVILEGED_MODULE := true
 

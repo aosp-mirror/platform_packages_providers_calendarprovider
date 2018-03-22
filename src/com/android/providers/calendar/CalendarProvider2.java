@@ -24,12 +24,15 @@ import android.app.AlarmManager;
 import android.app.AppOpsManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
+import android.content.ContentProviderOperation;
+import android.content.ContentProviderResult;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.OperationApplicationException;
 import android.content.UriMatcher;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
@@ -63,12 +66,15 @@ import com.android.calendarcommon2.Duration;
 import com.android.calendarcommon2.EventRecurrence;
 import com.android.calendarcommon2.RecurrenceProcessor;
 import com.android.calendarcommon2.RecurrenceSet;
+import com.android.internal.util.ProviderAccessStats;
 import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
 import com.android.providers.calendar.CalendarDatabaseHelper.Views;
 import com.google.android.collect.Sets;
 import com.google.common.annotations.VisibleForTesting;
 
 import java.io.File;
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -445,6 +451,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     @VisibleForTesting
     protected CalendarAlarmManager mCalendarAlarm;
 
+    private final ThreadLocal<Integer> mCallingUid = new ThreadLocal<>();
+    private final ProviderAccessStats mStats = new ProviderAccessStats();
+
     /**
      * Listens for timezone changes and disk-no-longer-full events
      */
@@ -807,11 +816,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             String sortOrder) {
         CalendarSanityChecker.getInstance(mContext).checkLastCheckTime();
 
+        // Note don't use mCallingUid here. That's only used by mutation functions.
+        final int callingUid = Binder.getCallingUid();
+
+        mStats.incrementQueryStats(callingUid);
         final long identity = clearCallingIdentityInternal();
         try {
             return queryInternal(uri, projection, selection, selectionArgs, sortOrder);
         } finally {
             restoreCallingIdentityInternal(identity);
+            mStats.finishOperation(callingUid);
         }
     }
 
@@ -2074,7 +2088,73 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     @Override
+    public int bulkInsert(Uri uri, ContentValues[] values) {
+        final int callingUid = Binder.getCallingUid();
+        mCallingUid.set(callingUid);
+
+        mStats.incrementBatchStats(callingUid);
+        try {
+            return super.bulkInsert(uri, values);
+        } finally {
+            mStats.finishOperation(callingUid);
+        }
+    }
+
+    @Override
+    public ContentProviderResult[] applyBatch(ArrayList<ContentProviderOperation> operations)
+            throws OperationApplicationException {
+        final int callingUid = Binder.getCallingUid();
+        mCallingUid.set(callingUid);
+
+        mStats.incrementBatchStats(callingUid);
+        try {
+            return super.applyBatch(operations);
+        } finally {
+            mStats.finishOperation(callingUid);
+        }
+    }
+
+    @Override
+    public Uri insert(Uri uri, ContentValues values) {
+        if (!applyingBatch()) {
+            mCallingUid.set(Binder.getCallingUid());
+        }
+
+        return super.insert(uri, values);
+    }
+
+    @Override
+    public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
+        if (!applyingBatch()) {
+            mCallingUid.set(Binder.getCallingUid());
+        }
+
+        return super.update(uri, values, selection, selectionArgs);
+    }
+
+    @Override
+    public int delete(Uri uri, String selection, String[] selectionArgs) {
+        if (!applyingBatch()) {
+            mCallingUid.set(Binder.getCallingUid());
+        }
+
+        return super.delete(uri, selection, selectionArgs);
+    }
+
+    @Override
     protected Uri insertInTransaction(Uri uri, ContentValues values, boolean callerIsSyncAdapter) {
+        final int callingUid = mCallingUid.get();
+
+        mStats.incrementInsertStats(callingUid, applyingBatch());
+        try {
+            return insertInTransactionInner(uri, values, callerIsSyncAdapter);
+        } finally {
+            mStats.finishOperation(callingUid);
+        }
+    }
+
+    private Uri insertInTransactionInner(
+            Uri uri, ContentValues values, boolean callerIsSyncAdapter) {
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "insertInTransaction: " + uri);
         }
@@ -3054,6 +3134,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     @Override
     protected int deleteInTransaction(Uri uri, String selection, String[] selectionArgs,
             boolean callerIsSyncAdapter) {
+        final int callingUid = mCallingUid.get();
+        mStats.incrementDeleteStats(callingUid, applyingBatch());
+        try {
+            return deleteInTransactionInner(uri, selection, selectionArgs, callerIsSyncAdapter);
+        } finally {
+            mStats.finishOperation(callingUid);
+        }
+    }
+
+    private int deleteInTransactionInner(Uri uri, String selection, String[] selectionArgs,
+            boolean callerIsSyncAdapter) {
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "deleteInTransaction: " + uri);
         }
@@ -3920,6 +4011,18 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     @Override
     protected int updateInTransaction(Uri uri, ContentValues values, String selection,
+            String[] selectionArgs, boolean callerIsSyncAdapter) {
+        final int callingUid = mCallingUid.get();
+        mStats.incrementUpdateStats(callingUid, applyingBatch());
+        try {
+            return updateInTransactionInner(uri, values, selection, selectionArgs,
+                    callerIsSyncAdapter);
+        } finally {
+            mStats.finishOperation(callingUid);
+        }
+    }
+
+    private int updateInTransactionInner(Uri uri, ContentValues values, String selection,
             String[] selectionArgs, boolean callerIsSyncAdapter) {
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "updateInTransaction: " + uri);
@@ -5071,5 +5174,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         } else {
             values.put(columnName, mutators + "," + packageName);
         }
+    }
+
+    @Override
+    public void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
+        mStats.dump(writer, "  ");
     }
 }

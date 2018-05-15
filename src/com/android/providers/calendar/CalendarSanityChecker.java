@@ -73,26 +73,9 @@ public class CalendarSanityChecker {
     @VisibleForTesting
     final SharedPreferences mPrefs;
 
-    @Nullable // only null when initialization failed.
-    private final CalendarProvider2 mCalendarProvider2;
-
     protected CalendarSanityChecker(Context context) {
         mContext = context;
         mPrefs = mContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        mCalendarProvider2 = getProvider(mContext);
-    }
-
-    protected static CalendarProvider2 getProvider(Context context) {
-        final IContentProvider iprovider =
-                context.getContentResolver().acquireProvider(CalendarContract.AUTHORITY);
-        final ContentProvider cprovider = ContentProvider.coerceToLocalContentProvider(iprovider);
-
-        if (!(cprovider instanceof CalendarProvider2)) {
-            Slog.wtf(TAG, "CalendarProvider2 not found in CalendarSanityChecker.");
-            return null;
-        }
-
-        return (CalendarProvider2) cprovider;
     }
 
     @VisibleForTesting
@@ -141,7 +124,7 @@ public class CalendarSanityChecker {
 
     /**
      * Call this at public entry points. This will check if the last check time was recent enough,
-     * and otherwise it'll call {@link CalendarAlarmManager#scheduleNextAlarmCheckRightNow()}.
+     * and otherwise it'll call {@link CalendarAlarmManager#checkNextAlarmCheckRightNow}.
      */
     public final boolean checkLastCheckTime() {
         final long lastBootCount;
@@ -202,10 +185,7 @@ public class CalendarSanityChecker {
                     .apply();
 
             // Note mCalendarProvider2 really shouldn't be null.
-            if (mCalendarProvider2 != null) {
-                mCalendarProvider2.getOrCreateCalendarAlarmManager()
-                        .scheduleNextAlarmCheckRightNow();
-            }
+            CalendarAlarmManager.checkNextAlarmCheckRightNow(mContext);
         }
         return false;
     }

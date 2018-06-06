@@ -50,13 +50,6 @@
                 android:readPermission="android.permission.READ_CALENDAR"
                 android:writePermission="android.permission.WRITE_CALENDAR" />
 
-        <activity android:name="CalendarContentProviderTests" android:label="Calendar Content Provider"
-                android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.UNIT_TEST" />
-            </intent-filter>
-        </activity>
         <receiver android:name="CalendarReceiver">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

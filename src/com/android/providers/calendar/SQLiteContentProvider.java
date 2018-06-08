@@ -83,7 +83,7 @@ public abstract class SQLiteContentProvider extends ContentProvider
         return mOpenHelper;
     }
 
-    private boolean applyingBatch() {
+    protected boolean applyingBatch() {
         return mApplyingBatch.get() != null && mApplyingBatch.get();
     }
 

@@ -11,9 +11,14 @@ LOCAL_PACKAGE_NAME := CalendarProviderTests
 LOCAL_PRIVATE_PLATFORM_APIS := true
 LOCAL_COMPATIBILITY_SUITE := device-tests
 
-LOCAL_STATIC_JAVA_LIBRARIES := calendar-common junit legacy-android-test
+LOCAL_STATIC_JAVA_LIBRARIES := calendar-common junit
 
-LOCAL_JAVA_LIBRARIES := ext android.test.runner
+LOCAL_JAVA_LIBRARIES := \
+    ext \
+    android.test.runner \
+    android.test.base \
+    android.test.mock \
+
 
 LOCAL_INSTRUMENTATION_FOR := CalendarProvider
 

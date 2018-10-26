@@ -50,6 +50,8 @@ import android.text.format.DateUtils;
 import android.text.format.Time;
 import android.util.Log;
 
+import com.android.providers.calendar.enterprise.CrossProfileCalendarHelper;
+
 import java.io.File;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -91,9 +93,12 @@ public class CalendarProvider2Test extends AndroidTestCase {
     private static final String DEFAULT_SORT_ORDER = "begin ASC";
 
     private CalendarProvider2ForTesting mProvider;
+    private CalendarProvider2ForTesting mWorkProfileProvider;
+
     private SQLiteDatabase mDb;
     private MetaData mMetaData;
     private Context mContext;
+    private Context mWorkContext;
     private MockContentResolver mResolver;
     private Uri mEventsUri = Events.CONTENT_URI;
     private Uri mCalendarsUri = Calendars.CONTENT_URI;
@@ -117,6 +122,36 @@ public class CalendarProvider2Test extends AndroidTestCase {
     private static final long ONE_MINUTE_MILLIS = 60*1000;
     private static final long ONE_HOUR_MILLIS = 3600*1000;
     private static final long ONE_WEEK_MILLIS = 7 * 24 * 3600 * 1000;
+
+    private static final int WORK_PROFILE_USER_ID = 10;
+    private static final String WORK_PROFILE_AUTHORITY = String.format("%d@%s",
+            WORK_PROFILE_USER_ID, CalendarContract.AUTHORITY);
+
+    private static long parseTimeStringToMillis(String timeStr, String timeZone) {
+        Time time = new Time(timeZone);
+        time.parse3339(timeStr);
+        return time.toMillis(false /* use isDst */);
+    }
+
+    private static String WORK_DEFAULT_TIMEZONE = TIME_ZONE_AMERICA_LOS_ANGELES;
+
+    private static String WORK_CALENDAR_TITLE = "Calendar1";
+    private static String WORK_CALENDAR_TITLE_STANDBY = "Calendar2";
+    private static int WORK_CALENDAR_COLOR = 0xFFFF0000;
+
+    private static String WORK_EVENT_TITLE = "event_title1";
+    private static String WORK_EVENT_TITLE_STANDBY = "event_title2";
+    private static long WORK_EVENT_DTSTART = parseTimeStringToMillis(
+            "2018-05-01T00:00:00", WORK_DEFAULT_TIMEZONE);
+    private static long WORK_EVENT_DTEND = parseTimeStringToMillis(
+            "2018-05-01T20:00:00", WORK_DEFAULT_TIMEZONE);
+    private final long WORK_EVENT_DTSTART_STANDBY = parseTimeStringToMillis(
+            "2008-05-01T00:00:00", WORK_DEFAULT_TIMEZONE);
+    private final long WORK_EVENT_DTEND_STANDBY = parseTimeStringToMillis(
+            "2008-05-01T20:00:00", WORK_DEFAULT_TIMEZONE);
+    private static int WORK_EVENT_COLOR = 0xff123456;
+    private static String WORK_EVENT_LOCATION = "Work event location.";
+    private static String WORK_EVENT_DESCRIPTION = "This is a work event.";
 
     /**
      * We need a few more stub methods so that our tests can run
@@ -964,14 +999,52 @@ public class CalendarProvider2Test extends AndroidTestCase {
             }
         };
 
-        mProvider = new CalendarProvider2ForTesting();
+        mWorkContext = new IsolatedContext(mResolver, targetContextWrapper) {
+            @Override
+            public int getUserId() {
+                return WORK_PROFILE_USER_ID;
+            }
+        };
+
+        mProvider = new CalendarProvider2ForTesting() {
+            @Override
+            protected int getWorkProfileUserId() {
+                return WORK_PROFILE_USER_ID;
+            }
+
+            @Override
+            protected void initCrossProfileCalendarHelper() {
+                mCrossProfileCalendarHelper = new MockCrossProfileCalendarHelper(mContext);
+            }
+
+            @Override
+            protected boolean isCallerCrossProfile() {
+                return false;
+            }
+        };
         ProviderInfo info = new ProviderInfo();
         info.authority = CalendarContract.AUTHORITY;
         mProvider.attachInfoForTesting(mContext, info);
 
+        mWorkProfileProvider = new CalendarProvider2ForTesting() {
+            @Override
+            protected void initCrossProfileCalendarHelper() {
+                mCrossProfileCalendarHelper = new MockCrossProfileCalendarHelper(mContext);
+            }
+
+            @Override
+            protected boolean isCallerCrossProfile() {
+                return true;
+            }
+        };
+        ProviderInfo workProviderInfo = new ProviderInfo();
+        workProviderInfo.authority = WORK_PROFILE_AUTHORITY;
+        mWorkProfileProvider.attachInfoForTesting(mWorkContext, info);
+
         mResolver.addProvider(CalendarContract.AUTHORITY, mProvider);
         mResolver.addProvider("subscribedfeeds", new MockProvider("subscribedfeeds"));
         mResolver.addProvider("sync", new MockProvider("sync"));
+        mResolver.addProvider(WORK_PROFILE_AUTHORITY, mWorkProfileProvider);
 
         mMetaData = getProvider().mMetaData;
         mForceDtend = false;
@@ -3122,4 +3195,364 @@ public class CalendarProvider2Test extends AndroidTestCase {
         checkCalendarCount(0);
     }
 
+    public void testEnterpriseInstancesGetCorrectValue() {
+        final long calendarId = insertWorkCalendar(WORK_CALENDAR_TITLE);
+        insertWorkEvent(WORK_EVENT_TITLE, calendarId,
+                WORK_EVENT_DTSTART, WORK_EVENT_DTEND);
+        insertWorkEvent(WORK_EVENT_TITLE_STANDBY, calendarId,
+                WORK_EVENT_DTSTART_STANDBY, WORK_EVENT_DTEND_STANDBY);
+        // Assume cross profile uri access is allowed by policy and settings.
+        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
+        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+
+        Uri.Builder builder = Instances.ENTERPRISE_CONTENT_URI.buildUpon();
+        ContentUris.appendId(builder, WORK_EVENT_DTSTART - DateUtils.YEAR_IN_MILLIS);
+        ContentUris.appendId(builder, WORK_EVENT_DTEND + DateUtils.YEAR_IN_MILLIS);
+        String[] projection = new String[]{
+                Instances.TITLE,
+                Instances.CALENDAR_ID,
+                Instances.DTSTART,
+                Instances.CALENDAR_DISPLAY_NAME,
+        };
+        Cursor cursor = mResolver.query(
+                builder.build(),
+                projection, null, null, null);
+
+        // Test the return cursor is correct when the all checks are met.
+        assertNotNull(cursor);
+        assertEquals(1, cursor.getCount());
+        cursor.moveToFirst();
+        assertEquals(WORK_EVENT_TITLE, cursor.getString(0));
+        assertEquals(calendarId, cursor.getLong(1));
+        assertEquals(WORK_EVENT_DTSTART, cursor.getLong(2));
+        assertEquals(WORK_CALENDAR_TITLE, cursor.getString(3));
+
+        cleanupEnterpriseTestForEvents(calendarId, 2);
+        cleanupEnterpriseTestForCalendars(1);
+    }
+
+    public void testEnterpriseInstancesContentSearch() {
+        final long calendarId = insertWorkCalendar(WORK_CALENDAR_TITLE);
+        insertWorkEvent(WORK_EVENT_TITLE, calendarId,
+                WORK_EVENT_DTSTART, WORK_EVENT_DTEND);
+        insertWorkEvent(WORK_EVENT_TITLE_STANDBY, calendarId,
+                WORK_EVENT_DTSTART_STANDBY, WORK_EVENT_DTEND_STANDBY);
+        // Assume cross profile uri access is allowed by policy and settings.
+        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
+        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+
+        Uri.Builder builder = Instances.ENTERPRISE_CONTENT_SEARCH_URI.buildUpon();
+        ContentUris.appendId(builder, WORK_EVENT_DTSTART - DateUtils.YEAR_IN_MILLIS);
+        ContentUris.appendId(builder, WORK_EVENT_DTEND + DateUtils.YEAR_IN_MILLIS);
+        builder = builder.appendPath(WORK_EVENT_TITLE /* search query */);
+        Cursor cursor = mResolver.query(
+                builder.build(),
+                null, null, null, null);
+        // There is only one event that meets the search criteria.
+        assertNotNull(cursor);
+        assertEquals(1, cursor.getCount());
+
+        builder = Instances.ENTERPRISE_CONTENT_SEARCH_URI.buildUpon();
+        ContentUris.appendId(builder, WORK_EVENT_DTSTART_STANDBY - DateUtils.YEAR_IN_MILLIS);
+        ContentUris.appendId(builder, WORK_EVENT_DTEND + DateUtils.YEAR_IN_MILLIS);
+        builder = builder.appendPath(WORK_EVENT_DESCRIPTION /* search query */);
+        cursor = mResolver.query(
+                builder.build(),
+                null, null, null, null);
+        // There are two events that meet the search criteria.
+        assertNotNull(cursor);
+        assertEquals(2, cursor.getCount());
+
+        cleanupEnterpriseTestForEvents(calendarId, 2);
+        cleanupEnterpriseTestForCalendars(1);
+    }
+
+    public void testEnterpriseEventsGetCorrectValue() {
+        final long calendarId = insertWorkCalendar(WORK_CALENDAR_TITLE);
+        final long idToTest = insertWorkEvent(WORK_EVENT_TITLE, calendarId,
+                WORK_EVENT_DTSTART, WORK_EVENT_DTEND);
+        insertWorkEvent(WORK_EVENT_TITLE_STANDBY, calendarId,
+                WORK_EVENT_DTSTART_STANDBY, WORK_EVENT_DTEND_STANDBY);
+        // Assume cross profile uri access is allowed by policy and settings.
+        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
+        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+
+        String selection = "(" + Events.TITLE + " = ? )";
+        String[] selectionArgs = new String[]{
+                WORK_EVENT_TITLE
+        };
+        String[] projection = new String[]{
+                Events._ID,
+                Events.TITLE,
+                Events.CALENDAR_ID,
+                Events.DTSTART,
+                Calendars.CALENDAR_DISPLAY_NAME
+        };
+        Cursor cursor = mResolver.query(
+                Events.ENTERPRISE_CONTENT_URI,
+                projection, selection, selectionArgs, null);
+
+        // Test the return cursor is correct when the all checks are met.
+        assertNotNull(cursor);
+        assertEquals(1, cursor.getCount());
+        cursor.moveToFirst();
+        assertEquals(idToTest, cursor.getLong(0));
+        assertEquals(WORK_EVENT_TITLE, cursor.getString(1));
+        assertEquals(calendarId, cursor.getLong(2));
+        assertEquals(WORK_EVENT_DTSTART, cursor.getLong(3));
+        assertEquals(WORK_CALENDAR_TITLE, cursor.getString(4));
+
+        cleanupEnterpriseTestForEvents(calendarId, 2);
+        cleanupEnterpriseTestForCalendars(1);
+    }
+
+    public void testEnterpriseEventsGetCorrectValueWithId() {
+        final long calendarId = insertWorkCalendar(WORK_CALENDAR_TITLE);
+        final long idToTest = insertWorkEvent(WORK_EVENT_TITLE, calendarId,
+                WORK_EVENT_DTSTART, WORK_EVENT_DTEND);
+        insertWorkEvent(WORK_EVENT_TITLE_STANDBY, calendarId,
+                WORK_EVENT_DTSTART_STANDBY, WORK_EVENT_DTEND_STANDBY);
+        // Assume cross profile uri access is allowed by policy and settings.
+        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
+        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+
+        // Test ENTERPRISE_CONTENT_URI_ID.
+        String[] projection = new String[]{
+                Events._ID,
+                Events.TITLE,
+                Events.CALENDAR_ID,
+                Events.DTSTART,
+                Calendars.CALENDAR_DISPLAY_NAME
+        };
+        final Cursor cursor = mResolver.query(
+                ContentUris.withAppendedId(Events.ENTERPRISE_CONTENT_URI, idToTest),
+                projection, null, null, null);
+
+        assertNotNull(cursor);
+        assertEquals(1, cursor.getCount());
+        cursor.moveToFirst();
+        assertEquals(idToTest, cursor.getLong(0));
+        assertEquals(WORK_EVENT_TITLE, cursor.getString(1));
+        assertEquals(calendarId, cursor.getLong(2));
+        assertEquals(WORK_EVENT_DTSTART, cursor.getLong(3));
+        assertEquals(WORK_CALENDAR_TITLE, cursor.getString(4));
+
+        cleanupEnterpriseTestForEvents(calendarId, 2);
+        cleanupEnterpriseTestForCalendars(1);
+    }
+
+    public void testEnterpriseEventsProjectionCalibration() {
+        final long calendarId = insertWorkCalendar(WORK_CALENDAR_TITLE);
+        final long idToTest = insertWorkEvent(WORK_EVENT_TITLE, calendarId,
+                WORK_EVENT_DTSTART, WORK_EVENT_DTEND);
+        insertWorkEvent(WORK_EVENT_TITLE_STANDBY, calendarId,
+                WORK_EVENT_DTSTART_STANDBY, WORK_EVENT_DTEND_STANDBY);
+        // Assume cross profile uri access is allowed by policy and settings.
+        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
+        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+
+        // Test all whitelisted columns are returned when projection is empty.
+        String selection = "(" + Events.TITLE + " = ? )";
+        String[] selectionArgs = new String[]{
+                WORK_EVENT_TITLE
+        };
+        final Cursor cursor = mResolver.query(
+                Events.ENTERPRISE_CONTENT_URI,
+                new String[] {}, selection, selectionArgs, null);
+
+        assertNotNull(cursor);
+        assertEquals(1, cursor.getCount());
+        cursor.moveToFirst();
+        for (String column : CrossProfileCalendarHelper.EVENTS_TABLE_WHITELIST) {
+            final int index = cursor.getColumnIndex(column);
+            assertTrue(index != -1);
+        }
+        assertEquals(idToTest, cursor.getLong(
+                cursor.getColumnIndex(Events._ID)));
+        assertEquals(WORK_CALENDAR_TITLE, cursor.getString(
+                cursor.getColumnIndex(Calendars.CALENDAR_DISPLAY_NAME)));
+        assertEquals(calendarId, cursor.getLong(
+                cursor.getColumnIndex(Events.CALENDAR_ID)));
+
+        cleanupEnterpriseTestForEvents(calendarId, 2);
+        cleanupEnterpriseTestForCalendars(1);
+    }
+
+    private void cleanupEnterpriseTestForEvents(long calendarId, int numToDelete) {
+        // Selection arguments must be provided when deleting events.
+        final int numDeleted = mWorkProfileProvider.delete(Events.CONTENT_URI,
+                "(" + Events.CALENDAR_ID + " = ? )",
+                new String[]{String.valueOf(calendarId)});
+        assertTrue(numDeleted == numToDelete);
+    }
+
+    private long insertWorkEvent(String eventTitle, long calendarId, long dtStart, long dtEnd) {
+        final ContentValues cv = new ContentValues();
+        cv.put(Events.TITLE, eventTitle);
+        cv.put(Events.CALENDAR_ID, calendarId);
+        cv.put(Events.DESCRIPTION, WORK_EVENT_DESCRIPTION);
+        cv.put(Events.EVENT_LOCATION, WORK_EVENT_LOCATION);
+        cv.put(Events.EVENT_COLOR, WORK_EVENT_COLOR);
+        cv.put(Events.DTSTART, dtStart);
+        cv.put(Events.DTEND, dtEnd);
+        cv.put(Events.EVENT_TIMEZONE, WORK_DEFAULT_TIMEZONE);
+        final Uri uri = mWorkProfileProvider.insert(Events.CONTENT_URI, cv);
+        return Long.parseLong(uri.getLastPathSegment());
+    }
+
+    public void testEnterpriseCalendarGetCorrectValue() {
+        final long idToTest = insertWorkCalendar(WORK_CALENDAR_TITLE);
+        insertWorkCalendar(WORK_CALENDAR_TITLE_STANDBY);
+        // Assume cross profile uri access is allowed by policy and settings.
+        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
+        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+
+        // Test the return cursor is correct when the all checks are met.
+        String selection = "(" + Calendars.CALENDAR_DISPLAY_NAME + " = ? )";
+        String[] selectionArgs = new String[] {
+                WORK_CALENDAR_TITLE
+        };
+        String[] projection = new String[] {
+                Calendars._ID,
+                Calendars.CALENDAR_DISPLAY_NAME,
+                Calendars.CALENDAR_COLOR
+        };
+        Cursor cursor = mResolver.query(
+                Calendars.ENTERPRISE_CONTENT_URI,
+                projection, selection, selectionArgs, null);
+
+        assertNotNull(cursor);
+        assertEquals(1, cursor.getCount());
+        cursor.moveToFirst();
+        assertEquals(idToTest, cursor.getLong(0));
+        assertEquals(WORK_CALENDAR_TITLE, cursor.getString(1));
+        assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(2));
+
+        cleanupEnterpriseTestForCalendars(2);
+    }
+
+    public void testEnterpriseCalendarGetCorrectValueWithId() {
+        final long idToTest = insertWorkCalendar(WORK_CALENDAR_TITLE);
+        insertWorkCalendar(WORK_CALENDAR_TITLE_STANDBY);
+        // Assume cross profile uri access is allowed by policy and settings.
+        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
+        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+
+        // Test Calendars.ENTERPRISE_CONTENT_URI with id.
+        String[] projection = new String[] {
+                Calendars._ID,
+                Calendars.CALENDAR_DISPLAY_NAME,
+                Calendars.CALENDAR_COLOR
+        };
+        final Cursor cursor = mResolver.query(
+                ContentUris.withAppendedId(Calendars.ENTERPRISE_CONTENT_URI, idToTest),
+                projection, null, null, null);
+
+        assertNotNull(cursor);
+        assertEquals(1, cursor.getCount());
+        cursor.moveToFirst();
+        assertEquals(idToTest, cursor.getLong(0));
+        assertEquals(WORK_CALENDAR_TITLE, cursor.getString(1));
+        assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(2));
+
+        cleanupEnterpriseTestForCalendars(2);
+    }
+
+    public void testEnterpriseCalendarsProjectionCalibration() {
+        final long idToTest = insertWorkCalendar(WORK_CALENDAR_TITLE);
+        // Assume cross profile uri access is allowed by policy and settings.
+        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
+        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+
+        // Test all whitelisted columns are returned when projection is empty.
+        final Cursor cursor = mResolver.query(
+                Calendars.ENTERPRISE_CONTENT_URI,
+                new String[] {}, null, null, null);
+
+        assertNotNull(cursor);
+        assertEquals(1, cursor.getCount());
+        cursor.moveToFirst();
+        for (String column : CrossProfileCalendarHelper.CALENDARS_TABLE_WHITELIST) {
+            final int index = cursor.getColumnIndex(column);
+            assertTrue(index != -1);
+        }
+        assertEquals(idToTest, cursor.getLong(
+                cursor.getColumnIndex(Calendars._ID)));
+        assertEquals(WORK_CALENDAR_TITLE, cursor.getString(
+                cursor.getColumnIndex(Calendars.CALENDAR_DISPLAY_NAME)));
+        assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(
+                cursor.getColumnIndex(Calendars.CALENDAR_COLOR)));
+
+        cleanupEnterpriseTestForCalendars(1);
+    }
+
+    public void testEnterpriseCalendarsNonWhitelistedProjection() {
+        // Test SecurityException is thrown there is non-whitelisted column in the projection.
+        try {
+            String[] projection = new String[] {
+                    Calendars._ID,
+                    Calendars.CALENDAR_DISPLAY_NAME,
+                    Calendars.CALENDAR_COLOR,
+                    Calendars.OWNER_ACCOUNT
+            };
+            mResolver.query(
+                    Calendars.ENTERPRISE_CONTENT_URI,
+                    projection, null, null, null);
+            fail("IllegalArgumentException is not thrown when querying non-whitelisted columns");
+        } catch (IllegalArgumentException e) {
+        }
+    }
+
+    public void testEnterpriseCalendarsDisabledInSettings() {
+        insertWorkCalendar(WORK_CALENDAR_TITLE);
+        // Assume cross profile uri access is allowed by policy but disabled settings.
+        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
+        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(false);
+
+        // Test empty cursor is returned if cross profile calendar is disabled in settings.
+        final Cursor cursor = mResolver.query(
+                Calendars.ENTERPRISE_CONTENT_URI,
+                new String[]{}, null, null, null);
+        assertTrue(cursor != null);
+        assertTrue(cursor.getCount() == 0);
+
+        cleanupEnterpriseTestForCalendars(1);
+    }
+
+    public void testEnterpriseCalendarsNonWhitelistedPackage() {
+        insertWorkCalendar(WORK_CALENDAR_TITLE);
+        // Assume cross profile uri access is allowed by settings but disabled by policy.
+        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+        MockCrossProfileCalendarHelper.setPackageWhitelisted(false);
+
+        // Test empty cursor is returned if cross profile calendar is disabled by policy.
+        final Cursor cursor = mResolver.query(
+                Calendars.ENTERPRISE_CONTENT_URI,
+                new String[]{}, null, null, null);
+        assertTrue(cursor != null);
+        assertTrue(cursor.getCount() == 0);
+
+        cleanupEnterpriseTestForCalendars(1);
+    }
+
+    // Remove the two inserted calendars.
+    private void cleanupEnterpriseTestForCalendars(int numToDelete) {
+        final int numDeleted =  mWorkProfileProvider.delete(Calendars.CONTENT_URI, null, null);
+        assertTrue(numDeleted == numToDelete);
+    }
+
+    private long insertWorkCalendar(String displayName) {
+        final ContentValues cv = new ContentValues();
+        cv.put(Calendars.ACCOUNT_TYPE, DEFAULT_ACCOUNT_TYPE);
+        cv.put(Calendars.OWNER_ACCOUNT, DEFAULT_ACCOUNT);
+        cv.put(Calendars.ACCOUNT_NAME, DEFAULT_ACCOUNT);
+        cv.put(Calendars.CALENDAR_DISPLAY_NAME, displayName);
+        cv.put(Calendars.CALENDAR_COLOR, WORK_CALENDAR_COLOR);
+        cv.put(Calendars.CALENDAR_TIME_ZONE, WORK_DEFAULT_TIMEZONE);
+        final Uri uri = mWorkProfileProvider.insert(
+                addSyncQueryParams(Calendars.CONTENT_URI, "local_account",
+                        CalendarContract.ACCOUNT_TYPE_LOCAL), cv);
+        return Long.parseLong(uri.getLastPathSegment());
+    }
 }
+

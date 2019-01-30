@@ -22,36 +22,22 @@ import com.android.providers.calendar.enterprise.CrossProfileCalendarHelper;
 
 public class MockCrossProfileCalendarHelper extends CrossProfileCalendarHelper {
 
-    private static boolean mCrossProfileCalendarEnabledInSettings = true;
-    private static boolean mCallingPackageWhitelisted = true;
+    private static boolean mCallingPackageAllowed = true;
 
     public MockCrossProfileCalendarHelper (Context context) {
         super(context);
     }
 
     /**
-     * Mock this method in unit test since it depends on Settings provider.
+     * Mock this method in unit test since it depends on DevicePolicyManager and SettingsProvider.
      * It will be tested in integration test.
      */
     @Override
-    public boolean isCrossProfileCalendarEnabledInSettings() {
-        return mCrossProfileCalendarEnabledInSettings;
+    public boolean isPackageAllowedToAccessCalendar(String packageName, int managedProfileUserId) {
+        return mCallingPackageAllowed;
     }
 
-    public static void setCrossProfileCalendarEnabledInSettings(boolean enabled) {
-        mCrossProfileCalendarEnabledInSettings = enabled;
-    }
-
-    /**
-     * Mock this method in unit test since it depends on DevicePolicyManager.
-     * It will be tested in integration test.
-     */
-    @Override
-    public boolean isPackageWhitelisted(String packageName, int managedProfileUserId) {
-        return mCallingPackageWhitelisted;
-    }
-
-    public static void setPackageWhitelisted(boolean isWhitelisted) {
-        mCallingPackageWhitelisted = isWhitelisted;
+    public static void setPackageAllowedToAccessCalendar(boolean isCallingPackageAllowed) {
+        mCallingPackageAllowed = isCallingPackageAllowed;
     }
 }

@@ -832,14 +832,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             String sortOrder) {
         CalendarSanityChecker.getInstance(mContext).checkLastCheckTime();
 
-        // Check if cross profile calendar is enabled in settings if caller does not come from
-        // the same profile.
-        if (isCallerCrossProfile()) {
-                if (!mCrossProfileCalendarHelper.isCrossProfileCalendarEnabledInSettings()) {
-                    return createEmptyCursor(projection);
-                }
-        }
-
         // Note don't use mCallingUid here. That's only used by mutation functions.
         final int callingUid = Binder.getCallingUid();
 
@@ -894,23 +886,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     /**
-     * @VisibleForTesting
-     */
-    protected boolean isCallerCrossProfile() {
-        return Binder.getCallingUserHandle().getIdentifier() != UserHandle.myUserId();
-    }
-
-    /**
      * @return {@code true} if the calling package can access cross profile calendar. {@code false}
      * otherwise.
      */
     private boolean canAccessCrossProfileCalendar(int workProfileUserId) {
         // The criteria include:
         // 1. There exists a work profile linked to the current user.
-        // 2. Profile owner of the work profile has whitelisted the calling package for cross
+        // 2. Profile owner of the work profile has allowed the calling package for cross
         //    profile calendar.
+        // 3. CROSS_PROFILE_CALENDAR_ENABLED is turned on in Settings.
         return workProfileUserId != UserHandle.USER_NULL
-                && mCrossProfileCalendarHelper.isPackageWhitelisted(
+                && mCrossProfileCalendarHelper.isPackageAllowedToAccessCalendar(
                         getCallingPackageName(), workProfileUserId);
     }
 

@@ -1016,11 +1016,6 @@ public class CalendarProvider2Test extends AndroidTestCase {
             protected void initCrossProfileCalendarHelper() {
                 mCrossProfileCalendarHelper = new MockCrossProfileCalendarHelper(mContext);
             }
-
-            @Override
-            protected boolean isCallerCrossProfile() {
-                return false;
-            }
         };
         ProviderInfo info = new ProviderInfo();
         info.authority = CalendarContract.AUTHORITY;
@@ -1030,11 +1025,6 @@ public class CalendarProvider2Test extends AndroidTestCase {
             @Override
             protected void initCrossProfileCalendarHelper() {
                 mCrossProfileCalendarHelper = new MockCrossProfileCalendarHelper(mContext);
-            }
-
-            @Override
-            protected boolean isCallerCrossProfile() {
-                return true;
             }
         };
         ProviderInfo workProviderInfo = new ProviderInfo();
@@ -3202,8 +3192,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         insertWorkEvent(WORK_EVENT_TITLE_STANDBY, calendarId,
                 WORK_EVENT_DTSTART_STANDBY, WORK_EVENT_DTEND_STANDBY);
         // Assume cross profile uri access is allowed by policy and settings.
-        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
-        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+        MockCrossProfileCalendarHelper.setPackageAllowedToAccessCalendar(true);
 
         Uri.Builder builder = Instances.ENTERPRISE_CONTENT_URI.buildUpon();
         ContentUris.appendId(builder, WORK_EVENT_DTSTART - DateUtils.YEAR_IN_MILLIS);
@@ -3238,8 +3227,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         insertWorkEvent(WORK_EVENT_TITLE_STANDBY, calendarId,
                 WORK_EVENT_DTSTART_STANDBY, WORK_EVENT_DTEND_STANDBY);
         // Assume cross profile uri access is allowed by policy and settings.
-        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
-        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+        MockCrossProfileCalendarHelper.setPackageAllowedToAccessCalendar(true);
 
         Uri.Builder builder = Instances.ENTERPRISE_CONTENT_SEARCH_URI.buildUpon();
         ContentUris.appendId(builder, WORK_EVENT_DTSTART - DateUtils.YEAR_IN_MILLIS);
@@ -3274,8 +3262,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         insertWorkEvent(WORK_EVENT_TITLE_STANDBY, calendarId,
                 WORK_EVENT_DTSTART_STANDBY, WORK_EVENT_DTEND_STANDBY);
         // Assume cross profile uri access is allowed by policy and settings.
-        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
-        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+        MockCrossProfileCalendarHelper.setPackageAllowedToAccessCalendar(true);
 
         String selection = "(" + Events.TITLE + " = ? )";
         String[] selectionArgs = new String[]{
@@ -3313,8 +3300,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         insertWorkEvent(WORK_EVENT_TITLE_STANDBY, calendarId,
                 WORK_EVENT_DTSTART_STANDBY, WORK_EVENT_DTEND_STANDBY);
         // Assume cross profile uri access is allowed by policy and settings.
-        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
-        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+        MockCrossProfileCalendarHelper.setPackageAllowedToAccessCalendar(true);
 
         // Test ENTERPRISE_CONTENT_URI_ID.
         String[] projection = new String[]{
@@ -3348,8 +3334,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         insertWorkEvent(WORK_EVENT_TITLE_STANDBY, calendarId,
                 WORK_EVENT_DTSTART_STANDBY, WORK_EVENT_DTEND_STANDBY);
         // Assume cross profile uri access is allowed by policy and settings.
-        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
-        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+        MockCrossProfileCalendarHelper.setPackageAllowedToAccessCalendar(true);
 
         // Test all whitelisted columns are returned when projection is empty.
         String selection = "(" + Events.TITLE + " = ? )";
@@ -3404,8 +3389,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         final long idToTest = insertWorkCalendar(WORK_CALENDAR_TITLE);
         insertWorkCalendar(WORK_CALENDAR_TITLE_STANDBY);
         // Assume cross profile uri access is allowed by policy and settings.
-        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
-        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+        MockCrossProfileCalendarHelper.setPackageAllowedToAccessCalendar(true);
 
         // Test the return cursor is correct when the all checks are met.
         String selection = "(" + Calendars.CALENDAR_DISPLAY_NAME + " = ? )";
@@ -3435,8 +3419,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         final long idToTest = insertWorkCalendar(WORK_CALENDAR_TITLE);
         insertWorkCalendar(WORK_CALENDAR_TITLE_STANDBY);
         // Assume cross profile uri access is allowed by policy and settings.
-        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
-        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+        MockCrossProfileCalendarHelper.setPackageAllowedToAccessCalendar(true);
 
         // Test Calendars.ENTERPRISE_CONTENT_URI with id.
         String[] projection = new String[] {
@@ -3461,8 +3444,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
     public void testEnterpriseCalendarsProjectionCalibration() {
         final long idToTest = insertWorkCalendar(WORK_CALENDAR_TITLE);
         // Assume cross profile uri access is allowed by policy and settings.
-        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
-        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
+        MockCrossProfileCalendarHelper.setPackageAllowedToAccessCalendar(true);
 
         // Test all whitelisted columns are returned when projection is empty.
         final Cursor cursor = mResolver.query(
@@ -3503,29 +3485,12 @@ public class CalendarProvider2Test extends AndroidTestCase {
         }
     }
 
-    public void testEnterpriseCalendarsDisabledInSettings() {
+    public void testEnterpriseCalendarsNotAllowed() {
         insertWorkCalendar(WORK_CALENDAR_TITLE);
-        // Assume cross profile uri access is allowed by policy but disabled settings.
-        MockCrossProfileCalendarHelper.setPackageWhitelisted(true);
-        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(false);
+        // Assume cross profile uri access is not allowed by policy or disabled in settings.
+        MockCrossProfileCalendarHelper.setPackageAllowedToAccessCalendar(false);
 
         // Test empty cursor is returned if cross profile calendar is disabled in settings.
-        final Cursor cursor = mResolver.query(
-                Calendars.ENTERPRISE_CONTENT_URI,
-                new String[]{}, null, null, null);
-        assertTrue(cursor != null);
-        assertTrue(cursor.getCount() == 0);
-
-        cleanupEnterpriseTestForCalendars(1);
-    }
-
-    public void testEnterpriseCalendarsNonWhitelistedPackage() {
-        insertWorkCalendar(WORK_CALENDAR_TITLE);
-        // Assume cross profile uri access is allowed by settings but disabled by policy.
-        MockCrossProfileCalendarHelper.setCrossProfileCalendarEnabledInSettings(true);
-        MockCrossProfileCalendarHelper.setPackageWhitelisted(false);
-
-        // Test empty cursor is returned if cross profile calendar is disabled by policy.
         final Cursor cursor = mResolver.query(
                 Calendars.ENTERPRISE_CONTENT_URI,
                 new String[]{}, null, null, null);

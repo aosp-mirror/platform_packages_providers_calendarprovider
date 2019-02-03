@@ -108,30 +108,23 @@ public class CrossProfileCalendarHelper {
     }
 
     /**
-     * Returns whether a packaged is whitelisted by the profile owner of a work profile to access
-     * the work calendar provider.
+     * Returns whether a package is allowed to access cross-profile calendar APIs.
+     *
+     * A package is allowed to access cross-profile calendar APIs if it's allowed by the
+     * profile owner of a managed profile to access the managed profile calendar provider,
+     * and the setting {@link Settings.Secure#CROSS_PROFILE_CALENDAR_ENABLED} is turned
+     * on in the managed profile.
      *
      * @param packageName  the name of the package
-     * @param managedProfileUserId the user id of the work profile
-     * @return {@code true} if the package is whitelisted, {@false} otherwise.
+     * @param managedProfileUserId the user id of the managed profile
+     * @return {@code true} if the package is allowed, {@false} otherwise.
      */
-    public boolean isPackageWhitelisted(String packageName, int managedProfileUserId) {
+    public boolean isPackageAllowedToAccessCalendar(String packageName, int managedProfileUserId) {
         final Context managedProfileUserContext = createPackageContextAsUser(
                 mContext, managedProfileUserId);
         final DevicePolicyManager mDpm = managedProfileUserContext.getSystemService(
                 DevicePolicyManager.class);
         return mDpm.isPackageAllowedToAccessCalendar(packageName);
-    }
-
-    /**
-     * Returns if cross profile calendar is allowed for a work profile in Settings.
-     *
-     * @return {@code true} if cross profile calendar is allowed in Settings, {@false} otherwise.
-     */
-    public boolean isCrossProfileCalendarEnabledInSettings() {
-        final int enabled = Settings.Secure.getInt(mContext.getContentResolver(),
-                Settings.Secure.CROSS_PROFILE_CALENDAR_ENABLED, /* default = */0);
-        return enabled == 1;
     }
 
     private static void ensureProjectionAllowed(String[] projection, Set<String> validColumnsSet) {

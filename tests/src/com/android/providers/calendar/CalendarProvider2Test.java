@@ -31,6 +31,7 @@ import android.database.MatrixCursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
+import android.os.UserHandle;
 import android.provider.BaseColumns;
 import android.provider.CalendarContract;
 import android.provider.CalendarContract.Calendars;
@@ -1013,6 +1014,11 @@ public class CalendarProvider2Test extends AndroidTestCase {
             }
 
             @Override
+            protected int getParentUserId() {
+                return UserHandle.USER_NULL;
+            }
+
+            @Override
             protected void initCrossProfileCalendarHelper() {
                 mCrossProfileCalendarHelper = new MockCrossProfileCalendarHelper(mContext);
             }
@@ -1022,6 +1028,16 @@ public class CalendarProvider2Test extends AndroidTestCase {
         mProvider.attachInfoForTesting(mContext, info);
 
         mWorkProfileProvider = new CalendarProvider2ForTesting() {
+            @Override
+            protected int getWorkProfileUserId() {
+                return UserHandle.USER_NULL;
+            }
+
+            @Override
+            protected int getParentUserId() {
+                return UserHandle.myUserId();
+            }
+
             @Override
             protected void initCrossProfileCalendarHelper() {
                 mCrossProfileCalendarHelper = new MockCrossProfileCalendarHelper(mContext);

@@ -862,8 +862,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             if (parent == null) {
                 continue; // No parent.
             }
-            // Check if it's linked to the current user.
-            if (parent.id == currentUserId) {
+            // Check if it's linked to the current user, and if work profile is disabled.
+            if (parent.id == currentUserId
+                    && !userManager.isQuietModeEnabled(UserHandle.of(userInfo.id))) {
                 return userInfo;
             }
         }
@@ -891,7 +892,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      */
     private boolean canAccessCrossProfileCalendar(int workProfileUserId) {
         // The criteria include:
-        // 1. There exists a work profile linked to the current user.
+        // 1. There exists a work profile linked to the current user and the work profile is not
+        //    disabled.
         // 2. Profile owner of the work profile has allowed the calling package for cross
         //    profile calendar.
         // 3. CROSS_PROFILE_CALENDAR_ENABLED is turned on in Settings.
@@ -920,8 +922,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 remoteUri = Uri.withAppendedPath(remoteUri, segment);
             }
         }
-        return getContext().getContentResolver().query(remoteUri, projection, selection,
-                selectionArgs, sortOrder);
+        final Cursor cursor = getContext().getContentResolver().query(remoteUri, projection,
+                selection, selectionArgs, sortOrder);
+        return cursor == null ? createEmptyCursor(projection) : cursor;
     }
 
     private Cursor queryInternal(Uri uri, String[] projection, String selection,

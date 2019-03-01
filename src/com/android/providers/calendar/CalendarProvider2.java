@@ -4955,7 +4955,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sCalendarsProjectionMap.put(Calendars.CALENDAR_TIME_ZONE, Calendars.CALENDAR_TIME_ZONE);
         sCalendarsProjectionMap.put(Calendars.OWNER_ACCOUNT, Calendars.OWNER_ACCOUNT);
         sCalendarsProjectionMap.put(Calendars.IS_PRIMARY,
-                "COALESCE(" + Events.IS_PRIMARY + ", "
+                "COALESCE(" + Calendars.IS_PRIMARY + ", "
                         + Calendars.OWNER_ACCOUNT + " = " + Calendars.ACCOUNT_NAME + ") AS "
                         + Calendars.IS_PRIMARY);
         sCalendarsProjectionMap.put(Calendars.CAN_ORGANIZER_RESPOND,
@@ -5041,6 +5041,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Calendars.MAX_REMINDERS, Calendars.MAX_REMINDERS);
         sEventsProjectionMap.put(Calendars.CAN_ORGANIZER_RESPOND, Calendars.CAN_ORGANIZER_RESPOND);
         sEventsProjectionMap.put(Calendars.CAN_MODIFY_TIME_ZONE, Calendars.CAN_MODIFY_TIME_ZONE);
+        sEventsProjectionMap.put(Calendars.IS_PRIMARY,
+                "COALESCE(" + Calendars.IS_PRIMARY + ", "
+                        + Calendars.OWNER_ACCOUNT + " = " + Calendars.ACCOUNT_NAME + ") AS "
+                        + Calendars.IS_PRIMARY);
         sEventsProjectionMap.put(Events.DISPLAY_COLOR, Events.DISPLAY_COLOR);
 
         // Put the shared items into the Instances projection map

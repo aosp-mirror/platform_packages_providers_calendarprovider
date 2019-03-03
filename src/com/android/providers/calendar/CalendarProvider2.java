@@ -462,6 +462,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private final ThreadLocal<Integer> mCallingUid = new ThreadLocal<>();
     private final ProviderAccessStats mStats = new ProviderAccessStats();
 
+    private int mParentUserId;
+
     /**
      * Listens for timezone changes and disk-no-longer-full events
      */
@@ -544,6 +546,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         // This is pulled out for testing
         initCalendarAlarm();
+
+        mParentUserId = getParentUserId();
 
         postInitialize();
 
@@ -808,12 +812,25 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         mCalendarAlarm.rescheduleMissedAlarms();
     }
 
+    @VisibleForTesting
+    protected int getParentUserId() {
+        final UserManager userManager = mContext.getSystemService(UserManager.class);
+        final UserInfo parentUser = userManager.getProfileParent(UserHandle.myUserId());
+        return parentUser == null ? UserHandle.USER_NULL : parentUser.id;
+    }
 
     @Override
     protected void notifyChange(boolean syncToNetwork) {
         // Note that semantics are changed: notification is for CONTENT_URI, not the specific
         // Uri that was modified.
         mContentResolver.notifyChange(CalendarContract.CONTENT_URI, null, syncToNetwork);
+        // If this is a managed profile CalendarProvider, notify the content observers of
+        // enterprise uris in the parent profile.
+        if (mParentUserId != UserHandle.USER_NULL) {
+            mContentResolver.notifyChange(
+                    CalendarContract.ENTERPRISE_CONTENT_URI,
+                    /* observer = */ null, /* syncToNetwork = */ false, mParentUserId);
+        }
     }
 
     /**

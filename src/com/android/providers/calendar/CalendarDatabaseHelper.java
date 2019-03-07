@@ -3236,6 +3236,7 @@ import java.util.TimeZone;
                 + Calendars.CAN_ORGANIZER_RESPOND + ","
                 + Calendars.CAN_MODIFY_TIME_ZONE + ","
                 + Calendars.CAN_PARTIALLY_UPDATE + ","
+                + Calendars.IS_PRIMARY + ","
                 + Calendars.CAL_SYNC1 + ","
                 + Calendars.CAL_SYNC2 + ","
                 + Calendars.CAL_SYNC3 + ","

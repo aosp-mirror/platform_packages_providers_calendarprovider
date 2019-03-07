@@ -60,11 +60,12 @@ public class CrossProfileCalendarHelper {
         EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.RDATE);
         EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.EXRULE);
         EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.EXDATE);
+        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.LAST_DATE);
+        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.SELF_ATTENDEE_STATUS);
+        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.DISPLAY_COLOR);
 
         CALENDARS_TABLE_WHITELIST = new ArraySet<>();
         CALENDARS_TABLE_WHITELIST.add(CalendarContract.Calendars._ID);
-        CALENDARS_TABLE_WHITELIST.add(CalendarContract.Calendars.NAME);
-        CALENDARS_TABLE_WHITELIST.add(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME);
         CALENDARS_TABLE_WHITELIST.add(CalendarContract.Calendars.CALENDAR_COLOR);
         CALENDARS_TABLE_WHITELIST.add(CalendarContract.Calendars.VISIBLE);
         CALENDARS_TABLE_WHITELIST.add(CalendarContract.Calendars.CALENDAR_LOCATION);
@@ -82,10 +83,10 @@ public class CrossProfileCalendarHelper {
         INSTANCES_TABLE_WHITELIST.add(CalendarContract.Instances.END_MINUTE);
 
         // Add calendar columns.
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME);
         EVENTS_TABLE_WHITELIST.add(CalendarContract.Calendars.CALENDAR_COLOR);
         EVENTS_TABLE_WHITELIST.add(CalendarContract.Calendars.VISIBLE);
         EVENTS_TABLE_WHITELIST.add(CalendarContract.Calendars.CALENDAR_TIME_ZONE);
+        EVENTS_TABLE_WHITELIST.add(CalendarContract.Calendars.IS_PRIMARY);
 
         ((ArraySet<String>) INSTANCES_TABLE_WHITELIST).addAll(EVENTS_TABLE_WHITELIST);
     }

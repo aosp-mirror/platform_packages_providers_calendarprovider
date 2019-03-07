@@ -1169,6 +1169,31 @@ public class CalendarProvider2Test extends AndroidTestCase {
         return Integer.parseInt(id);
     }
 
+    /**
+     * Creates a new calendar, with the provided name, time zone, and account name, but an empty
+     * owner account, which makes this calendar non-primary calendar.
+     *
+     * @return the new calendar's _ID value
+     */
+    private int insertNonPrimaryCal(String name, String timezone, String account) {
+        ContentValues m = new ContentValues();
+        m.put(Calendars.NAME, name);
+        m.put(Calendars.CALENDAR_DISPLAY_NAME, name);
+        m.put(Calendars.CALENDAR_COLOR, 0xff123456);
+        m.put(Calendars.CALENDAR_TIME_ZONE, timezone);
+        m.put(Calendars.VISIBLE, 1);
+        m.put(Calendars.CAL_SYNC1, CALENDAR_URL);
+        m.put(Calendars.OWNER_ACCOUNT, "");
+        m.put(Calendars.ACCOUNT_NAME,  account);
+        m.put(Calendars.ACCOUNT_TYPE, DEFAULT_ACCOUNT_TYPE);
+        m.put(Calendars.SYNC_EVENTS,  1);
+
+        Uri url = mResolver.insert(
+                addSyncQueryParams(mCalendarsUri, account, DEFAULT_ACCOUNT_TYPE), m);
+        String id = url.getLastPathSegment();
+        return Integer.parseInt(id);
+    }
+
     private String obsToString(Object... objs) {
         StringBuilder bob = new StringBuilder();
 
@@ -3181,6 +3206,70 @@ public class CalendarProvider2Test extends AndroidTestCase {
         checkCalendarCount(0);
     }
 
+    public void testGetIsPrimary_ForEvents() {
+        checkCalendarCount(0);
+        int calendarId0 = insertCal("Calendar0", DEFAULT_TIMEZONE);
+
+        final String START = "2008-05-01T00:00:00";
+        final String END = "2008-05-01T20:00:00";
+        EventInfo event = new EventInfo("search orange",
+                START,
+                END,
+                false /* allDay */,
+                DEFAULT_TIMEZONE);
+
+        insertEvent(calendarId0, event);
+
+        String[] projection = new String[] {
+                Calendars.IS_PRIMARY
+        };
+        String selection = "((" + Calendars.ACCOUNT_NAME + " = ? ))";
+        String[] selectionArgs = new String[] {
+                DEFAULT_ACCOUNT
+        };
+        Cursor cursor = mResolver.query(Calendars.CONTENT_URI, projection, selection, selectionArgs,
+                null);
+        assertNotNull(cursor);
+        cursor.moveToLast();
+        assertEquals(1, cursor.getCount());
+        assertEquals(1, cursor.getInt(cursor.getColumnIndex(Calendars.IS_PRIMARY)));
+        cursor.close();
+        deleteMatchingCalendars(Calendars._ID + "=" + calendarId0, null /* selectionArgs*/);
+        checkCalendarCount(0);
+    }
+
+    public void testGetIsNotPrimary_ForEvents() {
+        checkCalendarCount(0);
+        int calendarId0 = insertNonPrimaryCal("Calendar0", DEFAULT_TIMEZONE, DEFAULT_ACCOUNT);
+
+        final String START = "2008-05-01T00:00:00";
+        final String END = "2008-05-01T20:00:00";
+        EventInfo event = new EventInfo("search orange",
+                START,
+                END,
+                false /* allDay */,
+                DEFAULT_TIMEZONE);
+
+        insertEvent(calendarId0, event);
+
+        String[] projection = new String[] {
+                Calendars.IS_PRIMARY
+        };
+        String selection = "((" + Calendars.ACCOUNT_NAME + " = ? ))";
+        String[] selectionArgs = new String[] {
+                DEFAULT_ACCOUNT
+        };
+        Cursor cursor = mResolver.query(Calendars.CONTENT_URI, projection, selection, selectionArgs,
+                null);
+        assertNotNull(cursor);
+        cursor.moveToLast();
+        assertEquals(1, cursor.getCount());
+        assertEquals(0, cursor.getInt(cursor.getColumnIndex(Calendars.IS_PRIMARY)));
+        cursor.close();
+        deleteMatchingCalendars(Calendars._ID + "=" + calendarId0, null /* selectionArgs*/);
+        checkCalendarCount(0);
+    }
+
     public void testGetColumnIndex_Count() {
         checkCalendarCount(0);
         int calendarId0 = insertCal("Calendar0", DEFAULT_TIMEZONE);
@@ -3217,7 +3306,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 Instances.TITLE,
                 Instances.CALENDAR_ID,
                 Instances.DTSTART,
-                Instances.CALENDAR_DISPLAY_NAME,
+                Instances.CALENDAR_COLOR,
         };
         Cursor cursor = mResolver.query(
                 builder.build(),
@@ -3230,7 +3319,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertEquals(WORK_EVENT_TITLE, cursor.getString(0));
         assertEquals(calendarId, cursor.getLong(1));
         assertEquals(WORK_EVENT_DTSTART, cursor.getLong(2));
-        assertEquals(WORK_CALENDAR_TITLE, cursor.getString(3));
+        assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(3));
 
         cleanupEnterpriseTestForEvents(calendarId, 2);
         cleanupEnterpriseTestForCalendars(1);
@@ -3289,7 +3378,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 Events.TITLE,
                 Events.CALENDAR_ID,
                 Events.DTSTART,
-                Calendars.CALENDAR_DISPLAY_NAME
+                Calendars.CALENDAR_COLOR
         };
         Cursor cursor = mResolver.query(
                 Events.ENTERPRISE_CONTENT_URI,
@@ -3303,7 +3392,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertEquals(WORK_EVENT_TITLE, cursor.getString(1));
         assertEquals(calendarId, cursor.getLong(2));
         assertEquals(WORK_EVENT_DTSTART, cursor.getLong(3));
-        assertEquals(WORK_CALENDAR_TITLE, cursor.getString(4));
+        assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(4));
 
         cleanupEnterpriseTestForEvents(calendarId, 2);
         cleanupEnterpriseTestForCalendars(1);
@@ -3324,7 +3413,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 Events.TITLE,
                 Events.CALENDAR_ID,
                 Events.DTSTART,
-                Calendars.CALENDAR_DISPLAY_NAME
+                Calendars.CALENDAR_COLOR
         };
         final Cursor cursor = mResolver.query(
                 ContentUris.withAppendedId(Events.ENTERPRISE_CONTENT_URI, idToTest),
@@ -3337,7 +3426,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertEquals(WORK_EVENT_TITLE, cursor.getString(1));
         assertEquals(calendarId, cursor.getLong(2));
         assertEquals(WORK_EVENT_DTSTART, cursor.getLong(3));
-        assertEquals(WORK_CALENDAR_TITLE, cursor.getString(4));
+        assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(4));
 
         cleanupEnterpriseTestForEvents(calendarId, 2);
         cleanupEnterpriseTestForCalendars(1);
@@ -3370,10 +3459,12 @@ public class CalendarProvider2Test extends AndroidTestCase {
         }
         assertEquals(idToTest, cursor.getLong(
                 cursor.getColumnIndex(Events._ID)));
-        assertEquals(WORK_CALENDAR_TITLE, cursor.getString(
-                cursor.getColumnIndex(Calendars.CALENDAR_DISPLAY_NAME)));
         assertEquals(calendarId, cursor.getLong(
                 cursor.getColumnIndex(Events.CALENDAR_ID)));
+        assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(
+                cursor.getColumnIndex(Calendars.CALENDAR_COLOR)));
+        assertEquals(1, cursor.getInt(
+                cursor.getColumnIndex(Calendars.IS_PRIMARY)));
 
         cleanupEnterpriseTestForEvents(calendarId, 2);
         cleanupEnterpriseTestForCalendars(1);
@@ -3414,7 +3505,6 @@ public class CalendarProvider2Test extends AndroidTestCase {
         };
         String[] projection = new String[] {
                 Calendars._ID,
-                Calendars.CALENDAR_DISPLAY_NAME,
                 Calendars.CALENDAR_COLOR
         };
         Cursor cursor = mResolver.query(
@@ -3425,8 +3515,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertEquals(1, cursor.getCount());
         cursor.moveToFirst();
         assertEquals(idToTest, cursor.getLong(0));
-        assertEquals(WORK_CALENDAR_TITLE, cursor.getString(1));
-        assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(2));
+        assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(1));
 
         cleanupEnterpriseTestForCalendars(2);
     }
@@ -3440,7 +3529,6 @@ public class CalendarProvider2Test extends AndroidTestCase {
         // Test Calendars.ENTERPRISE_CONTENT_URI with id.
         String[] projection = new String[] {
                 Calendars._ID,
-                Calendars.CALENDAR_DISPLAY_NAME,
                 Calendars.CALENDAR_COLOR
         };
         final Cursor cursor = mResolver.query(
@@ -3451,8 +3539,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertEquals(1, cursor.getCount());
         cursor.moveToFirst();
         assertEquals(idToTest, cursor.getLong(0));
-        assertEquals(WORK_CALENDAR_TITLE, cursor.getString(1));
-        assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(2));
+        assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(1));
 
         cleanupEnterpriseTestForCalendars(2);
     }
@@ -3476,8 +3563,6 @@ public class CalendarProvider2Test extends AndroidTestCase {
         }
         assertEquals(idToTest, cursor.getLong(
                 cursor.getColumnIndex(Calendars._ID)));
-        assertEquals(WORK_CALENDAR_TITLE, cursor.getString(
-                cursor.getColumnIndex(Calendars.CALENDAR_DISPLAY_NAME)));
         assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(
                 cursor.getColumnIndex(Calendars.CALENDAR_COLOR)));
 

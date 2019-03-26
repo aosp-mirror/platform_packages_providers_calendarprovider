@@ -450,6 +450,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     /** set to 'true' to enable debug logging for recurrence exception code */
     private static final boolean DEBUG_EXCEPTION = false;
+    
+    private static final String SELECTION_PRIMARY_CALENDAR =
+            Calendars.IS_PRIMARY + "= 1"
+                    + " OR " + Calendars.ACCOUNT_NAME + "=" + Calendars.OWNER_ACCOUNT;
 
     private final ThreadLocal<Boolean> mCallingPackageErrorLogged = new ThreadLocal<Boolean>();
 
@@ -919,6 +923,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         getCallingPackageName(), workProfileUserId);
     }
 
+    private String appendPrimaryOnlyToSelection(String selection) {
+        return TextUtils.isEmpty(selection)
+                ? SELECTION_PRIMARY_CALENDAR
+                : selection + " AND (" +  SELECTION_PRIMARY_CALENDAR + ")";
+    }
+
     private Cursor queryWorkProfileProvider(Uri localUri, String[] projection,
             String selection, String[] selectionArgs, String sortOrder,
             List<String> additionalPathSegments) {
@@ -939,6 +949,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 remoteUri = Uri.withAppendedPath(remoteUri, segment);
             }
         }
+
+        selection = appendPrimaryOnlyToSelection(selection);
+
         final Cursor cursor = getContext().getContentResolver().query(remoteUri, projection,
                 selection, selectionArgs, sortOrder);
         return cursor == null ? createEmptyCursor(projection) : cursor;

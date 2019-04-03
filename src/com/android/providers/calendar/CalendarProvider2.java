@@ -4321,8 +4321,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     }
 
                     if (events.getCount() == 0) {
-                        Log.i(TAG, "No events to update: uri=" + uri + " selection=" + selection +
-                                " selectionArgs=" + Arrays.toString(selectionArgs));
                         return 0;
                     }
 

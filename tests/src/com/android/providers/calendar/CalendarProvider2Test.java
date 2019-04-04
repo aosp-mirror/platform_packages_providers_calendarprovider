@@ -3223,9 +3223,10 @@ public class CalendarProvider2Test extends AndroidTestCase {
         String[] projection = new String[] {
                 Calendars.IS_PRIMARY
         };
-        String selection = "((" + Calendars.ACCOUNT_NAME + " = ? ))";
+        String selection =
+                "((" + Calendars.IS_PRIMARY + " = ? OR " + Calendars.ACCOUNT_NAME + " = ?))";
         String[] selectionArgs = new String[] {
-                DEFAULT_ACCOUNT
+                "1", DEFAULT_ACCOUNT
         };
         Cursor cursor = mResolver.query(Calendars.CONTENT_URI, projection, selection, selectionArgs,
                 null);
@@ -3320,6 +3321,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertEquals(calendarId, cursor.getLong(1));
         assertEquals(WORK_EVENT_DTSTART, cursor.getLong(2));
         assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(3));
+        cursor.close();
 
         cleanupEnterpriseTestForEvents(calendarId, 2);
         cleanupEnterpriseTestForCalendars(1);
@@ -3355,6 +3357,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         // There are two events that meet the search criteria.
         assertNotNull(cursor);
         assertEquals(2, cursor.getCount());
+        cursor.close();
 
         cleanupEnterpriseTestForEvents(calendarId, 2);
         cleanupEnterpriseTestForCalendars(1);
@@ -3393,6 +3396,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertEquals(calendarId, cursor.getLong(2));
         assertEquals(WORK_EVENT_DTSTART, cursor.getLong(3));
         assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(4));
+        cursor.close();
 
         cleanupEnterpriseTestForEvents(calendarId, 2);
         cleanupEnterpriseTestForCalendars(1);
@@ -3427,6 +3431,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertEquals(calendarId, cursor.getLong(2));
         assertEquals(WORK_EVENT_DTSTART, cursor.getLong(3));
         assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(4));
+        assertEquals(1, cursor.getInt(2));
+        cursor.close();
 
         cleanupEnterpriseTestForEvents(calendarId, 2);
         cleanupEnterpriseTestForCalendars(1);
@@ -3465,6 +3471,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 cursor.getColumnIndex(Calendars.CALENDAR_COLOR)));
         assertEquals(1, cursor.getInt(
                 cursor.getColumnIndex(Calendars.IS_PRIMARY)));
+        cursor.close();
 
         cleanupEnterpriseTestForEvents(calendarId, 2);
         cleanupEnterpriseTestForCalendars(1);
@@ -3540,6 +3547,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         cursor.moveToFirst();
         assertEquals(idToTest, cursor.getLong(0));
         assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(1));
+        cursor.close();
 
         cleanupEnterpriseTestForCalendars(2);
     }
@@ -3565,6 +3573,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 cursor.getColumnIndex(Calendars._ID)));
         assertEquals(WORK_CALENDAR_COLOR, cursor.getInt(
                 cursor.getColumnIndex(Calendars.CALENDAR_COLOR)));
+        cursor.close();
 
         cleanupEnterpriseTestForCalendars(1);
     }
@@ -3597,6 +3606,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
                 new String[]{}, null, null, null);
         assertTrue(cursor != null);
         assertTrue(cursor.getCount() == 0);
+        cursor.close();
 
         cleanupEnterpriseTestForCalendars(1);
     }

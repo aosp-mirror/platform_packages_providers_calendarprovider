@@ -4804,14 +4804,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Log.d(TAG, "sendUpdateNotification: delay=" + delay);
         }
 
-        mCalendarAlarm.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + delay,
+        mCalendarAlarm.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + delay,
                 PendingIntent.getBroadcast(mContext, 0, createProviderChangedBroadcast(),
                         PendingIntent.FLAG_UPDATE_CURRENT));
     }
 
     private Intent createProviderChangedBroadcast() {
         return new Intent(Intent.ACTION_PROVIDER_CHANGED, CalendarContract.CONTENT_URI)
-                .addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
+                .addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING)
+                .addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
     }
 
     private static final int TRANSACTION_QUERY = 0;

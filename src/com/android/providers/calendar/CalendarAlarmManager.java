@@ -181,7 +181,7 @@ public class CalendarAlarmManager {
             // Trigger the check in 5s from now, so that we can have batch processing.
             long triggerAtTime = SystemClock.elapsedRealtime() + ALARM_CHECK_DELAY_MILLIS;
             // Given to the short delay, we just use setExact here.
-            setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtTime, pending);
+            setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtTime, pending);
         }
     }
 
@@ -480,6 +480,10 @@ public class CalendarAlarmManager {
 
     public void set(int type, long triggerAtTime, PendingIntent operation) {
         mAlarmManager.set(type, triggerAtTime, operation);
+    }
+
+    public void setAndAllowWhileIdle(int type, long triggerAtTime, PendingIntent operation) {
+        mAlarmManager.setAndAllowWhileIdle(type, triggerAtTime, operation);
     }
 
     public void setExact(int type, long triggerAtTime, PendingIntent operation) {

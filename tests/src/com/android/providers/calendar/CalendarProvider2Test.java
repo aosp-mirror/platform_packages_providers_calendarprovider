@@ -3600,14 +3600,15 @@ public class CalendarProvider2Test extends AndroidTestCase {
         // Assume cross profile uri access is not allowed by policy or disabled in settings.
         MockCrossProfileCalendarHelper.setPackageAllowedToAccessCalendar(false);
 
-        // Test empty cursor is returned if cross profile calendar is disabled in settings.
-        final Cursor cursor = mResolver.query(
-                Calendars.ENTERPRISE_CONTENT_URI,
-                new String[]{}, null, null, null);
-        assertTrue(cursor != null);
-        assertTrue(cursor.getCount() == 0);
-        cursor.close();
-
+        // Throw exception if cross profile calendar is disabled in settings.
+        try {
+            final Cursor cursor = mResolver.query(
+                    Calendars.ENTERPRISE_CONTENT_URI,
+                    new String[]{}, null, null, null);
+            fail("Unsupported operation exception should have been raised.");
+        } catch (UnsupportedOperationException e) {
+            // Exception expected.
+        }
         cleanupEnterpriseTestForCalendars(1);
     }
 

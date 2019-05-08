@@ -929,6 +929,12 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 : selection + " AND (" +  SELECTION_PRIMARY_CALENDAR + ")";
     }
 
+    /*
+     * Throw UnsupportedOperationException if
+     * <p>1. Work profile doesn't exits or disabled.
+     * <p>2. Calling package is not allowed to access cross profile calendar.
+     * <p>3. CROSS_PROFILE_CALENDAR_ENABLED is turned off in Settings.
+     */
     private Cursor queryWorkProfileProvider(Uri localUri, String[] projection,
             String selection, String[] selectionArgs, String sortOrder,
             List<String> additionalPathSegments) {
@@ -936,10 +942,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // allowed columns.
         projection = mCrossProfileCalendarHelper.getCalibratedProjection(
                 projection, localUri);
-        // Return empty cursor if cross profile calendar is currently not available.
+        // Throw exception if cross profile calendar is currently not available.
         final int workProfileUserId = getWorkProfileUserId();
         if (!canAccessCrossProfileCalendar(workProfileUserId)) {
-            return createEmptyCursor(projection);
+            throw new UnsupportedOperationException("Can't access cross profile for " + localUri);
         }
 
         Uri remoteUri = maybeAddUserId(

@@ -13,24 +13,34 @@
  * See the License for the specific language governing permissions and
  * limitations under the License
  */
+
 package com.android.providers.calendar;
 
-
-import com.android.common.content.SyncStateContentProviderHelper;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.sqlite.SQLiteDatabase;
 import android.test.mock.MockContext;
-import android.test.suitebuilder.annotation.MediumTest;
 import android.text.TextUtils;
 import android.util.Log;
 
+import androidx.test.runner.AndroidJUnit4;
+
+import com.android.common.content.SyncStateContentProviderHelper;
+
+import org.junit.Before;
+import org.junit.Ignore;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+
 import java.util.Arrays;
 
-import junit.framework.TestCase;
-
-public class CalendarDatabaseHelperTest extends TestCase {
+@RunWith(AndroidJUnit4.class)
+public class CalendarDatabaseHelperTest {
     private static final String TAG = "CDbHelperTest";
 
     private SQLiteDatabase mBadDb;
@@ -38,7 +48,7 @@ public class CalendarDatabaseHelperTest extends TestCase {
     private DatabaseUtils.InsertHelper mBadEventsInserter;
     private DatabaseUtils.InsertHelper mGoodEventsInserter;
 
-    @Override
+    @Before
     public void setUp() {
         mBadDb = SQLiteDatabase.create(null);
         assertNotNull(mBadDb);
@@ -386,7 +396,7 @@ public class CalendarDatabaseHelperTest extends TestCase {
         assertEquals(mGoodDb.rawQuery("SELECT _id FROM Events;", null).getCount(), 2);
     }
 
-    @MediumTest
+    @Test
     public void testUpgradeToVersion69() {
         // Create event tables
         createVersion67EventsTable(mBadDb);
@@ -416,7 +426,8 @@ public class CalendarDatabaseHelperTest extends TestCase {
         }
     }
 
-    @MediumTest
+    @Test
+    @Ignore("b/140236227")
     public void testUpgradeToCurrentVersion() {
         // Create event tables
         bootstrapDbVersion50(mBadDb);
@@ -452,6 +463,8 @@ public class CalendarDatabaseHelperTest extends TestCase {
 
     private static final String[] PROJECTION = {"tbl_name", "sql"};
 
+    @Test
+    @Ignore("b/140236227")
     public void testSchemasEqualForAllTables() {
 
         CalendarDatabaseHelper cDbHelper = new CalendarDatabaseHelper(new MockContext());

@@ -74,7 +74,7 @@ import java.util.TimeZone;
     // 5xx for JB MR1
     // 6xx for K
     // Bump this to the next hundred at each major release.
-    static final int DATABASE_VERSION = 600;
+    static final int DATABASE_VERSION = 601;
 
     private static final int PRE_FROYO_SYNC_STATE_VERSION = 3;
 
@@ -1411,6 +1411,11 @@ import java.util.TimeZone;
                 upgradeToVersion600(db);
                 createEventsView = true; // This is needed if the calendars or events schema changed
                 oldVersion = 600;
+            }
+            if (oldVersion < 601) {
+                // There are no table changes in 601, but recreating the events view is required
+                createEventsView = true;
+                oldVersion = 601;
             }
 
             if (createEventsView) {
@@ -3236,6 +3241,7 @@ import java.util.TimeZone;
                 + Calendars.CAN_ORGANIZER_RESPOND + ","
                 + Calendars.CAN_MODIFY_TIME_ZONE + ","
                 + Calendars.CAN_PARTIALLY_UPDATE + ","
+                + Calendars.IS_PRIMARY + ","
                 + Calendars.CAL_SYNC1 + ","
                 + Calendars.CAL_SYNC2 + ","
                 + Calendars.CAL_SYNC3 + ","

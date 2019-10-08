@@ -35,8 +35,10 @@ import android.content.IntentFilter;
 import android.content.OperationApplicationException;
 import android.content.UriMatcher;
 import android.content.pm.PackageManager;
+import android.content.pm.UserInfo;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
+import android.database.MatrixCursor;
 import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteQueryBuilder;
@@ -44,6 +46,8 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Process;
 import android.os.SystemClock;
+import android.os.UserHandle;
+import android.os.UserManager;
 import android.provider.BaseColumns;
 import android.provider.CalendarContract;
 import android.provider.CalendarContract.Attendees;
@@ -69,6 +73,8 @@ import com.android.calendarcommon2.RecurrenceSet;
 import com.android.internal.util.ProviderAccessStats;
 import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
 import com.android.providers.calendar.CalendarDatabaseHelper.Views;
+import com.android.providers.calendar.enterprise.CrossProfileCalendarHelper;
+
 import com.google.android.collect.Sets;
 import com.google.common.annotations.VisibleForTesting;
 
@@ -186,6 +192,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private CalendarDatabaseHelper mDbHelper;
     private CalendarInstancesHelper mInstancesHelper;
+
+    protected CrossProfileCalendarHelper mCrossProfileCalendarHelper;
 
     private static final String SQL_SELECT_EVENTSRAWTIMES = "SELECT " +
             CalendarContract.EventsRawTimes.EVENT_ID + ", " +
@@ -442,6 +450,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     /** set to 'true' to enable debug logging for recurrence exception code */
     private static final boolean DEBUG_EXCEPTION = false;
+    
+    private static final String SELECTION_PRIMARY_CALENDAR =
+            Calendars.IS_PRIMARY + "= 1"
+                    + " OR " + Calendars.ACCOUNT_NAME + "=" + Calendars.OWNER_ACCOUNT;
 
     private final ThreadLocal<Boolean> mCallingPackageErrorLogged = new ThreadLocal<Boolean>();
 
@@ -453,6 +465,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private final ThreadLocal<Integer> mCallingUid = new ThreadLocal<>();
     private final ProviderAccessStats mStats = new ProviderAccessStats();
+
+    private int mParentUserId;
 
     /**
      * Listens for timezone changes and disk-no-longer-full events
@@ -531,12 +545,22 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         mCalendarCache = new CalendarCache(mDbHelper);
 
+        // Unit test overrides this method to get a mock helper.
+        initCrossProfileCalendarHelper();
+
         // This is pulled out for testing
         initCalendarAlarm();
+
+        mParentUserId = getParentUserId();
 
         postInitialize();
 
         return true;
+    }
+
+    @VisibleForTesting
+    protected void initCrossProfileCalendarHelper() {
+        mCrossProfileCalendarHelper = new CrossProfileCalendarHelper(mContext);
     }
 
     protected void initCalendarAlarm() {
@@ -792,12 +816,25 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         mCalendarAlarm.rescheduleMissedAlarms();
     }
 
+    @VisibleForTesting
+    protected int getParentUserId() {
+        final UserManager userManager = mContext.getSystemService(UserManager.class);
+        final UserInfo parentUser = userManager.getProfileParent(UserHandle.myUserId());
+        return parentUser == null ? UserHandle.USER_NULL : parentUser.id;
+    }
 
     @Override
     protected void notifyChange(boolean syncToNetwork) {
         // Note that semantics are changed: notification is for CONTENT_URI, not the specific
         // Uri that was modified.
         mContentResolver.notifyChange(CalendarContract.CONTENT_URI, null, syncToNetwork);
+        // If this is a managed profile CalendarProvider, notify the content observers of
+        // enterprise uris in the parent profile.
+        if (mParentUserId != UserHandle.USER_NULL) {
+            mContentResolver.notifyChange(
+                    CalendarContract.ENTERPRISE_CONTENT_URI,
+                    /* observer = */ null, /* syncToNetwork = */ false, mParentUserId);
+        }
     }
 
     /**
@@ -829,6 +866,103 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     }
 
+    /**
+     * @return {@link UserInfo} of the work profile user that is linked to the current user,
+     * if any. {@code null} if there is no such user.
+     */
+    private UserInfo getWorkProfileUserInfo(Context context) {
+        final UserManager userManager = context.getSystemService(UserManager.class);
+        final int currentUserId = userManager.getUserHandle();
+
+        // Check each user.
+        for (UserInfo userInfo : userManager.getUsers()) {
+            if (!userInfo.isManagedProfile()) {
+                continue; // Not a managed user.
+            }
+            final UserInfo parent = userManager.getProfileParent(userInfo.id);
+            if (parent == null) {
+                continue; // No parent.
+            }
+            // Check if it's linked to the current user, and if work profile is disabled.
+            if (parent.id == currentUserId
+                    && !userManager.isQuietModeEnabled(UserHandle.of(userInfo.id))) {
+                return userInfo;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * @return the user ID of the work profile user that is linked to the current user
+     * if any. {@link UserHandle#USER_NULL} if there's no such user.
+     *
+     * @VisibleForTesting
+     */
+    protected int getWorkProfileUserId() {
+        final UserInfo ui = getWorkProfileUserInfo(getContext());
+        return ui == null ? UserHandle.USER_NULL : ui.id;
+    }
+
+    private static Cursor createEmptyCursor(String[] projection) {
+        return new MatrixCursor(projection);
+    }
+
+    /**
+     * @return {@code true} if the calling package can access cross profile calendar. {@code false}
+     * otherwise.
+     */
+    private boolean canAccessCrossProfileCalendar(int workProfileUserId) {
+        // The criteria include:
+        // 1. There exists a work profile linked to the current user and the work profile is not
+        //    disabled.
+        // 2. Profile owner of the work profile has allowed the calling package for cross
+        //    profile calendar.
+        // 3. CROSS_PROFILE_CALENDAR_ENABLED is turned on in Settings.
+        return workProfileUserId != UserHandle.USER_NULL
+                && mCrossProfileCalendarHelper.isPackageAllowedToAccessCalendar(
+                        getCallingPackageName(), workProfileUserId);
+    }
+
+    private String appendPrimaryOnlyToSelection(String selection) {
+        return TextUtils.isEmpty(selection)
+                ? SELECTION_PRIMARY_CALENDAR
+                : selection + " AND (" +  SELECTION_PRIMARY_CALENDAR + ")";
+    }
+
+    /*
+     * Throw UnsupportedOperationException if
+     * <p>1. Work profile doesn't exits or disabled.
+     * <p>2. Calling package is not allowed to access cross profile calendar.
+     * <p>3. CROSS_PROFILE_CALENDAR_ENABLED is turned off in Settings.
+     */
+    private Cursor queryWorkProfileProvider(Uri localUri, String[] projection,
+            String selection, String[] selectionArgs, String sortOrder,
+            List<String> additionalPathSegments) {
+        // If projection is not empty, check if it's valid. Otherwise fill it with all
+        // allowed columns.
+        projection = mCrossProfileCalendarHelper.getCalibratedProjection(
+                projection, localUri);
+        // Throw exception if cross profile calendar is currently not available.
+        final int workProfileUserId = getWorkProfileUserId();
+        if (!canAccessCrossProfileCalendar(workProfileUserId)) {
+            throw new UnsupportedOperationException("Can't access cross profile for " + localUri);
+        }
+
+        Uri remoteUri = maybeAddUserId(
+                localUri, workProfileUserId).buildUpon().build();
+        if (additionalPathSegments != null) {
+            for (String segment : additionalPathSegments) {
+                remoteUri = Uri.withAppendedPath(remoteUri, segment);
+            }
+        }
+
+        selection = appendPrimaryOnlyToSelection(selection);
+
+        final Cursor cursor = getContext().getContentResolver().query(remoteUri, projection,
+                selection, selectionArgs, sortOrder);
+        return cursor == null ? createEmptyCursor(projection) : cursor;
+    }
+
     private Cursor queryInternal(Uri uri, String[] projection, String selection,
             String[] selectionArgs, String sortOrder) {
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
@@ -841,6 +975,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         String groupBy = null;
         String limit = null; // Not currently implemented
         String instancesTimezone;
+
+        List<String> corpAdditionalPathSegments = null;
+        final List<String> uriPathSegments = uri.getPathSegments();
 
         final int match = sUriMatcher.match(uri);
         switch (match) {
@@ -855,6 +992,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                         String.valueOf(ContentUris.parseId(uri)));
                 return mDbHelper.getSyncState().query(db, projection, selectionWithId,
                         selectionArgs, sortOrder);
+
+            case ENTERPRISE_EVENTS_ID:
+                corpAdditionalPathSegments = uriPathSegments.subList(2, uriPathSegments.size());
+            // Intentional fall from the above case.
+            case ENTERPRISE_EVENTS:
+                return queryWorkProfileProvider(Events.CONTENT_URI, projection, selection,
+                        selectionArgs, sortOrder, corpAdditionalPathSegments);
 
             case EVENTS:
                 qb.setTables(CalendarDatabaseHelper.Views.EVENTS);
@@ -890,6 +1034,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 selection = appendAccountToSelection(uri, selection, Calendars.ACCOUNT_NAME,
                         Calendars.ACCOUNT_TYPE);
                 break;
+
+            case ENTERPRISE_CALENDARS_ID:
+                corpAdditionalPathSegments = uriPathSegments.subList(2, uriPathSegments.size());
+                // Intentional fall from the above case.
+            case ENTERPRISE_CALENDARS:
+                return queryWorkProfileProvider(Calendars.CONTENT_URI, projection, selection,
+                        selectionArgs, sortOrder, corpAdditionalPathSegments);
 
             case CALENDARS:
             case CALENDAR_ENTITIES:
@@ -945,6 +1096,22 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 return handleInstanceSearchQuery(qb, begin, end, query, projection, selection,
                         selectionArgs, sortOrder, match == INSTANCES_SEARCH_BY_DAY,
                         instancesTimezone, isHomeTimezone());
+            case ENTERPRISE_INSTANCES:
+                corpAdditionalPathSegments = uriPathSegments.subList(3, uriPathSegments.size());
+                return queryWorkProfileProvider(Instances.CONTENT_URI, projection, selection,
+                        selectionArgs, sortOrder, corpAdditionalPathSegments);
+            case ENTERPRISE_INSTANCES_BY_DAY:
+                corpAdditionalPathSegments = uriPathSegments.subList(3, uriPathSegments.size());
+                return queryWorkProfileProvider(Instances.CONTENT_BY_DAY_URI, projection, selection,
+                        selectionArgs, sortOrder, corpAdditionalPathSegments);
+            case ENTERPRISE_INSTANCES_SEARCH:
+                corpAdditionalPathSegments = uriPathSegments.subList(3, uriPathSegments.size());
+                return queryWorkProfileProvider(Instances.CONTENT_SEARCH_URI, projection, selection,
+                        selectionArgs, sortOrder, corpAdditionalPathSegments);
+            case ENTERPRISE_INSTANCES_SEARCH_BY_DAY:
+                corpAdditionalPathSegments = uriPathSegments.subList(3, uriPathSegments.size());
+                return queryWorkProfileProvider(Instances.CONTENT_SEARCH_BY_DAY_URI, projection,
+                        selection, selectionArgs, sortOrder, corpAdditionalPathSegments);
             case EVENT_DAYS:
                 int startDay;
                 int endDay;
@@ -4160,8 +4327,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                     }
 
                     if (events.getCount() == 0) {
-                        Log.i(TAG, "No events to update: uri=" + uri + " selection=" + selection +
-                                " selectionArgs=" + Arrays.toString(selectionArgs));
                         return 0;
                     }
 
@@ -4645,14 +4810,16 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             Log.d(TAG, "sendUpdateNotification: delay=" + delay);
         }
 
-        mCalendarAlarm.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + delay,
+        mCalendarAlarm.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + delay,
                 PendingIntent.getBroadcast(mContext, 0, createProviderChangedBroadcast(),
                         PendingIntent.FLAG_UPDATE_CURRENT));
     }
 
     private Intent createProviderChangedBroadcast() {
         return new Intent(Intent.ACTION_PROVIDER_CHANGED, CalendarContract.CONTENT_URI)
-                .addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
+                .addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING)
+                .addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
     }
 
     private static final int TRANSACTION_QUERY = 0;
@@ -4700,6 +4867,14 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private static final int EXCEPTION_ID2 = 30;
     private static final int EMMA = 31;
     private static final int COLORS = 32;
+    private static final int ENTERPRISE_EVENTS = 33;
+    private static final int ENTERPRISE_EVENTS_ID = 34;
+    private static final int ENTERPRISE_CALENDARS = 35;
+    private static final int ENTERPRISE_CALENDARS_ID = 36;
+    private static final int ENTERPRISE_INSTANCES = 37;
+    private static final int ENTERPRISE_INSTANCES_BY_DAY = 38;
+    private static final int ENTERPRISE_INSTANCES_SEARCH = 39;
+    private static final int ENTERPRISE_INSTANCES_SEARCH_BY_DAY = 40;
 
     private static final UriMatcher sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
     private static final HashMap<String, String> sInstancesProjectionMap;
@@ -4750,6 +4925,21 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sUriMatcher.addURI(CalendarContract.AUTHORITY, "exception/#/#", EXCEPTION_ID2);
         sUriMatcher.addURI(CalendarContract.AUTHORITY, "emma", EMMA);
         sUriMatcher.addURI(CalendarContract.AUTHORITY, "colors", COLORS);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "enterprise/events", ENTERPRISE_EVENTS);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "enterprise/events/#",
+                ENTERPRISE_EVENTS_ID);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "enterprise/calendars",
+                ENTERPRISE_CALENDARS);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "enterprise/calendars/#",
+                ENTERPRISE_CALENDARS_ID);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "enterprise/instances/when/*/*",
+                ENTERPRISE_INSTANCES);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "enterprise/instances/whenbyday/*/*",
+                ENTERPRISE_INSTANCES_BY_DAY);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "enterprise/instances/search/*/*/*",
+                ENTERPRISE_INSTANCES_SEARCH);
+        sUriMatcher.addURI(CalendarContract.AUTHORITY, "enterprise/instances/searchbyday/*/*/*",
+                ENTERPRISE_INSTANCES_SEARCH_BY_DAY);
 
         /** Contains just BaseColumns._COUNT */
         sCountProjectionMap = new HashMap<String, String>();
@@ -4784,7 +4974,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sCalendarsProjectionMap.put(Calendars.CALENDAR_TIME_ZONE, Calendars.CALENDAR_TIME_ZONE);
         sCalendarsProjectionMap.put(Calendars.OWNER_ACCOUNT, Calendars.OWNER_ACCOUNT);
         sCalendarsProjectionMap.put(Calendars.IS_PRIMARY,
-                "COALESCE(" + Events.IS_PRIMARY + ", "
+                "COALESCE(" + Calendars.IS_PRIMARY + ", "
                         + Calendars.OWNER_ACCOUNT + " = " + Calendars.ACCOUNT_NAME + ") AS "
                         + Calendars.IS_PRIMARY);
         sCalendarsProjectionMap.put(Calendars.CAN_ORGANIZER_RESPOND,
@@ -4870,6 +5060,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         sEventsProjectionMap.put(Calendars.MAX_REMINDERS, Calendars.MAX_REMINDERS);
         sEventsProjectionMap.put(Calendars.CAN_ORGANIZER_RESPOND, Calendars.CAN_ORGANIZER_RESPOND);
         sEventsProjectionMap.put(Calendars.CAN_MODIFY_TIME_ZONE, Calendars.CAN_MODIFY_TIME_ZONE);
+        sEventsProjectionMap.put(Calendars.IS_PRIMARY,
+                "COALESCE(" + Calendars.IS_PRIMARY + ", "
+                        + Calendars.OWNER_ACCOUNT + " = " + Calendars.ACCOUNT_NAME + ") AS "
+                        + Calendars.IS_PRIMARY);
         sEventsProjectionMap.put(Events.DISPLAY_COLOR, Events.DISPLAY_COLOR);
 
         // Put the shared items into the Instances projection map
@@ -5144,7 +5338,8 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
     }
 
-    private String getCallingPackageName() {
+    @VisibleForTesting
+    protected String getCallingPackageName() {
         if (getCachedCallingPackage() != null) {
             // If the calling package is null, use the best available as a fallback.
             return getCachedCallingPackage();

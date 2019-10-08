@@ -5,7 +5,6 @@ import android.app.PendingIntent;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.net.Uri;
-import android.os.PowerManager;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -42,6 +41,11 @@ public class CalendarProvider2ForTesting extends CalendarProvider2 {
     @Override
     protected boolean shouldSyncFor(Uri uri) {
         return true;
+    }
+
+    @Override
+    protected String getCallingPackageName() {
+        return "";
     }
 
     private static class MockCalendarAlarmManager extends CalendarAlarmManager {

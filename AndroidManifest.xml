@@ -37,6 +37,8 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.UPDATE_APP_OPS_STATS" />
     <uses-permission android:name="android.permission.USE_RESERVED_DISK" />
+    <uses-permission android:name="android.permission.MANAGE_USERS" />
+    <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS" />
 
     <application android:label="@string/calendar_storage"
                  android:allowBackup="false"
@@ -50,13 +52,6 @@
                 android:readPermission="android.permission.READ_CALENDAR"
                 android:writePermission="android.permission.WRITE_CALENDAR" />
 
-        <activity android:name="CalendarContentProviderTests" android:label="Calendar Content Provider"
-                android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.UNIT_TEST" />
-            </intent-filter>
-        </activity>
         <receiver android:name="CalendarReceiver">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

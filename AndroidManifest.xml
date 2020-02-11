@@ -43,6 +43,7 @@
     <application android:label="@string/calendar_storage"
                  android:allowBackup="false"
                  android:icon="@drawable/app_icon"
+                 android:forceQueryable="true"
                  android:usesCleartextTraffic="false">
 
         <provider android:name="CalendarProvider2" android:authorities="com.android.calendar"

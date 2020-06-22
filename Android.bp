@@ -25,6 +25,7 @@ android_app {
         "src/**/*.java",
         "src/com/android/providers/calendar/EventLogTags.logtags",
     ],
+    libs: ["app-compat-annotations"],
     platform_apis: true,
     privileged: true,
 
@@ -36,4 +37,9 @@ android_app {
     jacoco: {
         include_filter: ["com.android.providers.calendar.*"],
     },
+}
+
+platform_compat_config {
+    name: "calendar-provider-compat-config",
+    src: ":CalendarProvider",
 }

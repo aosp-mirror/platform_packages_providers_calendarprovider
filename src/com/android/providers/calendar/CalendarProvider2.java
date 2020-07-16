@@ -23,6 +23,9 @@ import android.accounts.OnAccountsUpdateListener;
 import android.app.AlarmManager;
 import android.app.AppOpsManager;
 import android.app.PendingIntent;
+import android.app.compat.CompatChanges;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledAfter;
 import android.content.BroadcastReceiver;
 import android.content.ContentProviderOperation;
 import android.content.ContentProviderResult;
@@ -44,6 +47,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Process;
 import android.os.SystemClock;
 import android.os.UserHandle;
@@ -451,10 +455,18 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     /** set to 'true' to enable debug logging for recurrence exception code */
     private static final boolean DEBUG_EXCEPTION = false;
-    
+
     private static final String SELECTION_PRIMARY_CALENDAR =
             Calendars.IS_PRIMARY + "= 1"
                     + " OR " + Calendars.ACCOUNT_NAME + "=" + Calendars.OWNER_ACCOUNT;
+
+    /**
+     * The SQLiteQueryBuilder will now verify all CalendarProvider2 query selections against
+     * malicious arguments.
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.R)
+    private static final long ENFORCE_STRICT_QUERY_BUILDER = 143231523L;
 
     private final ThreadLocal<Boolean> mCallingPackageErrorLogged = new ThreadLocal<Boolean>();
 
@@ -801,7 +813,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         Cursor cursor = null;
         try {
-            cursor = handleInstanceQuery(new SQLiteQueryBuilder(),
+            final SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
+            qb.setStrict(true);
+            qb.setStrictColumns(true);
+            qb.setStrictGrammar(true);
+            cursor = handleInstanceQuery(qb,
                     begin, end,
                     new String[] { Instances._ID },
                     null /* selection */, null,
@@ -861,7 +877,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         mStats.incrementQueryStats(callingUid);
         final long identity = clearCallingIdentityInternal();
         try {
-            return queryInternal(uri, projection, selection, selectionArgs, sortOrder);
+            return queryInternal(uri, projection, selection, selectionArgs, sortOrder, callingUid);
         } finally {
             restoreCallingIdentityInternal(identity);
             mStats.finishOperation(callingUid);
@@ -966,7 +982,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     private Cursor queryInternal(Uri uri, String[] projection, String selection,
-            String[] selectionArgs, String sortOrder) {
+            String[] selectionArgs, String sortOrder, int callingUid) {
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "query uri - " + uri);
         }
@@ -974,6 +990,9 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         final SQLiteDatabase db = mDbHelper.getReadableDatabase();
 
         SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
+        if (CompatChanges.isChangeEnabled(ENFORCE_STRICT_QUERY_BUILDER, callingUid)) {
+            qb.setStrict(true);
+        }
         String groupBy = null;
         String limit = null; // Not currently implemented
         String instancesTimezone;

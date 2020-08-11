@@ -193,7 +193,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      */
     MetaData mMetaData;
     CalendarCache mCalendarCache;
-    CalendarSanityChecker mSanityChecker;
+    CalendarConfidenceChecker mConfidenceChecker;
 
     private CalendarDatabaseHelper mDbHelper;
     private CalendarInstancesHelper mInstancesHelper;
@@ -542,7 +542,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         mMetaData = new MetaData(mDbHelper);
         mInstancesHelper = new CalendarInstancesHelper(mDbHelper, mMetaData);
-        mSanityChecker = new CalendarSanityChecker(mContext);
+        mConfidenceChecker = new CalendarConfidenceChecker(mContext);
 
         // Register for Intent broadcasts
         IntentFilter filter = new IntentFilter();
@@ -869,7 +869,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
-        mSanityChecker.checkLastCheckTime();
+        mConfidenceChecker.checkLastCheckTime();
 
         // Note don't use mCallingUid here. That's only used by mutation functions.
         final int callingUid = Binder.getCallingUid();
@@ -2346,7 +2346,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "insertInTransaction: " + uri);
         }
-        mSanityChecker.checkLastCheckTime();
+        mConfidenceChecker.checkLastCheckTime();
 
         validateUriParameters(uri.getQueryParameterNames());
         final int match = sUriMatcher.match(uri);
@@ -3336,7 +3336,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "deleteInTransaction: " + uri);
         }
-        mSanityChecker.checkLastCheckTime();
+        mConfidenceChecker.checkLastCheckTime();
 
         validateUriParameters(uri.getQueryParameterNames());
         final int match = sUriMatcher.match(uri);
@@ -4215,7 +4215,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "updateInTransaction: " + uri);
         }
-        mSanityChecker.checkLastCheckTime();
+        mConfidenceChecker.checkLastCheckTime();
 
         validateUriParameters(uri.getQueryParameterNames());
         final int match = sUriMatcher.match(uri);
@@ -4586,7 +4586,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             // TODO review this list, document in contract.
             if (!TextUtils.isEmpty(selection)) {
                 // Only allow selections for the URIs that can reasonably use them.
-                // Whitelist of URIs allowed selections
+                // Allowed list of URIs allowed selections
                 switch (uriMatch) {
                     case SYNCSTATE:
                     case CALENDARS:
@@ -4603,7 +4603,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
             } else {
                 // Disallow empty selections for some URIs.
-                // Blacklist of URIs _not_ allowed empty selections
+                // Disallowed list of URIs _not_ allowed empty selections
                 switch (uriMatch) {
                     case EVENTS:
                     case ATTENDEES:

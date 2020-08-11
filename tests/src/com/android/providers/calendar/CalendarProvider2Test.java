@@ -3466,7 +3466,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         // Assume cross profile uri access is allowed by policy and settings.
         MockCrossProfileCalendarHelper.setPackageAllowedToAccessCalendar(true);
 
-        // Test all whitelisted columns are returned when projection is empty.
+        // Test all allowed list of columns are returned when projection is empty.
         String selection = "(" + Events.TITLE + " = ? )";
         String[] selectionArgs = new String[]{
                 WORK_EVENT_TITLE
@@ -3478,7 +3478,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertNotNull(cursor);
         assertEquals(1, cursor.getCount());
         cursor.moveToFirst();
-        for (String column : CrossProfileCalendarHelper.EVENTS_TABLE_WHITELIST) {
+        for (String column : CrossProfileCalendarHelper.EVENTS_TABLE_ALLOWED_LIST) {
             final int index = cursor.getColumnIndex(column);
             assertTrue(index != -1);
         }
@@ -3576,7 +3576,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         // Assume cross profile uri access is allowed by policy and settings.
         MockCrossProfileCalendarHelper.setPackageAllowedToAccessCalendar(true);
 
-        // Test all whitelisted columns are returned when projection is empty.
+        // Test all allowed list of columns are returned when projection is empty.
         final Cursor cursor = mResolver.query(
                 Calendars.ENTERPRISE_CONTENT_URI,
                 new String[] {}, null, null, null);
@@ -3584,7 +3584,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertNotNull(cursor);
         assertEquals(1, cursor.getCount());
         cursor.moveToFirst();
-        for (String column : CrossProfileCalendarHelper.CALENDARS_TABLE_WHITELIST) {
+        for (String column : CrossProfileCalendarHelper.CALENDARS_TABLE_ALLOWED_LIST) {
             final int index = cursor.getColumnIndex(column);
             assertTrue(index != -1);
         }
@@ -3597,8 +3597,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
         cleanupEnterpriseTestForCalendars(1);
     }
 
-    public void testEnterpriseCalendarsNonWhitelistedProjection() {
-        // Test SecurityException is thrown there is non-whitelisted column in the projection.
+    public void testEnterpriseCalendarsNonAllowedListProjection() {
+        // Test SecurityException is thrown there is non-allowed list column in the projection.
         try {
             String[] projection = new String[] {
                     Calendars._ID,
@@ -3609,7 +3609,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             mResolver.query(
                     Calendars.ENTERPRISE_CONTENT_URI,
                     projection, null, null, null);
-            fail("IllegalArgumentException is not thrown when querying non-whitelisted columns");
+            fail("IllegalArgumentException is not thrown when querying non-allowed list of columns");
         } catch (IllegalArgumentException e) {
         }
     }
@@ -3651,4 +3651,3 @@ public class CalendarProvider2Test extends AndroidTestCase {
         return Long.parseLong(uri.getLastPathSegment());
     }
 }
-

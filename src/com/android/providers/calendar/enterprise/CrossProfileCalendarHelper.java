@@ -37,58 +37,58 @@ public class CrossProfileCalendarHelper {
 
     final private Context mContext;
 
-    public static final Set<String> EVENTS_TABLE_WHITELIST;
-    public static final Set<String> CALENDARS_TABLE_WHITELIST;
-    public static final Set<String> INSTANCES_TABLE_WHITELIST;
+    public static final Set<String> EVENTS_TABLE_ALLOWED_LIST;
+    public static final Set<String> CALENDARS_TABLE_ALLOWED_LIST;
+    public static final Set<String> INSTANCES_TABLE_ALLOWED_LIST;
 
     static {
-        EVENTS_TABLE_WHITELIST = new ArraySet<>();
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events._ID);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.CALENDAR_ID);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.TITLE);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.EVENT_LOCATION);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.EVENT_COLOR);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.STATUS);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.DTSTART);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.DTEND);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.EVENT_TIMEZONE);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.EVENT_END_TIMEZONE);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.DURATION);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.ALL_DAY);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.AVAILABILITY);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.RRULE);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.RDATE);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.EXRULE);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.EXDATE);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.LAST_DATE);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.SELF_ATTENDEE_STATUS);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Events.DISPLAY_COLOR);
+        EVENTS_TABLE_ALLOWED_LIST = new ArraySet<>();
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events._ID);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.CALENDAR_ID);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.TITLE);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.EVENT_LOCATION);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.EVENT_COLOR);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.STATUS);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.DTSTART);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.DTEND);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.EVENT_TIMEZONE);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.EVENT_END_TIMEZONE);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.DURATION);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.ALL_DAY);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.AVAILABILITY);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.RRULE);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.RDATE);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.EXRULE);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.EXDATE);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.LAST_DATE);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.SELF_ATTENDEE_STATUS);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Events.DISPLAY_COLOR);
 
-        CALENDARS_TABLE_WHITELIST = new ArraySet<>();
-        CALENDARS_TABLE_WHITELIST.add(CalendarContract.Calendars._ID);
-        CALENDARS_TABLE_WHITELIST.add(CalendarContract.Calendars.CALENDAR_COLOR);
-        CALENDARS_TABLE_WHITELIST.add(CalendarContract.Calendars.VISIBLE);
-        CALENDARS_TABLE_WHITELIST.add(CalendarContract.Calendars.CALENDAR_LOCATION);
-        CALENDARS_TABLE_WHITELIST.add(CalendarContract.Calendars.CALENDAR_TIME_ZONE);
-        CALENDARS_TABLE_WHITELIST.add(CalendarContract.Calendars.IS_PRIMARY);
+        CALENDARS_TABLE_ALLOWED_LIST = new ArraySet<>();
+        CALENDARS_TABLE_ALLOWED_LIST.add(CalendarContract.Calendars._ID);
+        CALENDARS_TABLE_ALLOWED_LIST.add(CalendarContract.Calendars.CALENDAR_COLOR);
+        CALENDARS_TABLE_ALLOWED_LIST.add(CalendarContract.Calendars.VISIBLE);
+        CALENDARS_TABLE_ALLOWED_LIST.add(CalendarContract.Calendars.CALENDAR_LOCATION);
+        CALENDARS_TABLE_ALLOWED_LIST.add(CalendarContract.Calendars.CALENDAR_TIME_ZONE);
+        CALENDARS_TABLE_ALLOWED_LIST.add(CalendarContract.Calendars.IS_PRIMARY);
 
-        INSTANCES_TABLE_WHITELIST = new ArraySet<>();
-        INSTANCES_TABLE_WHITELIST.add(CalendarContract.Instances._ID);
-        INSTANCES_TABLE_WHITELIST.add(CalendarContract.Instances.EVENT_ID);
-        INSTANCES_TABLE_WHITELIST.add(CalendarContract.Instances.BEGIN);
-        INSTANCES_TABLE_WHITELIST.add(CalendarContract.Instances.END);
-        INSTANCES_TABLE_WHITELIST.add(CalendarContract.Instances.START_DAY);
-        INSTANCES_TABLE_WHITELIST.add(CalendarContract.Instances.END_DAY);
-        INSTANCES_TABLE_WHITELIST.add(CalendarContract.Instances.START_MINUTE);
-        INSTANCES_TABLE_WHITELIST.add(CalendarContract.Instances.END_MINUTE);
+        INSTANCES_TABLE_ALLOWED_LIST = new ArraySet<>();
+        INSTANCES_TABLE_ALLOWED_LIST.add(CalendarContract.Instances._ID);
+        INSTANCES_TABLE_ALLOWED_LIST.add(CalendarContract.Instances.EVENT_ID);
+        INSTANCES_TABLE_ALLOWED_LIST.add(CalendarContract.Instances.BEGIN);
+        INSTANCES_TABLE_ALLOWED_LIST.add(CalendarContract.Instances.END);
+        INSTANCES_TABLE_ALLOWED_LIST.add(CalendarContract.Instances.START_DAY);
+        INSTANCES_TABLE_ALLOWED_LIST.add(CalendarContract.Instances.END_DAY);
+        INSTANCES_TABLE_ALLOWED_LIST.add(CalendarContract.Instances.START_MINUTE);
+        INSTANCES_TABLE_ALLOWED_LIST.add(CalendarContract.Instances.END_MINUTE);
 
         // Add calendar columns.
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Calendars.CALENDAR_COLOR);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Calendars.VISIBLE);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Calendars.CALENDAR_TIME_ZONE);
-        EVENTS_TABLE_WHITELIST.add(CalendarContract.Calendars.IS_PRIMARY);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Calendars.CALENDAR_COLOR);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Calendars.VISIBLE);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Calendars.CALENDAR_TIME_ZONE);
+        EVENTS_TABLE_ALLOWED_LIST.add(CalendarContract.Calendars.IS_PRIMARY);
 
-        ((ArraySet<String>) INSTANCES_TABLE_WHITELIST).addAll(EVENTS_TABLE_WHITELIST);
+        ((ArraySet<String>) INSTANCES_TABLE_ALLOWED_LIST).addAll(EVENTS_TABLE_ALLOWED_LIST);
     }
 
     public CrossProfileCalendarHelper(Context context) {
@@ -140,29 +140,29 @@ public class CrossProfileCalendarHelper {
     /**
      * Returns the calibrated version of projection for a given table.
      *
-     * If the input projection is empty, return an array of all the whitelisted columns for a
+     * If the input projection is empty, return an array of all the allowed list of columns for a
      * given table. Table is determined by the input uri.
      *
      * @param projection the original projection
      * @param localUri the local uri for the query of the projection
      * @return the original value of the input projection if it's not empty, otherwise an array of
-     * all the whitelisted columns.
+     * all the allowed list of columns.
      * @throws IllegalArgumentException if the input projection contains a column that is not
-     * whitelisted for a given table.
+     * in the allowed list for a given table.
      */
     public String[] getCalibratedProjection(String[] projection, Uri localUri) {
         // If projection is not empty, check if it's valid. Otherwise fill it with all
         // allowed columns.
         Set<String> validColumnsSet = new ArraySet<String>();
         if (CalendarContract.Events.CONTENT_URI.equals(localUri)) {
-            validColumnsSet = EVENTS_TABLE_WHITELIST;
+            validColumnsSet = EVENTS_TABLE_ALLOWED_LIST;
         } else if (CalendarContract.Calendars.CONTENT_URI.equals(localUri)) {
-            validColumnsSet = CALENDARS_TABLE_WHITELIST;
+            validColumnsSet = CALENDARS_TABLE_ALLOWED_LIST;
         } else if (CalendarContract.Instances.CONTENT_URI.equals(localUri)
                 || CalendarContract.Instances.CONTENT_BY_DAY_URI.equals(localUri)
                 || CalendarContract.Instances.CONTENT_SEARCH_URI.equals(localUri)
                 || CalendarContract.Instances.CONTENT_SEARCH_BY_DAY_URI.equals(localUri)) {
-            validColumnsSet = INSTANCES_TABLE_WHITELIST;
+            validColumnsSet = INSTANCES_TABLE_ALLOWED_LIST;
         } else {
             throw new IllegalArgumentException(String.format("Cross profile version of %d is not "
                     + "supported", localUri.toSafeString()));

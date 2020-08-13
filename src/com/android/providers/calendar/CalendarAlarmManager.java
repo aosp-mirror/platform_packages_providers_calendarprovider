@@ -249,7 +249,7 @@ public class CalendarAlarmManager {
      * @param cp2 TODO
      */
     private void scheduleNextAlarmLocked(SQLiteDatabase db, CalendarProvider2 cp2) {
-        cp2.mSanityChecker.updateLastCheckTime();
+        cp2.mConfidenceChecker.updateLastCheckTime();
 
         Time time = new Time();
 

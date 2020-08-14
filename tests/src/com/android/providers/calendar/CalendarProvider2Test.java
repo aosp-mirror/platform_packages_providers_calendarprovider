@@ -49,9 +49,9 @@ import android.test.suitebuilder.annotation.Smoke;
 import android.test.suitebuilder.annotation.Suppress;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
-import android.text.format.Time;
 import android.util.Log;
 
+import com.android.calendarcommon2.Time;
 import com.android.providers.calendar.enterprise.CrossProfileCalendarHelper;
 
 import java.io.File;

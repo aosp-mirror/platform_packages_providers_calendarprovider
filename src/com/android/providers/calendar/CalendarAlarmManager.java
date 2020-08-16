@@ -16,6 +16,7 @@
 
 package com.android.providers.calendar;
 
+import com.android.calendarcommon2.Time;
 import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
 import com.android.providers.calendar.CalendarDatabaseHelper.Views;
 import com.google.common.annotations.VisibleForTesting;
@@ -38,7 +39,6 @@ import android.provider.CalendarContract.Events;
 import android.provider.CalendarContract.Instances;
 import android.provider.CalendarContract.Reminders;
 import android.text.format.DateUtils;
-import android.text.format.Time;
 import android.util.Log;
 
 import java.util.concurrent.atomic.AtomicBoolean;

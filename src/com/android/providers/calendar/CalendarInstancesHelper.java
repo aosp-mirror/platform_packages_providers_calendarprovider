@@ -21,6 +21,7 @@ import com.android.calendarcommon2.Duration;
 import com.android.calendarcommon2.EventRecurrence;
 import com.android.calendarcommon2.RecurrenceProcessor;
 import com.android.calendarcommon2.RecurrenceSet;
+import com.android.calendarcommon2.Time;
 import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
 
 import android.content.ContentValues;
@@ -33,7 +34,6 @@ import android.provider.CalendarContract.Calendars;
 import android.provider.CalendarContract.Events;
 import android.provider.CalendarContract.Instances;
 import android.text.TextUtils;
-import android.text.format.Time;
 import android.util.Log;
 import android.util.TimeFormatException;
 

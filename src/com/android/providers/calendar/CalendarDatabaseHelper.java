@@ -36,9 +36,9 @@ import android.provider.CalendarContract.Events;
 import android.provider.CalendarContract.Reminders;
 import android.provider.SyncStateContract;
 import android.text.TextUtils;
-import android.text.format.Time;
 import android.util.Log;
 
+import com.android.calendarcommon2.Time;
 import com.android.common.content.SyncStateContentProviderHelper;
 import com.google.common.annotations.VisibleForTesting;
 

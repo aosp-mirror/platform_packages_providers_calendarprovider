@@ -1,0 +1,15 @@
+{
+    "presubmit": [
+        {
+            "name": "CalendarProviderTests"
+        },
+        {
+            "name": "CtsProviderTestCases",
+            "options": [
+                {
+                    "include-filter": "android.provider.cts.calendar."
+                }
+            ]
+        }
+    ]
+}

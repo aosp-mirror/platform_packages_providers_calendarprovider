@@ -16,14 +16,10 @@
 
 package com.android.providers.calendar;
 
-import android.annotation.Nullable;
-import android.content.ContentProvider;
 import android.content.Context;
-import android.content.IContentProvider;
 import android.content.SharedPreferences;
 import android.os.SystemClock;
 import android.os.UserManager;
-import android.provider.CalendarContract;
 import android.provider.Settings;
 import android.provider.Settings.Global;
 import android.text.format.DateUtils;
@@ -64,7 +60,6 @@ public class CalendarSanityChecker {
     private static final String LAST_CHECK_BOOT_COUNT_PREF_KEY = "last_check_boot_count";
     private static final String LAST_WTF_REALTIME_PREF_KEY = "last_wtf_realtime";
 
-    private static CalendarSanityChecker sInstance;
     private final Context mContext;
 
     private final Object mLock = new Object();
@@ -73,7 +68,7 @@ public class CalendarSanityChecker {
     @VisibleForTesting
     final SharedPreferences mPrefs;
 
-    protected CalendarSanityChecker(Context context) {
+    public CalendarSanityChecker(Context context) {
         mContext = context;
         mPrefs = mContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
     }
@@ -90,20 +85,13 @@ public class CalendarSanityChecker {
 
     @VisibleForTesting
     protected long getUserUnlockTime() {
-        final UserManager um = mContext.getSystemService(UserManager.class);
+        final UserManager um = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
         final long startTime = um.getUserStartRealtime();
         final long unlockTime = um.getUserUnlockRealtime();
         if (DEBUG) {
             Log.d(TAG, String.format("User start/unlock time=%d/%d", startTime, unlockTime));
         }
         return unlockTime;
-    }
-
-    public static synchronized CalendarSanityChecker getInstance(Context context) {
-        if (sInstance == null) {
-            sInstance = new CalendarSanityChecker(context);
-        }
-        return sInstance;
     }
 
     /**

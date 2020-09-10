@@ -23,6 +23,7 @@ import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ProviderInfo;
 import android.content.res.Resources;
@@ -988,15 +989,22 @@ public class CalendarProvider2Test extends AndroidTestCase {
         RenamingDelegatingContext targetContextWrapper = new RenamingDelegatingContext(
                 new MockContext2(), // The context that most methods are delegated to
                 getContext(), // The context that file methods are delegated to
-                filenamePrefix);
+                filenamePrefix) {
+            @Override
+            public SharedPreferences getSharedPreferences(String name, int mode) {
+                return getContext().getSharedPreferences(name, mode);
+            }
+        };
         mContext = new IsolatedContext(mResolver, targetContextWrapper) {
             @Override
             public Object getSystemService(String name) {
-                // for accessing wakelock.
-                if (Context.POWER_SERVICE.equals(name)) {
-                    return getContext().getSystemService(name);
+                switch (name) {
+                    case Context.POWER_SERVICE:
+                    case Context.USER_SERVICE:
+                        return getContext().getSystemService(name);
+                    default:
+                        return super.getSystemService(name);
                 }
-                return super.getSystemService(name);
             }
         };
 
@@ -1004,6 +1012,17 @@ public class CalendarProvider2Test extends AndroidTestCase {
             @Override
             public int getUserId() {
                 return WORK_PROFILE_USER_ID;
+            }
+
+            @Override
+            public Object getSystemService(String name) {
+                switch (name) {
+                    case Context.POWER_SERVICE:
+                    case Context.USER_SERVICE:
+                        return getContext().getSystemService(name);
+                    default:
+                        return super.getSystemService(name);
+                }
             }
         };
 

@@ -261,7 +261,7 @@ public class CalendarAlarmManager {
 
         if (Log.isLoggable(CalendarProvider2.TAG, Log.DEBUG)) {
             time.set(start);
-            String startTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
+            String startTimeStr = time.format();
             Log.d(CalendarProvider2.TAG, "runScheduleNextAlarm() start search: " + startTimeStr);
         }
 
@@ -306,9 +306,9 @@ public class CalendarAlarmManager {
         // string query parameter to an int in myAlarmtime>=?, so the comparison
         // will fail. This could be simplified if bug 2464440 is resolved.
 
-        time.setToNow();
-        time.normalize(false);
-        long localOffset = time.gmtoff * 1000;
+        time.set(System.currentTimeMillis());
+        time.normalize();
+        long localOffset = time.getGmtOffset() * 1000;
 
         String allDayOffset = " -(" + localOffset + ") ";
         String subQueryPrefix = "SELECT " + Instances.BEGIN;
@@ -373,7 +373,7 @@ public class CalendarAlarmManager {
 
             if (Log.isLoggable(CalendarProvider2.TAG, Log.DEBUG)) {
                 time.set(nextAlarmTime);
-                String alarmTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
+                String alarmTimeStr = time.format();
                 Log.d(CalendarProvider2.TAG,
                         "cursor results: " + cursor.getCount() + " nextAlarmTime: " + alarmTimeStr);
             }
@@ -394,9 +394,9 @@ public class CalendarAlarmManager {
 
                 if (Log.isLoggable(CalendarProvider2.TAG, Log.DEBUG)) {
                     time.set(alarmTime);
-                    String schedTime = time.format(" %a, %b %d, %Y %I:%M%P");
+                    String schedTime = time.format();
                     time.set(startTime);
-                    String startTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
+                    String startTimeStr = time.format();
 
                     Log.d(CalendarProvider2.TAG,
                             "  looking at id: " + eventId + " " + startTime + startTimeStr

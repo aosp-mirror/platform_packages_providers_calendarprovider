@@ -1476,10 +1476,10 @@ import java.util.TimeZone;
 
     private static boolean fixAllDayTime(Time time, String timezone, Long timeInMillis) {
         time.set(timeInMillis);
-        if(time.hour != 0 || time.minute != 0 || time.second != 0) {
-            time.hour = 0;
-            time.minute = 0;
-            time.second = 0;
+        if(time.getHour() != 0 || time.getMinute() != 0 || time.getSecond() != 0) {
+            time.setHour(0);
+            time.setMinute(0);
+            time.setSecond(0);
             return true;
         }
         return false;
@@ -2576,22 +2576,22 @@ import java.util.TimeZone;
 
                         time.clear(timezone);
                         update |= fixAllDayTime(time, timezone, dtstart);
-                        dtstart = time.normalize(false);
+                        dtstart = time.normalize();
 
                         time.clear(timezone);
                         update |= fixAllDayTime(time, timezone, dtend);
-                        dtend = time.normalize(false);
+                        dtend = time.normalize();
 
                         if (dtstart2 != null) {
                             time.clear(timezone2);
                             update |= fixAllDayTime(time, timezone2, dtstart2);
-                            dtstart2 = time.normalize(false);
+                            dtstart2 = time.normalize();
                         }
 
                         if (dtend2 != null) {
                             time.clear(timezone2);
                             update |= fixAllDayTime(time, timezone2, dtend2);
-                            dtend2 = time.normalize(false);
+                            dtend2 = time.normalize();
                         }
 
                         if (!TextUtils.isEmpty(duration)) {
@@ -2637,12 +2637,12 @@ import java.util.TimeZone;
 
                         time.clear(timezone);
                         update |= fixAllDayTime(time, timezone, dtstart);
-                        dtstart = time.normalize(false);
+                        dtstart = time.normalize();
 
                         if (dtstart2 != null) {
                             time.clear(timezone2);
                             update |= fixAllDayTime(time, timezone2, dtstart2);
-                            dtstart2 = time.normalize(false);
+                            dtstart2 = time.normalize();
                         }
 
                         if (TextUtils.isEmpty(duration)) {
@@ -2756,17 +2756,17 @@ import java.util.TimeZone;
                     oldTime.clear(eTz);
                     oldTime.set(dtstart);
                     newTime.clear(tz);
-                    newTime.set(oldTime.monthDay, oldTime.month, oldTime.year);
-                    newTime.normalize(false);
-                    dtstart = newTime.toMillis(false /*ignoreDst*/);
+                    newTime.set(oldTime.getDay(), oldTime.getMonth(), oldTime.getYear());
+                    newTime.normalize();
+                    dtstart = newTime.toMillis();
 
                     // Convert end time for all day events into the timezone of their calendar
                     oldTime.clear(eTz);
                     oldTime.set(dtend);
                     newTime.clear(tz);
-                    newTime.set(oldTime.monthDay, oldTime.month, oldTime.year);
-                    newTime.normalize(false);
-                    dtend = newTime.toMillis(false /*ignoreDst*/);
+                    newTime.set(oldTime.getDay(), oldTime.getMonth(), oldTime.getYear());
+                    newTime.normalize();
+                    dtend = newTime.toMillis();
 
                     newData[0] = String.valueOf(dtstart);
                     newData[1] = String.valueOf(dtend);

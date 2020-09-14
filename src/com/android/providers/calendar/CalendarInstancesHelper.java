@@ -288,9 +288,9 @@ public class CalendarInstancesHelper {
                     }
 
                     // need to parse the event into a local calendar.
-                    eventTime.timezone = eventTimezone;
+                    eventTime.setTimezone(eventTimezone);
                     eventTime.set(dtstartMillis);
-                    eventTime.allDay = allDay;
+                    eventTime.setAllDay(allDay);
 
                     if (durationStr == null) {
                         // should not happen.
@@ -332,9 +332,9 @@ public class CalendarInstancesHelper {
                     // Initialize the "eventTime" timezone outside the loop.
                     // This is used in computeTimezoneDependentFields().
                     if (allDay) {
-                        eventTime.timezone = Time.TIMEZONE_UTC;
+                        eventTime.setTimezone(Time.TIMEZONE_UTC);
                     } else {
-                        eventTime.timezone = localTimezone;
+                        eventTime.setTimezone(localTimezone);
                     }
 
                     long durationMillis = duration.getMillis();
@@ -404,9 +404,9 @@ public class CalendarInstancesHelper {
                     initialValues.put(Events.DELETED, deleted);
 
                     if (allDay) {
-                        eventTime.timezone = Time.TIMEZONE_UTC;
+                        eventTime.setTimezone(Time.TIMEZONE_UTC);
                     } else {
-                        eventTime.timezone = localTimezone;
+                        eventTime.setTimezone(localTimezone);
                     }
                     CalendarInstancesHelper.computeTimezoneDependentFields(dtstartMillis,
                             dtendMillis, eventTime, initialValues);
@@ -703,9 +703,9 @@ public class CalendarInstancesHelper {
             // Update the timezone-dependent fields.
             Time local = new Time();
             if (allDay) {
-                local.timezone = Time.TIMEZONE_UTC;
+                local.setTimezone(Time.TIMEZONE_UTC);
             } else {
-                local.timezone = fields.timezone;
+                local.setTimezone(fields.timezone);
             }
 
             CalendarInstancesHelper.computeTimezoneDependentFields(dtstartMillis, dtendMillis,
@@ -889,12 +889,12 @@ public class CalendarInstancesHelper {
     static void computeTimezoneDependentFields(long begin, long end,
             Time local, ContentValues values) {
         local.set(begin);
-        int startDay = Time.getJulianDay(begin, local.gmtoff);
-        int startMinute = local.hour * 60 + local.minute;
+        int startDay = Time.getJulianDay(begin, local.getGmtOffset());
+        int startMinute = local.getHour() * 60 + local.getMinute();
 
         local.set(end);
-        int endDay = Time.getJulianDay(end, local.gmtoff);
-        int endMinute = local.hour * 60 + local.minute;
+        int endDay = Time.getJulianDay(end, local.getGmtOffset());
+        int endMinute = local.getHour() * 60 + local.getMinute();
 
         // Special case for midnight, which has endMinute == 0.  Change
         // that to +24 hours on the previous day to make everything simpler.

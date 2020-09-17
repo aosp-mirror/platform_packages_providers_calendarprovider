@@ -249,7 +249,7 @@ public class CalendarAlarmManager {
      * @param cp2 TODO
      */
     private void scheduleNextAlarmLocked(SQLiteDatabase db, CalendarProvider2 cp2) {
-        CalendarSanityChecker.getInstance(mContext).updateLastCheckTime();
+        cp2.mSanityChecker.updateLastCheckTime();
 
         Time time = new Time();
 
@@ -479,22 +479,27 @@ public class CalendarAlarmManager {
     }
 
     public void set(int type, long triggerAtTime, PendingIntent operation) {
+        if (mAlarmManager == null) return;
         mAlarmManager.set(type, triggerAtTime, operation);
     }
 
     public void setAndAllowWhileIdle(int type, long triggerAtTime, PendingIntent operation) {
+        if (mAlarmManager == null) return;
         mAlarmManager.setAndAllowWhileIdle(type, triggerAtTime, operation);
     }
 
     public void setExact(int type, long triggerAtTime, PendingIntent operation) {
+        if (mAlarmManager == null) return;
         mAlarmManager.setExact(type, triggerAtTime, operation);
     }
 
     public void setExactAndAllowWhileIdle(int type, long triggerAtTime, PendingIntent operation) {
+        if (mAlarmManager == null) return;
         mAlarmManager.setExactAndAllowWhileIdle(type, triggerAtTime, operation);
     }
 
     public void cancel(PendingIntent operation) {
+        if (mAlarmManager == null) return;
         mAlarmManager.cancel(operation);
     }
 
@@ -503,6 +508,7 @@ public class CalendarAlarmManager {
      * mAlarmScheduled is specific to that method, currently.
      */
     public void scheduleAlarm(long alarmTime) {
+        if (mAlarmManager == null) return;
         // Debug log for investigating dozing related bugs, remove it once we confirm it is stable.
         if (Build.IS_DEBUGGABLE) {
             Log.d(TAG, "schedule reminder alarm fired at " + alarmTime);
@@ -511,6 +517,7 @@ public class CalendarAlarmManager {
     }
 
     public void rescheduleMissedAlarms(ContentResolver cr) {
+        if (mAlarmManager == null) return;
         CalendarContract.CalendarAlerts.rescheduleMissedAlarms(cr, mContext, mAlarmManager);
     }
 }

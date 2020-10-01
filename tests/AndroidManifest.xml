@@ -25,18 +25,8 @@
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
 
-    <!--
-    The test declared in this instrumentation will be run along with tests declared by
-    all other applications via the command: "adb shell itr".
-    The "itr" command will find all tests declared by all applications. If you want to run just these
-    tests on their own then use the command:
-    "adb shell am instrument -w com.android.providers.calendar.tests/android.test.InstrumentationTestRunner"
-
-    To test db upgrade:
-    adb shell am instrument -w -e class com.android.providers.calendar.CalendarDatabaseHelperTest#testSchemasEqualForAllTables com.android.providers.calendar.tests/android.test.InstrumentationTestRunner
-    -->
-    <instrumentation android:name="android.test.InstrumentationTestRunner"
+    <instrumentation android:name="androidx.test.runner.AndroidJUnitRunner"
                      android:targetPackage="com.android.providers.calendar"
-                     android:label="calendar provider tests"/>
+                     android:label="CalendarProvider tests"/>
 
 </manifest>

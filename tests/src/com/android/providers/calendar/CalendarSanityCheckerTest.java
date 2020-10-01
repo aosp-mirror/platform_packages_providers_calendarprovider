@@ -15,11 +15,23 @@
  */
 package com.android.providers.calendar;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 import android.content.Context;
-import android.test.AndroidTestCase;
+import android.test.suitebuilder.annotation.SmallTest;
 import android.text.format.DateUtils;
 
-public class CalendarSanityCheckerTest extends AndroidTestCase {
+import androidx.test.InstrumentationRegistry;
+import androidx.test.runner.AndroidJUnit4;
+
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+
+@RunWith(AndroidJUnit4.class)
+@SmallTest
+public class CalendarSanityCheckerTest {
     private class CalendarSanityCheckerTestable extends CalendarSanityChecker {
         protected CalendarSanityCheckerTestable(Context context) {
             super(context);
@@ -41,73 +53,79 @@ public class CalendarSanityCheckerTest extends AndroidTestCase {
         }
     }
 
+    private Context mContext;
+    private CalendarSanityCheckerTestable mSanityChecker;
+
     private long mInjectedRealtimeMillis = 1000000L;
     private long mInjectedBootCount = 1000;
     private long mInjectedUnlockTime = 0;
 
-    public void testWithoutLastCheckTime() {
-        CalendarSanityCheckerTestable target = new CalendarSanityCheckerTestable(getContext());
-        target.mPrefs.edit().clear().commit();
+    @Before
+    public void setUp() {
+        mContext = InstrumentationRegistry.getContext();
+        mSanityChecker = new CalendarSanityCheckerTestable(mContext);
+        mSanityChecker.mPrefs.edit().clear().commit();
+    }
 
-        assertTrue(target.checkLastCheckTime());
+    @Test
+    public void testWithoutLastCheckTime() {
+        assertTrue(mSanityChecker.checkLastCheckTime());
 
         // Unlock.
         mInjectedUnlockTime = mInjectedRealtimeMillis;
 
         mInjectedRealtimeMillis += 15 * 60 * 1000;
-        assertTrue(target.checkLastCheckTime());
+        assertTrue(mSanityChecker.checkLastCheckTime());
 
         mInjectedRealtimeMillis += 1;
-        assertFalse(target.checkLastCheckTime());
+        assertFalse(mSanityChecker.checkLastCheckTime());
     }
 
+    @Test
     public void testWithLastCheckTime() {
-        CalendarSanityCheckerTestable target = new CalendarSanityCheckerTestable(getContext());
-        target.mPrefs.edit().clear().commit();
-
-        assertTrue(target.checkLastCheckTime());
+        assertTrue(mSanityChecker.checkLastCheckTime());
 
         mInjectedUnlockTime = mInjectedRealtimeMillis;
 
         // Update the last check time.
         mInjectedRealtimeMillis += 1 * 60 * 1000;
-        target.updateLastCheckTime();
+        mSanityChecker.updateLastCheckTime();
 
         // Right after, okay.
-        assertTrue(target.checkLastCheckTime());
+        assertTrue(mSanityChecker.checkLastCheckTime());
 
         // Still okay.
         mInjectedRealtimeMillis += DateUtils.DAY_IN_MILLIS - (15 * DateUtils.MINUTE_IN_MILLIS);
-        assertTrue(target.checkLastCheckTime());
+        assertTrue(mSanityChecker.checkLastCheckTime());
 
         mInjectedRealtimeMillis += 1;
-        assertFalse(target.checkLastCheckTime());
+        assertFalse(mSanityChecker.checkLastCheckTime());
 
         // Repeat the same thing.
         mInjectedRealtimeMillis += 1 * 60 * 1000;
-        target.updateLastCheckTime();
+        mSanityChecker.updateLastCheckTime();
 
         // Right after, okay.
-        assertTrue(target.checkLastCheckTime());
+        assertTrue(mSanityChecker.checkLastCheckTime());
 
         // Still okay.
         mInjectedRealtimeMillis += DateUtils.DAY_IN_MILLIS - (15 * DateUtils.MINUTE_IN_MILLIS);
-        assertTrue(target.checkLastCheckTime());
+        assertTrue(mSanityChecker.checkLastCheckTime());
 
         mInjectedRealtimeMillis += 1;
-        assertFalse(target.checkLastCheckTime());
+        assertFalse(mSanityChecker.checkLastCheckTime());
 
         // Check again right after. This should pass because of WTF_INTERVAL_MS.
-        assertTrue(target.checkLastCheckTime());
+        assertTrue(mSanityChecker.checkLastCheckTime());
 
         mInjectedRealtimeMillis += 60 * 60 * 1000;
 
         // Still okay.
-        assertTrue(target.checkLastCheckTime());
+        assertTrue(mSanityChecker.checkLastCheckTime());
 
         // Now WTF again.
         mInjectedRealtimeMillis += 1;
-        assertFalse(target.checkLastCheckTime());
+        assertFalse(mSanityChecker.checkLastCheckTime());
 
         // Reboot.
         mInjectedRealtimeMillis = 1000000L;
@@ -117,12 +135,12 @@ public class CalendarSanityCheckerTest extends AndroidTestCase {
         mInjectedUnlockTime = mInjectedRealtimeMillis;
 
         mInjectedRealtimeMillis += 15 * 60 * 1000;
-        assertTrue(target.checkLastCheckTime());
+        assertTrue(mSanityChecker.checkLastCheckTime());
 
         mInjectedRealtimeMillis += 1;
-        assertFalse(target.checkLastCheckTime());
+        assertFalse(mSanityChecker.checkLastCheckTime());
 
         // Check again right after. This should pass because of WTF_INTERVAL_MS.
-        assertTrue(target.checkLastCheckTime());
+        assertTrue(mSanityChecker.checkLastCheckTime());
     }
 }

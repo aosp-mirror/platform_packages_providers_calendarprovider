@@ -4834,7 +4834,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         mCalendarAlarm.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 SystemClock.elapsedRealtime() + delay,
                 PendingIntent.getBroadcast(mContext, 0, createProviderChangedBroadcast(),
-                        PendingIntent.FLAG_UPDATE_CURRENT));
+                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE));
     }
 
     private Intent createProviderChangedBroadcast() {

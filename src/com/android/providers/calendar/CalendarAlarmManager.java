@@ -170,13 +170,13 @@ public class CalendarAlarmManager {
             }
             Intent intent = getCheckNextAlarmIntent(mContext, removeAlarms);
             PendingIntent pending = PendingIntent.getBroadcast(mContext, 0 /* ignored */, intent,
-                    PendingIntent.FLAG_NO_CREATE);
+                    PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
             if (pending != null) {
                 // Cancel any previous Alarm check requests
                 cancel(pending);
             }
             pending = PendingIntent.getBroadcast(mContext, 0 /* ignored */, intent,
-                    PendingIntent.FLAG_CANCEL_CURRENT);
+                    PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
             // Trigger the check in 5s from now, so that we can have batch processing.
             long triggerAtTime = SystemClock.elapsedRealtime() + ALARM_CHECK_DELAY_MILLIS;

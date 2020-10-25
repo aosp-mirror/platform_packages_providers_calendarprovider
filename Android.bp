@@ -16,6 +16,7 @@
 
 android_app {
     name: "CalendarProvider",
+    defaults: ["platform_app_defaults"],
     static_libs: [
         "guava",
         "android-common",

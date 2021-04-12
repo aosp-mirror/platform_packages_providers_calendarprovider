@@ -42,7 +42,6 @@
     <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS" />
     <uses-permission android:name="android.permission.LOG_COMPAT_CHANGE" />
     <uses-permission android:name="android.permission.READ_COMPAT_CHANGE_CONFIG" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application android:label="@string/calendar_storage"
                  android:allowBackup="false"

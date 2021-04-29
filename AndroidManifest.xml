@@ -109,5 +109,9 @@
             </intent-filter>
         </receiver>
 
+        <service android:name="CalendarProviderJobService"
+                 android:exported="false"
+                 android:permission="android.permission.BIND_JOB_SERVICE" />
+
     </application>
 </manifest>

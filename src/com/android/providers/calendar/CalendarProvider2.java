@@ -25,7 +25,7 @@ import android.app.AppOpsManager;
 import android.app.PendingIntent;
 import android.app.compat.CompatChanges;
 import android.compat.annotation.ChangeId;
-import android.compat.annotation.EnabledAfter;
+import android.compat.annotation.Disabled;
 import android.content.BroadcastReceiver;
 import android.content.ContentProviderOperation;
 import android.content.ContentProviderResult;
@@ -464,7 +464,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      * malicious arguments.
      */
     @ChangeId
-    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.R)
+    @Disabled
     private static final long ENFORCE_STRICT_QUERY_BUILDER = 143231523L;
 
     private final ThreadLocal<Boolean> mCallingPackageErrorLogged = new ThreadLocal<Boolean>();

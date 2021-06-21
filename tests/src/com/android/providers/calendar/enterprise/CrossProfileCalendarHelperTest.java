@@ -35,7 +35,7 @@ public class CrossProfileCalendarHelperTest extends AndroidTestCase {
         mHelper = new CrossProfileCalendarHelper(mContext);
     }
 
-    public void testProjectionNotWhitelisted_throwErrorForCalendars() {
+    public void testProjectionNotInAllowedList_throwErrorForCalendars() {
         final String[] projection = new String[]{
                 Calendars._ID,
                 Calendars.OWNER_ACCOUNT
@@ -48,7 +48,7 @@ public class CrossProfileCalendarHelperTest extends AndroidTestCase {
         }
     }
 
-    public void testProjectionNotWhitelisted_throwErrorForEvents() {
+    public void testProjectionNotInAllowedList_throwErrorForEvents() {
         final String[] projection = new String[] {
                 Events._ID,
                 Events.DESCRIPTION
@@ -61,7 +61,7 @@ public class CrossProfileCalendarHelperTest extends AndroidTestCase {
         }
     }
 
-    public void testProjectionNotWhitelisted_throwErrorForInstances() {
+    public void testProjectionNotInAllowedList_throwErrorForInstances() {
         final String[] projection = new String[] {
                 Instances._ID,
                 Events.DESCRIPTION
@@ -74,22 +74,22 @@ public class CrossProfileCalendarHelperTest extends AndroidTestCase {
         }
     }
 
-    public void testNoProjection_getFullWhitelistedProjectionForCalendars() {
+    public void testNoProjection_getFullAllowedListProjectionForCalendars() {
         final String[] projection = mHelper.getCalibratedProjection(null, Calendars.CONTENT_URI);
         final Set<String> projectionSet = new ArraySet<String>(Arrays.asList(projection));
-        assertTrue(Objects.deepEquals(CrossProfileCalendarHelper.CALENDARS_TABLE_WHITELIST,
+        assertTrue(Objects.deepEquals(CrossProfileCalendarHelper.CALENDARS_TABLE_ALLOWED_LIST,
                 projectionSet));
     }
 
-    public void testNoProjection_getFullWhitelistedProjectionForEvents() {
+    public void testNoProjection_getFullAllowedListProjectionForEvents() {
         final String[] projection = mHelper.getCalibratedProjection(null, Events.CONTENT_URI);
         final Set<String> projectionSet = new ArraySet<String>(Arrays.asList(projection));
-        assertTrue(CrossProfileCalendarHelper.EVENTS_TABLE_WHITELIST.equals(projectionSet));
+        assertTrue(CrossProfileCalendarHelper.EVENTS_TABLE_ALLOWED_LIST.equals(projectionSet));
     }
 
-    public void testNoProjection_getFullWhitelistedProjectionForInstances() {
+    public void testNoProjection_getFullAllowedListProjectionForInstances() {
         final String[] projection = mHelper.getCalibratedProjection(null, Instances.CONTENT_URI);
         final Set<String> projectionSet = new ArraySet<String>(Arrays.asList(projection));
-        assertTrue(CrossProfileCalendarHelper.INSTANCES_TABLE_WHITELIST.equals(projectionSet));
+        assertTrue(CrossProfileCalendarHelper.INSTANCES_TABLE_ALLOWED_LIST.equals(projectionSet));
     }
 }

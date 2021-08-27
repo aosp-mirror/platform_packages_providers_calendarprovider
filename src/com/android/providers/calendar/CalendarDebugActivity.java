@@ -69,6 +69,13 @@ public class CalendarDebugActivity extends Activity implements OnClickListener {
         updateDeleteButton();
     }
 
+    @Override
+    protected void onStart() {
+        super.onStart();
+        getWindow().addSystemFlags(android.view.WindowManager.LayoutParams
+                .SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS);
+    }
+
     private void updateDeleteButton() {
         final boolean fileExist =
             new File(Environment.getExternalStorageDirectory(), OUT_FILE).exists();

@@ -17,10 +17,12 @@
 package com.android.providers.calendar;
 
 import android.app.Activity;
+import android.app.job.JobInfo;
+import android.app.job.JobScheduler;
+import android.app.job.JobWorkItem;
 import android.content.BroadcastReceiver;
-import android.content.ContentProvider;
+import android.content.ComponentName;
 import android.content.Context;
-import android.content.IContentProvider;
 import android.content.Intent;
 import android.provider.CalendarContract;
 import android.util.Log;
@@ -41,33 +43,17 @@ public class CalendarProviderBroadcastReceiver extends BroadcastReceiver {
         if (Log.isLoggable(TAG, Log.DEBUG)) {
             Log.d(TAG, "Received intent: " + intent);
         }
-        final IContentProvider iprovider =
-                context.getContentResolver().acquireProvider(CalendarContract.AUTHORITY);
-        final ContentProvider cprovider = ContentProvider.coerceToLocalContentProvider(iprovider);
 
-        if (!(cprovider instanceof CalendarProvider2)) {
-            Slog.wtf(TAG, "CalendarProvider2 not found in CalendarProviderBroadcastReceiver.");
-            return;
+        JobWorkItem jwi = new JobWorkItem(intent);
+        JobInfo alarmJob = new JobInfo.Builder(CalendarProviderJobService.JOB_ID,
+                new ComponentName(context, CalendarProviderJobService.class))
+                .setExpedited(true)
+                .build();
+        JobScheduler jobScheduler = context.getSystemService(JobScheduler.class);
+        if (jobScheduler.enqueue(alarmJob, jwi) == JobScheduler.RESULT_SUCCESS) {
+            setResultCode(Activity.RESULT_OK);
+        } else {
+            Slog.wtf(TAG, "Failed to schedule expedited job");
         }
-
-        final CalendarProvider2 provider = (CalendarProvider2) cprovider;
-
-        final PendingResult result = goAsync();
-
-        new Thread(() -> {
-            // Schedule the next alarm. Please be noted that for ACTION_EVENT_REMINDER broadcast,
-            // we never remove scheduled alarms.
-            final boolean removeAlarms = intent
-                    .getBooleanExtra(CalendarAlarmManager.KEY_REMOVE_ALARMS, false);
-            provider.getOrCreateCalendarAlarmManager().runScheduleNextAlarm(removeAlarms, provider);
-
-            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                Log.d(TAG, "Next alarm set.");
-            }
-
-            result.setResultCode(Activity.RESULT_OK);
-            result.finish();
-        }).start();
-
     }
 }

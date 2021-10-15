@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--  Copyright (C) 2009 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+ -->
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage" msgid="8317143729823142952">"Kalenderlagring"</string>
+    <string name="calendar_default_name" msgid="5010385424907560782">"Standard"</string>
+    <string name="calendar_info" msgid="3080204956905796668">"Kalenderoplysninger"</string>
+    <string name="calendar_info_error" msgid="8686794108585408379">"Fejl"</string>
+    <string name="calendar_info_no_calendars" msgid="6166939001615667041">"Der er ingen kalendere"</string>
+    <string name="calendar_info_events" msgid="6513451584822286165">"Begivenheder: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="3953603148780098018">"Begivenheder: <xliff:g id="EVENTS_0">%1$d</xliff:g>, ikke gemte: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="1910026788169486138">"Kalender"</string>
+    <string name="debug_tool_delete_button" msgid="2843837310185088850">"Slet nu"</string>
+    <string name="debug_tool_start_button" msgid="2827965939935983665">"Start"</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"Du er ved at 1) lave en kopi af din kalenderdatabase til SD-kortet/USB-lageret, som kan læses af alle apps og 2) sende den via mail. Husk at slette den, så snart du har kopieret den fra enheden, eller mailen er modtaget."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"Vælg et program at sende din fil med"</string>
+    <string name="debug_tool_email_subject" msgid="1450453531950410260">"Kalenderdatabase er vedhæftet"</string>
+    <string name="debug_tool_email_body" msgid="1271714905048793618">"Min kalenderdatabase med alle mine aftaler og personlige oplysninger er vedhæftet. Brug den med omhu."</string>
+</resources>

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--  Copyright (C) 2009 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+ -->
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage" msgid="8317143729823142952">"கேலெண்டர் சேமிப்பகம்"</string>
+    <string name="calendar_default_name" msgid="5010385424907560782">"இயல்பு"</string>
+    <string name="calendar_info" msgid="3080204956905796668">"கேலெண்டர் தகவல்கள்"</string>
+    <string name="calendar_info_error" msgid="8686794108585408379">"பிழை"</string>
+    <string name="calendar_info_no_calendars" msgid="6166939001615667041">"கேலெண்டர்கள் இல்லை"</string>
+    <string name="calendar_info_events" msgid="6513451584822286165">"நிகழ்வுகள்: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="3953603148780098018">"நிகழ்வுகள்: <xliff:g id="EVENTS_0">%1$d</xliff:g>, சேமிக்கப்படாதவை: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="1910026788169486138">"கேலெண்டர்"</string>
+    <string name="debug_tool_delete_button" msgid="2843837310185088850">"இப்போதே நீக்கு"</string>
+    <string name="debug_tool_start_button" msgid="2827965939935983665">"தொடங்கு"</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"இவற்றைச் செய்ய உள்ளீர்கள்: 1) உங்கள் கேலெண்டர் தரவுத்தளத்தை எந்தவொரு ஆப்ஸும் அறியக்கூடிய வகையில் SD கார்டு/USB சேமிப்பகத்தில் நகலெடுத்தல் மற்றும் 2) அதை மின்னஞ்சல் செய்தல். நீங்கள் அதைச் சாதனத்தில் முழுவதுமாக நகலெடுத்த பிறகோ மின்னஞ்சலைப் பெற்ற பிறகோ உடனே நகலை நீக்க வேண்டும் என்பதை நினைவில் கொள்ளவும்."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"உங்கள் ஃபைலை அனுப்புவதற்கான நிரலைத் தேர்வுசெய்யவும்"</string>
+    <string name="debug_tool_email_subject" msgid="1450453531950410260">"கேலெண்டர் Db இணைக்கப்பட்டது"</string>
+    <string name="debug_tool_email_body" msgid="1271714905048793618">"என்னுடைய அனைத்து அப்பாயிண்ட்மெண்ட்டுகளையும் தனிப்பட்ட தகவல்களையும் உள்ளடக்கிய எனது கேலெண்டர் தரவுத்தளம் இணைக்கப்பட்டுள்ளது. அதைக் கவனமாகக் கையாளவும்."</string>
+</resources>

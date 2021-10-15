@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--  Copyright (C) 2009 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+ -->
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage" msgid="8317143729823142952">"कॅलेंडर स्टोरेज"</string>
+    <string name="calendar_default_name" msgid="5010385424907560782">"डीफॉल्ट"</string>
+    <string name="calendar_info" msgid="3080204956905796668">"कॅलेंडरशी संबंधित माहिती"</string>
+    <string name="calendar_info_error" msgid="8686794108585408379">"एरर"</string>
+    <string name="calendar_info_no_calendars" msgid="6166939001615667041">"कोणतीही कॅलेंडर नाहीत"</string>
+    <string name="calendar_info_events" msgid="6513451584822286165">"इव्हेंट: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="3953603148780098018">"इव्हेंट: <xliff:g id="EVENTS_0">%1$d</xliff:g>, सेव्ह न केलेले: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="1910026788169486138">"कॅलेंडर"</string>
+    <string name="debug_tool_delete_button" msgid="2843837310185088850">"आता हटवा"</string>
+    <string name="debug_tool_start_button" msgid="2827965939935983665">"सुरू करा"</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"तुम्ही १) कोणत्याही ॲपद्वारे वाचण्यायोग्य असेल, अशी तुमच्या कॅलेंडर डेटाबेसची एक प्रत SD कार्ड/USB स्टोरेजमध्ये बनवणार आहात आणि २) ती ईमेल करणार आहात. तुम्ही ती डिव्हाइसवरून यशस्वीरीत्या कॉपी करताच किंवा ईमेल मिळताच प्रत हटवण्याचे लक्षात ठेवा."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"तुमची फाइल पाठवण्‍यासाठी एक प्रोग्राम निवडा"</string>
+    <string name="debug_tool_email_subject" msgid="1450453531950410260">"कॅलेंडर डेटाबेसची फाइल अटॅच केली आहे"</string>
+    <string name="debug_tool_email_body" msgid="1271714905048793618">"माझ्या सर्व अपॉइंटमेंट आणि वैयक्तिक माहिती असलेल्या माझ्या कॅलेंडर डेटाबेसची फाइल अटॅच केली आहे. काळजीपूर्वक हाताळा."</string>
+</resources>

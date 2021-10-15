@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--  Copyright (C) 2009 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+ -->
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage" msgid="8317143729823142952">"ပြက္ခဒိန် သိုလှောင်ခန်း"</string>
+    <string name="calendar_default_name" msgid="5010385424907560782">"မူရင်း"</string>
+    <string name="calendar_info" msgid="3080204956905796668">"ပြက္ခဒိန် အချက်အလက်"</string>
+    <string name="calendar_info_error" msgid="8686794108585408379">"အမှား"</string>
+    <string name="calendar_info_no_calendars" msgid="6166939001615667041">"ပြက္ခဒိန်များ မရှိပါ"</string>
+    <string name="calendar_info_events" msgid="6513451584822286165">"အစီအစဉ်များ- <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="3953603148780098018">"အစီအစဉ်များ- <xliff:g id="EVENTS_0">%1$d</xliff:g>၊ သိမ်းမထားသည်များ- <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="1910026788169486138">"ပြက္ခဒိန်"</string>
+    <string name="debug_tool_delete_button" msgid="2843837310185088850">"ယခုဖျက်ပါ"</string>
+    <string name="debug_tool_start_button" msgid="2827965939935983665">"စပါ"</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"သင်သည် ၁) အက်ပ်တိုင်းက ဖတ်နိုင်သော ပြက္ခဒိန်ဒေတာဘေ့စ်ကို SD ကတ်/USB သိုလှောင်ခန်းသို့ မိတ္တူကူးယူတော့မည်ဖြစ်ပြီး ၂) အီးမေးလ် ပို့ပါတော့မည်။ ၎င်းကို စက်အပြင်သို့ အပြီးမိတ္တူကူးယူပြီးသည်နှင့်တစ်ပြိုင်နက် (သို့) အီးမေးလ် ရရှိသည်နှင့်တစ်ပြိုင်နက် မိတ္တူကို ဖျက်ရန် မမေ့ပါနှင့်။"</string>
+    <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"သင့်ဖိုင်ကိုပို့ရန် ပရိုဂရမ်တစ်ခုရွေးပါ"</string>
+    <string name="debug_tool_email_subject" msgid="1450453531950410260">"Calendar Db ပူးတွဲထားသည်"</string>
+    <string name="debug_tool_email_body" msgid="1271714905048793618">"ပူးတွဲချက်မှာ ကျွန်ုပ်၏ရက်ချိန်းနှင့် ကိုယ်ရေး အချက်အလက်များ အားလုံးပါဝင်သည့် ကျွန်ုပ်၏ ‘ပြက္ခဒိန်’ ဒေတာဘေ့စ် ဖြစ်သည်။ သတိထား ကိုင်တွယ်ပါ။"</string>
+</resources>

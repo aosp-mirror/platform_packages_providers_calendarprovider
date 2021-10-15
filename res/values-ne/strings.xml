@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--  Copyright (C) 2009 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+ -->
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage" msgid="8317143729823142952">"पात्रोको भण्डारण"</string>
+    <string name="calendar_default_name" msgid="5010385424907560782">"डिफल्ट"</string>
+    <string name="calendar_info" msgid="3080204956905796668">"पात्रोसम्बन्धी जानकारी"</string>
+    <string name="calendar_info_error" msgid="8686794108585408379">"त्रुटि"</string>
+    <string name="calendar_info_no_calendars" msgid="6166939001615667041">"कुनै पनि पात्रो छैन"</string>
+    <string name="calendar_info_events" msgid="6513451584822286165">"क्रियाकलापको सङ्ख्या: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="3953603148780098018">"क्रियाकलापको सङ्ख्या: <xliff:g id="EVENTS_0">%1$d</xliff:g>, सेभ नगरिएका क्रियाकलापको सङ्ख्या: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="1910026788169486138">"पात्रो"</string>
+    <string name="debug_tool_delete_button" msgid="2843837310185088850">"अहिले मेटाउनुहोस्"</string>
+    <string name="debug_tool_start_button" msgid="2827965939935983665">"सुरु गर्नुहोस्"</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"तपाईं: निम्न कार्य गर्न लाग्दै हुनुहुन्छ: १) SD कार्ड/USB भण्डारणमा जुनसुकै एपले पढ्न मिल्ने गरी आफ्नो पात्रोको डेटाबेसको कपी बनाउन र २) उक्त कपी इमेलमार्फत पठाउन। तपाईंले यस डिभाइसबाट अन्य डिभाइसमा डेटाबेस कपी गरी पेस्ट गर्नेबित्तिकै वा डेटाबेस समावेश गरिएको इमेल प्राप्त गर्नेबित्तिकै पुरानो डेटाबेस मेटाउन नबिर्सनुहोला।"</string>
+    <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"आफ्नो फाइल पठाउनका लागि कुनै प्रोग्राम छान्नुहोस्"</string>
+    <string name="debug_tool_email_subject" msgid="1450453531950410260">"पात्रोको डेटाबेस संलग्न गरिएको छ"</string>
+    <string name="debug_tool_email_body" msgid="1271714905048793618">"यो इमेलमा मेरा अपोइन्टमेन्ट र व्यक्तिगत जानकारीसहितको मेरो पात्रोको डेटाबेस संलग्न गरिएको छ। यसलाई सावधानीपूर्वक प्रयोग गर्नुहोला।"</string>
+</resources>

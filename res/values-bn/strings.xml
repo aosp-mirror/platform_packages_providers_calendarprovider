@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--  Copyright (C) 2009 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+ -->
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage" msgid="8317143729823142952">"ক্যালেন্ডারের স্টোরেজ"</string>
+    <string name="calendar_default_name" msgid="5010385424907560782">"ডিফল্ট"</string>
+    <string name="calendar_info" msgid="3080204956905796668">"ক্যালেন্ডার সংক্রান্ত তথ্য"</string>
+    <string name="calendar_info_error" msgid="8686794108585408379">"সমস্যা"</string>
+    <string name="calendar_info_no_calendars" msgid="6166939001615667041">"কোনও ক্যালেন্ডার নেই"</string>
+    <string name="calendar_info_events" msgid="6513451584822286165">"ইভেন্ট: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="3953603148780098018">"ইভেন্ট: <xliff:g id="EVENTS_0">%1$d</xliff:g>, সেভ করা নয়: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="1910026788169486138">"ক্যালেন্ডার"</string>
+    <string name="debug_tool_delete_button" msgid="2843837310185088850">"এখনই মুছে দিন"</string>
+    <string name="debug_tool_start_button" msgid="2827965939935983665">"শুরু করুন"</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"আপনি ১) SD কার্ড/USB স্টোরেজে যেকোনও অ্যাপের উপযোগী ক্যালেন্ডার ডেটাবেসের কপি করতে এবং ২) সেটিকে ইমেল করতে চলেছেন। ডিভাইস থেকে এটি কপি হয়ে গেলে অথবা ইমেল পাওয়ার পরেই, মনে করে কপিটি মুছে ফেলবেন।"</string>
+    <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"আপনার ফাইল পাঠানোর জন্য একটি প্রোগ্রাম বেছে নিন"</string>
+    <string name="debug_tool_email_subject" msgid="1450453531950410260">"ক্যালেন্ডার Db অ্যাচাট করা হয়েছে"</string>
+    <string name="debug_tool_email_body" msgid="1271714905048793618">"অ্যাটাচমেন্টটি হল সব অ্যাপয়েন্টমেন্ট ও ব্যক্তিগত তথ্য সহ আমার Calendar-এর ডেটাবেস। সাবধানে ব্যবহার করবেন।"</string>
+</resources>

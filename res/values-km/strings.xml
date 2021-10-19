@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--  Copyright (C) 2009 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+ -->
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage" msgid="8317143729823142952">"ទំហំផ្ទុក​ប្រតិទិន"</string>
+    <string name="calendar_default_name" msgid="5010385424907560782">"លំនាំដើម"</string>
+    <string name="calendar_info" msgid="3080204956905796668">"ព័ត៌មាន​ប្រតិទិន"</string>
+    <string name="calendar_info_error" msgid="8686794108585408379">"បញ្ហា"</string>
+    <string name="calendar_info_no_calendars" msgid="6166939001615667041">"មិន​មានប្រតិទិនទេ"</string>
+    <string name="calendar_info_events" msgid="6513451584822286165">"ព្រឹត្តិការណ៍៖ <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="3953603148780098018">"ព្រឹត្តិការណ៍៖ <xliff:g id="EVENTS_0">%1$d</xliff:g>, មិនបានរក្សាទុក៖ <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="1910026788169486138">"ប្រតិទិន"</string>
+    <string name="debug_tool_delete_button" msgid="2843837310185088850">"លុប​ឥឡូវនេះ"</string>
+    <string name="debug_tool_start_button" msgid="2827965939935983665">"ចាប់ផ្ដើម"</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"អ្នក​ហៀបនឹង 1) ចម្លង​មូលដ្ឋាន​ទិន្នន័យ​ប្រតិទិន​របស់អ្នក​ទៅកាត SD/ឧបករណ៍ផ្ទុក USB ដែលអាច​អានបានដោយ​កម្មវិធី​ណាមួយ 2) និងផ្ញើ​អ៊ីមែលវា។ សូមចងចាំថា ត្រូវ​លុប​ច្បាប់​ចម្លង​ភ្លាមៗ បន្ទាប់ពី​អ្នកបានចម្លង​វាចេញពី​ឧបករណ៍​ដោយជោគជ័យ ឬបាន​ទទួលអ៊ីមែល។"</string>
+    <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"ជ្រើសរើស​កម្មវិធី ដើម្បីផ្ញើ​ឯកសារ​របស់អ្នក"</string>
+    <string name="debug_tool_email_subject" msgid="1450453531950410260">"បានភ្ជាប់​មូលដ្ឋានទិន្នន័យ​ប្រតិទិន"</string>
+    <string name="debug_tool_email_body" msgid="1271714905048793618">"ឯកសារភ្ជាប់គឺជាមូលដ្ឋាន​ទិន្នន័យប្រតិទិនរបស់ខ្ញុំ ដែលមានព័ត៌មាន​ផ្ទាល់ខ្លួន និងការណាត់ជួប​ទាំងអស់របស់ខ្ញុំ។ សូមប្រើ​ដោយប្រុងប្រយ័ត្ន។"</string>
+</resources>

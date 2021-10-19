@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--  Copyright (C) 2009 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+ -->
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage" msgid="8317143729823142952">"कैलेंडर का स्टोरेज"</string>
+    <string name="calendar_default_name" msgid="5010385424907560782">"डिफ़ॉल्ट"</string>
+    <string name="calendar_info" msgid="3080204956905796668">"कैलेंडर की जानकारी"</string>
+    <string name="calendar_info_error" msgid="8686794108585408379">"गड़बड़ी"</string>
+    <string name="calendar_info_no_calendars" msgid="6166939001615667041">"कोई कैलेंडर नहीं"</string>
+    <string name="calendar_info_events" msgid="6513451584822286165">"इवेंट: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="3953603148780098018">"इवेंट: <xliff:g id="EVENTS_0">%1$d</xliff:g>, सेव नहीं किए गए: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="1910026788169486138">"कैलेंडर"</string>
+    <string name="debug_tool_delete_button" msgid="2843837310185088850">"अभी मिटाएं"</string>
+    <string name="debug_tool_start_button" msgid="2827965939935983665">"शुरू करें"</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"1) आपके कैलेंडर के डेटाबेस की एक कॉपी को एसडी कार्ड/यूएसबी स्टोरेज में सेव किया जाएगा और इसे कोई भी ऐप्लिकेशन ऐक्सेस कर पाएगा 2) साथ ही, इस कॉपी को ईमेल से भेजा जाएगा. कॉपी बनाने या ईमेल मिलने के तुरंत बाद, इस कॉपी को मिटाना न भूलें."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"अपनी फ़ाइल भेजने के लिए कोई प्रोग्राम चुनें"</string>
+    <string name="debug_tool_email_subject" msgid="1450453531950410260">"कैलेंडर के डेटाबेस का अटैचमेंट"</string>
+    <string name="debug_tool_email_body" msgid="1271714905048793618">"इस ईमेल में मेरे कैलेंडर के डेटाबेस को अटैच किया गया है. अटैचमेंट में, मेरे सभी अपॉइंटमेंट और निजी जानकारी शामिल है. सावधानी से रखें."</string>
+</resources>

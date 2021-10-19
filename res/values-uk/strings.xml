@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--  Copyright (C) 2009 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+ -->
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage" msgid="8317143729823142952">"Пам’ять календаря"</string>
+    <string name="calendar_default_name" msgid="5010385424907560782">"За умовчанням"</string>
+    <string name="calendar_info" msgid="3080204956905796668">"Інформація про календар"</string>
+    <string name="calendar_info_error" msgid="8686794108585408379">"Помилка"</string>
+    <string name="calendar_info_no_calendars" msgid="6166939001615667041">"Немає календарів"</string>
+    <string name="calendar_info_events" msgid="6513451584822286165">"Події: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="3953603148780098018">"Подій: <xliff:g id="EVENTS_0">%1$d</xliff:g>, не збережено: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="1910026788169486138">"Календар"</string>
+    <string name="debug_tool_delete_button" msgid="2843837310185088850">"Видалити"</string>
+    <string name="debug_tool_start_button" msgid="2827965939935983665">"Почати"</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"Ви збираєтеся: 1) створити копію бази даних свого календаря на карті SD або на носії USB, які зможе читати будь-який додаток, і 2) надіслати базу даних електронною поштою. Не забудьте видалити базу даних, коли скопіюєте її з пристрою або отримаєте електронним листом."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"Виберіть програму для надсилання файлу"</string>
+    <string name="debug_tool_email_subject" msgid="1450453531950410260">"Базу даних календаря вкладено"</string>
+    <string name="debug_tool_email_body" msgid="1271714905048793618">"У вкладенні – база даних мого додатка Календар з усіма запланованими зустрічами й особистою інформацією. Обережно працюйте з нею."</string>
+</resources>

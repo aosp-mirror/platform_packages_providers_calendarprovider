@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--  Copyright (C) 2009 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+ -->
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage" msgid="8317143729823142952">"કૅલેન્ડર સ્ટોરેજ"</string>
+    <string name="calendar_default_name" msgid="5010385424907560782">"ડિફૉલ્ટ"</string>
+    <string name="calendar_info" msgid="3080204956905796668">"કૅલેન્ડર માહિતી"</string>
+    <string name="calendar_info_error" msgid="8686794108585408379">"ભૂલ"</string>
+    <string name="calendar_info_no_calendars" msgid="6166939001615667041">"કોઈ કૅલેન્ડર નથી"</string>
+    <string name="calendar_info_events" msgid="6513451584822286165">"ઇવેન્ટ: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="3953603148780098018">"ઇવેન્ટ: <xliff:g id="EVENTS_0">%1$d</xliff:g>, સાચવ્યા વિનાની: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="1910026788169486138">"કૅલેન્ડર"</string>
+    <string name="debug_tool_delete_button" msgid="2843837310185088850">"હમણાં ડિલીટ કરો"</string>
+    <string name="debug_tool_start_button" msgid="2827965939935983665">"શરૂ કરો"</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"તમે 1) તમારા કૅલેન્ડરના ડેટાબેઝની કૉપિ SD કાર્ડ/USB સ્ટોરેજમાં કરવા જઈ રહ્યાં છો જે કોઈપણ ઍપ દ્વારા વાંચી શકાશે અને 2) તેને ઇમેઇલ કરવાની પ્રક્રિયામાં છો. જેવી તમે તે કૉપિને ડિવાઇસમાંથી સફળતાપૂર્વક કૉપિ કરી લો કે ઇમેઇલ મેળવો એટલે તેને યાદથી ડિલીટ કરજો."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"તમારી ફાઇલ મોકલવા માટે કોઈ પ્રોગ્રામ પસંદ કરો"</string>
+    <string name="debug_tool_email_subject" msgid="1450453531950410260">"કૅલેન્ડર Db જોડ્યું"</string>
+    <string name="debug_tool_email_body" msgid="1271714905048793618">"આ જોડેલી ફાઇલમાં મારી બધી અપૉઇન્ટમેન્ટ અને વ્યક્તિગત માહિતી સહિત મારા કૅલેન્ડરનો ડેટાબેઝ છે. કાળજીપૂર્વક તેને હૅન્ડલ કરો."</string>
+</resources>

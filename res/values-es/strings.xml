@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--  Copyright (C) 2009 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+ -->
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage" msgid="8317143729823142952">"Almacenamiento en el calendario"</string>
+    <string name="calendar_default_name" msgid="5010385424907560782">"Predeterminado"</string>
+    <string name="calendar_info" msgid="3080204956905796668">"Información de calendario"</string>
+    <string name="calendar_info_error" msgid="8686794108585408379">"Error"</string>
+    <string name="calendar_info_no_calendars" msgid="6166939001615667041">"No hay ningún calendario"</string>
+    <string name="calendar_info_events" msgid="6513451584822286165">"Eventos: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="3953603148780098018">"Eventos: <xliff:g id="EVENTS_0">%1$d</xliff:g>; no guardados: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="1910026788169486138">"Calendario"</string>
+    <string name="debug_tool_delete_button" msgid="2843837310185088850">"Eliminar ahora"</string>
+    <string name="debug_tool_start_button" msgid="2827965939935983665">"Iniciar"</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"Vas a 1) hacer una copia de tu base de datos de calendario en la tarjeta SD o en el almacenamiento USB a la que puede acceder cualquier aplicación y a 2) enviarla por correo electrónico. Recuerda eliminarla en cuanto se haya copiado correctamente fuera del dispositivo o se haya recibido el correo."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"Elige un programa para enviar el archivo"</string>
+    <string name="debug_tool_email_subject" msgid="1450453531950410260">"Base de datos de calendario adjunta"</string>
+    <string name="debug_tool_email_body" msgid="1271714905048793618">"Mi base de datos de calendario con todas mis citas y mi información personal va adjunta a este mensaje. Utiliza esta información con cuidado."</string>
+</resources>

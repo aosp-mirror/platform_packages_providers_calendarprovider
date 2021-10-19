@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--  Copyright (C) 2009 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+ -->
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage" msgid="8317143729823142952">"കലണ്ടർ സ്റ്റോറേജ്"</string>
+    <string name="calendar_default_name" msgid="5010385424907560782">"ഡിഫോൾട്ട്"</string>
+    <string name="calendar_info" msgid="3080204956905796668">"കലണ്ടർ വിവരങ്ങൾ"</string>
+    <string name="calendar_info_error" msgid="8686794108585408379">"പിശക്"</string>
+    <string name="calendar_info_no_calendars" msgid="6166939001615667041">"കലണ്ടറുകളൊന്നുമില്ല"</string>
+    <string name="calendar_info_events" msgid="6513451584822286165">"ഇവന്റുകൾ: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="3953603148780098018">"ഇവന്റുകൾ: <xliff:g id="EVENTS_0">%1$d</xliff:g>, സംരക്ഷിക്കാത്തവ: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="1910026788169486138">"കലണ്ടർ"</string>
+    <string name="debug_tool_delete_button" msgid="2843837310185088850">"ഇപ്പോൾ ഇല്ലാതാക്കുക"</string>
+    <string name="debug_tool_start_button" msgid="2827965939935983665">"ആരംഭിക്കുക"</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"നിങ്ങൾ ഇവ ചെയ്യാൻ പോകുന്നു 1) ഏതൊരു ആപ്പിനും വായിക്കാവുന്ന തരത്തിലുള്ള, SD കാർഡ്/USB സ്റ്റോറേജ് എന്നിവയിൽ നിങ്ങളുടെ കലണ്ടർ ഡാറ്റാബേസിന്റെ ഒരു പകർപ്പെടുക്കുക, തുടർന്ന് 2) അത് ഇമെയിൽ ചെയ്യുക. ഉപകരണത്തിൽ നിന്ന് അത് പകർത്തുകയോ ഇമെയിൽ ലഭിക്കുകയോ ചെയ്‌തുകഴിഞ്ഞാൽ ഉടൻ തന്നെ പകർപ്പ് ഇല്ലാതാക്കാൻ ഓർമ്മിക്കുക."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"നിങ്ങളുടെ ഫയൽ അയയ്‌ക്കുന്നതിന് ഒരു പ്രോഗ്രാം തിരഞ്ഞെടുക്കുക"</string>
+    <string name="debug_tool_email_subject" msgid="1450453531950410260">"കലണ്ടർ Db അറ്റാച്ച് ചെയ്തിരിക്കുന്നു"</string>
+    <string name="debug_tool_email_body" msgid="1271714905048793618">"അറ്റാച്ച് ചെയ്തിരിക്കുന്നത് എന്റെ എല്ലാ അപ്പോയിന്റ്മെന്റുകളും വ്യക്തിപരമായ വിവരങ്ങളും അടങ്ങിയ കലണ്ടർ ഡാറ്റാബേസ് ആണ്. സൂക്ഷിച്ച് കൈകാര്യം ചെയ്യുക."</string>
+</resources>

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--  Copyright (C) 2009 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+ -->
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage" msgid="8317143729823142952">"Emmagatzematge del calendari"</string>
+    <string name="calendar_default_name" msgid="5010385424907560782">"Predeterminat"</string>
+    <string name="calendar_info" msgid="3080204956905796668">"Informació del calendari"</string>
+    <string name="calendar_info_error" msgid="8686794108585408379">"Error"</string>
+    <string name="calendar_info_no_calendars" msgid="6166939001615667041">"No hi ha cap calendari"</string>
+    <string name="calendar_info_events" msgid="6513451584822286165">"Esdeveniments: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="3953603148780098018">"Esdeveniments: <xliff:g id="EVENTS_0">%1$d</xliff:g>, no desats: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="1910026788169486138">"Calendari"</string>
+    <string name="debug_tool_delete_button" msgid="2843837310185088850">"Suprimeix ara"</string>
+    <string name="debug_tool_start_button" msgid="2827965939935983665">"Inicia"</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"Estàs a punt de 1) fer una còpia de la base de dades del teu calendari a l\'emmagatzematge USB o targeta SD, llegible per qualsevol aplicació, i 2) d\'enviar-la per correu electrònic. Recorda suprimir-la tan bon punt l\'hagis copiat correctament al dispositiu o s\'hagi rebut el correu electrònic."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"Tria un programa per enviar el teu fitxer"</string>
+    <string name="debug_tool_email_subject" msgid="1450453531950410260">"Base de dades del calendari adjunta"</string>
+    <string name="debug_tool_email_body" msgid="1271714905048793618">"La base de dades del meu calendari amb totes les meves cites i informació personal es troba adjunta. Tracta-la amb cura."</string>
+</resources>

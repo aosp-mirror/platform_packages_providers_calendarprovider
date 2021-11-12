@@ -29,6 +29,8 @@ public class CalendarProviderJobService extends JobService {
     private static final String TAG = CalendarProvider2.TAG;
     static final int JOB_ID = CalendarProviderJobService.class.hashCode();
 
+    private volatile boolean canRun;
+
     @Override
     public boolean onStartJob(JobParameters params) {
         if (!params.isExpeditedJob()) {
@@ -44,6 +46,7 @@ public class CalendarProviderJobService extends JobService {
             return false;
         }
 
+        canRun = true;
         final CalendarProvider2 provider = (CalendarProvider2) cprovider;
 
         new Thread(() -> {
@@ -58,6 +61,9 @@ public class CalendarProviderJobService extends JobService {
                 if (Log.isLoggable(TAG, Log.DEBUG)) {
                     Log.d(TAG, "Next alarm set.");
                 }
+                if (!canRun) {
+                    break;
+                }
                 params.completeWork(jwi);
             }
         }).start();
@@ -70,6 +76,7 @@ public class CalendarProviderJobService extends JobService {
         Slog.wtf(TAG, "CalendarProviderJobService was stopped due to "
                 + JobParameters.getInternalReasonCodeDescription(params.getInternalStopReasonCode())
                 + "(" + params.getStopReason() + ")");
+        canRun = false;
         return true;
     }
 }

@@ -47,6 +47,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Process;
 import android.os.SystemClock;
 import android.os.UserHandle;
@@ -888,7 +889,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      */
     private UserInfo getWorkProfileUserInfo(Context context) {
         final UserManager userManager = context.getSystemService(UserManager.class);
-        final int currentUserId = userManager.getProcessUserId();
+        final int currentUserId = userManager.getUserHandle();
 
         // Check each user.
         for (UserInfo userInfo : userManager.getUsers()) {

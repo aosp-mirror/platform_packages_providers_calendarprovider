@@ -37,7 +37,7 @@
     <!-- Event and dirty event count message for secret calendar info -->
     <string name="calendar_info_events_dirty">Events: <xliff:g id = "events">%1$d</xliff:g>, Unsaved: <xliff:g id = "dirty events">%2$d</xliff:g></string>
 
-    <!-- What to show in messaging that refers to this provider, e.g. AccountSyncSettings -->
+    <!-- A label for the calendar provider - this is a generic reference to calendar -->
     <string name="provider_label">Calendar</string>
 
     <!-- Debug tool - dialog - delete file now [CHAR LIMIT=NONE] -->

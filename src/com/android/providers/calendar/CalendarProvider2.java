@@ -23,9 +23,6 @@ import android.accounts.OnAccountsUpdateListener;
 import android.app.AlarmManager;
 import android.app.AppOpsManager;
 import android.app.PendingIntent;
-import android.app.compat.CompatChanges;
-import android.compat.annotation.ChangeId;
-import android.compat.annotation.Disabled;
 import android.content.BroadcastReceiver;
 import android.content.ContentProviderOperation;
 import android.content.ContentProviderResult;
@@ -47,7 +44,6 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
 import android.os.Binder;
-import android.os.Build;
 import android.os.Process;
 import android.os.SystemClock;
 import android.os.UserHandle;
@@ -64,7 +60,9 @@ import android.provider.CalendarContract.Reminders;
 import android.provider.CalendarContract.SyncState;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
+import android.text.format.Time;
 import android.util.Log;
+import android.util.TimeFormatException;
 import android.util.TimeUtils;
 
 import com.android.calendarcommon2.DateException;
@@ -72,7 +70,6 @@ import com.android.calendarcommon2.Duration;
 import com.android.calendarcommon2.EventRecurrence;
 import com.android.calendarcommon2.RecurrenceProcessor;
 import com.android.calendarcommon2.RecurrenceSet;
-import com.android.calendarcommon2.Time;
 import com.android.internal.util.ProviderAccessStats;
 import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
 import com.android.providers.calendar.CalendarDatabaseHelper.Views;
@@ -192,7 +189,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
      */
     MetaData mMetaData;
     CalendarCache mCalendarCache;
-    CalendarConfidenceChecker mConfidenceChecker;
+    CalendarSanityChecker mSanityChecker;
 
     private CalendarDatabaseHelper mDbHelper;
     private CalendarInstancesHelper mInstancesHelper;
@@ -454,18 +451,10 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     /** set to 'true' to enable debug logging for recurrence exception code */
     private static final boolean DEBUG_EXCEPTION = false;
-
+    
     private static final String SELECTION_PRIMARY_CALENDAR =
             Calendars.IS_PRIMARY + "= 1"
                     + " OR " + Calendars.ACCOUNT_NAME + "=" + Calendars.OWNER_ACCOUNT;
-
-    /**
-     * The SQLiteQueryBuilder will now verify all CalendarProvider2 query selections against
-     * malicious arguments.
-     */
-    @ChangeId
-    @Disabled
-    private static final long ENFORCE_STRICT_QUERY_BUILDER = 143231523L;
 
     private final ThreadLocal<Boolean> mCallingPackageErrorLogged = new ThreadLocal<Boolean>();
 
@@ -541,7 +530,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         mMetaData = new MetaData(mDbHelper);
         mInstancesHelper = new CalendarInstancesHelper(mDbHelper, mMetaData);
-        mConfidenceChecker = new CalendarConfidenceChecker(mContext);
+        mSanityChecker = new CalendarSanityChecker(mContext);
 
         // Register for Intent broadcasts
         IntentFilter filter = new IntentFilter();
@@ -731,13 +720,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         Time time = (timezone != null) ? new Time(timezone) : new Time();
         try {
             time.parse(dt2445);
-        } catch (IllegalArgumentException e) {
+        } catch (TimeFormatException e) {
             if (Log.isLoggable(TAG, Log.ERROR)) {
                 Log.e(TAG, "Cannot parse RFC2445 date " + dt2445);
             }
             return 0;
         }
-        return time.toMillis();
+        return time.toMillis(true /* ignore DST */);
     }
 
     private void updateEventsStartEndLocked(long eventId,
@@ -802,21 +791,17 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         String instancesTimezone = mCalendarCache.readTimezoneInstances();
         Time time = new Time(instancesTimezone);
         time.set(now);
-        time.setDay(1);
-        time.setHour(0);
-        time.setMinute(0);
-        time.setSecond(0);
+        time.monthDay = 1;
+        time.hour = 0;
+        time.minute = 0;
+        time.second = 0;
 
-        long begin = time.normalize();
+        long begin = time.normalize(true);
         long end = begin + MINIMUM_EXPANSION_SPAN;
 
         Cursor cursor = null;
         try {
-            final SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
-            qb.setStrict(true);
-            qb.setStrictColumns(true);
-            qb.setStrictGrammar(true);
-            cursor = handleInstanceQuery(qb,
+            cursor = handleInstanceQuery(new SQLiteQueryBuilder(),
                     begin, end,
                     new String[] { Instances._ID },
                     null /* selection */, null,
@@ -868,7 +853,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
-        mConfidenceChecker.checkLastCheckTime();
+        mSanityChecker.checkLastCheckTime();
 
         // Note don't use mCallingUid here. That's only used by mutation functions.
         final int callingUid = Binder.getCallingUid();
@@ -876,7 +861,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         mStats.incrementQueryStats(callingUid);
         final long identity = clearCallingIdentityInternal();
         try {
-            return queryInternal(uri, projection, selection, selectionArgs, sortOrder, callingUid);
+            return queryInternal(uri, projection, selection, selectionArgs, sortOrder);
         } finally {
             restoreCallingIdentityInternal(identity);
             mStats.finishOperation(callingUid);
@@ -981,7 +966,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     }
 
     private Cursor queryInternal(Uri uri, String[] projection, String selection,
-            String[] selectionArgs, String sortOrder, int callingUid) {
+            String[] selectionArgs, String sortOrder) {
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "query uri - " + uri);
         }
@@ -989,9 +974,6 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         final SQLiteDatabase db = mDbHelper.getReadableDatabase();
 
         SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
-        if (CompatChanges.isChangeEnabled(ENFORCE_STRICT_QUERY_BUILDER, callingUid)) {
-            qb.setStrict(true);
-        }
         String groupBy = null;
         String limit = null; // Not currently implemented
         String instancesTimezone;
@@ -1724,11 +1706,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // Change dtstart so h,m,s are 0 if necessary.
         time.clear(Time.TIMEZONE_UTC);
         time.set(dtstart.longValue());
-        if (time.getHour() != 0 || time.getMinute() != 0 || time.getSecond() != 0) {
-            time.setHour(0);
-            time.setMinute(0);
-            time.setSecond(0);
-            modValues.put(Events.DTSTART, time.toMillis());
+        if (time.hour != 0 || time.minute != 0 || time.second != 0) {
+            time.hour = 0;
+            time.minute = 0;
+            time.second = 0;
+            modValues.put(Events.DTSTART, time.toMillis(true));
             neededCorrection = true;
         }
 
@@ -1736,11 +1718,11 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (dtend != null) {
             time.clear(Time.TIMEZONE_UTC);
             time.set(dtend.longValue());
-            if (time.getHour() != 0 || time.getMinute() != 0 || time.getSecond() != 0) {
-                time.setHour(0);
-                time.setMinute(0);
-                time.setSecond(0);
-                dtend = time.toMillis();
+            if (time.hour != 0 || time.minute != 0 || time.second != 0) {
+                time.hour = 0;
+                time.minute = 0;
+                time.second = 0;
+                dtend = time.toMillis(true);
                 modValues.put(Events.DTEND, dtend);
                 neededCorrection = true;
             }
@@ -1813,7 +1795,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         // Get the start time of the first instance in the original recurrence.
         long startTimeMillis = values.getAsLong(Events.DTSTART);
         Time dtstart = new Time();
-        dtstart.setTimezone(values.getAsString(Events.EVENT_TIMEZONE));
+        dtstart.timezone = values.getAsString(Events.EVENT_TIMEZONE);
         dtstart.set(startTimeMillis);
 
         ContentValues updateValues = new ContentValues();
@@ -1852,30 +1834,26 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             // to display it properly. For all-day events, the "until" time string
             // must include just the date field, and not the time field. The
             // repeating events repeat up to and including the "until" time.
-            untilTime.setTimezone(Time.TIMEZONE_UTC);
+            untilTime.timezone = Time.TIMEZONE_UTC;
 
             // Subtract one second from the exception begin time to get the "until" time.
             untilTime.set(endTimeMillis - 1000); // subtract one second (1000 millis)
             if (origAllDay) {
-                untilTime.setHour(0);
-                untilTime.setMinute(0);
-                untilTime.setSecond(0);
-                untilTime.setAllDay(true);
-                untilTime.normalize();
+                untilTime.hour = untilTime.minute = untilTime.second = 0;
+                untilTime.allDay = true;
+                untilTime.normalize(false);
 
                 // This should no longer be necessary -- DTSTART should already be in the correct
                 // format for an all-day event.
-                dtstart.setHour(0);
-                dtstart.setMinute(0);
-                dtstart.setSecond(0);
-                dtstart.setAllDay(true);
-                dtstart.setTimezone(Time.TIMEZONE_UTC);
+                dtstart.hour = dtstart.minute = dtstart.second = 0;
+                dtstart.allDay = true;
+                dtstart.timezone = Time.TIMEZONE_UTC;
             }
             origRecurrence.until = untilTime.format2445();
         }
 
         updateValues.put(Events.RRULE, origRecurrence.toString());
-        updateValues.put(Events.DTSTART, dtstart.normalize());
+        updateValues.put(Events.DTSTART, dtstart.normalize(true));
         return updateValues;
     }
 
@@ -2349,7 +2327,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "insertInTransaction: " + uri);
         }
-        mConfidenceChecker.checkLastCheckTime();
+        mSanityChecker.checkLastCheckTime();
 
         validateUriParameters(uri.getQueryParameterNames());
         final int match = sUriMatcher.match(uri);
@@ -3285,7 +3263,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         }
 
         Time time = new Time(timezone);
-        time.setAllDay(allDay);
+        time.allDay = allDay;
         Long dtstartMillis = values.getAsLong(Events.DTSTART);
         if (dtstartMillis != null) {
             time.set(dtstartMillis);
@@ -3305,7 +3283,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             // date correctly.
             allDayInteger = values.getAsInteger(Events.ORIGINAL_ALL_DAY);
             if (allDayInteger != null) {
-                time.setAllDay(allDayInteger != 0);
+                time.allDay = allDayInteger != 0;
             }
             time.set(originalInstanceMillis);
             rawValues.put(CalendarContract.EventsRawTimes.ORIGINAL_INSTANCE_TIME_2445,
@@ -3314,7 +3292,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
         Long lastDateMillis = values.getAsLong(Events.LAST_DATE);
         if (lastDateMillis != null) {
-            time.setAllDay(allDay);
+            time.allDay = allDay;
             time.set(lastDateMillis);
             rawValues.put(CalendarContract.EventsRawTimes.LAST_DATE_2445, time.format2445());
         }
@@ -3339,7 +3317,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "deleteInTransaction: " + uri);
         }
-        mConfidenceChecker.checkLastCheckTime();
+        mSanityChecker.checkLastCheckTime();
 
         validateUriParameters(uri.getQueryParameterNames());
         final int match = sUriMatcher.match(uri);
@@ -4218,7 +4196,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "updateInTransaction: " + uri);
         }
-        mConfidenceChecker.checkLastCheckTime();
+        mSanityChecker.checkLastCheckTime();
 
         validateUriParameters(uri.getQueryParameterNames());
         final int match = sUriMatcher.match(uri);
@@ -4589,7 +4567,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
             // TODO review this list, document in contract.
             if (!TextUtils.isEmpty(selection)) {
                 // Only allow selections for the URIs that can reasonably use them.
-                // Allowed list of URIs allowed selections
+                // Whitelist of URIs allowed selections
                 switch (uriMatch) {
                     case SYNCSTATE:
                     case CALENDARS:
@@ -4606,7 +4584,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
             } else {
                 // Disallow empty selections for some URIs.
-                // Disallowed list of URIs _not_ allowed empty selections
+                // Blacklist of URIs _not_ allowed empty selections
                 switch (uriMatch) {
                     case EVENTS:
                     case ATTENDEES:
@@ -4837,7 +4815,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
         mCalendarAlarm.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 SystemClock.elapsedRealtime() + delay,
                 PendingIntent.getBroadcast(mContext, 0, createProviderChangedBroadcast(),
-                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE));
+                        PendingIntent.FLAG_UPDATE_CURRENT));
     }
 
     private Intent createProviderChangedBroadcast() {

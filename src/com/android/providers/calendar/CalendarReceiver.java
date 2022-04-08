@@ -94,7 +94,7 @@ public class CalendarReceiver extends BroadcastReceiver {
         final PendingIntent checkIntent = PendingIntent.getBroadcast(context,
                 NEXT_EVENT_CHECK_PENDING_CODE,
                 CalendarAlarmManager.getCheckNextAlarmIntentForBroadcast(context),
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                PendingIntent.FLAG_UPDATE_CURRENT);
 
         final AlarmManager am = context.getSystemService(AlarmManager.class);
 

@@ -30,13 +30,13 @@ public class ICalendarTest extends TestCase {
 
     @SmallTest
     public void testAddProperty() throws Exception {
-        String text = "BEGIN:STUB\n" +
+        String text = "BEGIN:DUMMY\n" +
                 "prop2:value3\n" +
                 "prop1:value1\n" +
                 "prop1:value2\n" +
-                "END:STUB\n";
+                "END:DUMMY\n";
 
-        ICalendar.Component component = new ICalendar.Component("STUB", null);
+        ICalendar.Component component = new ICalendar.Component("DUMMY", null);
         // properties should be listed in insertion order, by property name.
         component.addProperty(new ICalendar.Property("prop2", "value3"));
         component.addProperty(new ICalendar.Property("prop1", "value1"));
@@ -46,17 +46,17 @@ public class ICalendarTest extends TestCase {
 
     @SmallTest
     public void testAddComponent() throws Exception {
-        String text = "BEGIN:STUB\n" +
+        String text = "BEGIN:DUMMY\n" +
                 "prop1:value1\n" +
                 "prop1:value12\n" +
-                "BEGIN:STUB2\n" +
+                "BEGIN:DUMMY2\n" +
                 "prop2:value2\n" +
-                "END:STUB2\n" +
-                "END:STUB\n";
+                "END:DUMMY2\n" +
+                "END:DUMMY\n";
 
-        ICalendar.Component parent = new ICalendar.Component("STUB", null);
+        ICalendar.Component parent = new ICalendar.Component("DUMMY", null);
         // properties should precede components
-        ICalendar.Component child = new ICalendar.Component("STUB2", parent);
+        ICalendar.Component child = new ICalendar.Component("DUMMY2", parent);
         child.addProperty(new ICalendar.Property("prop2", "value2"));
         parent.addChild(child);
         parent.addProperty(new ICalendar.Property("prop1", "value1"));
@@ -66,15 +66,15 @@ public class ICalendarTest extends TestCase {
 
     @SmallTest
     public void testParseBasicComponent() throws Exception {
-        String text = "BEGIN:STUB\n" +
+        String text = "BEGIN:DUMMY\n" +
                 "PROP1;PARAM1=foo;PARAM2=bar:VALUE1\n" +
                 "PROP1;PARAM1=baaz;PARAM1=quux:VALUE2\n" +
                 "PROP2:VALUE3\n" +
-                "END:STUB\n";
+                "END:DUMMY\n";
 
         ICalendar.Component component = ICalendar.parseComponent(text);
-
-        assertEquals("STUB", component.getName());
+        
+        assertEquals("DUMMY", component.getName());
         assertNull(component.getComponents());
         assertEquals(2, component.getPropertyNames().size());
         ICalendar.Property prop1 = component.getFirstProperty("PROP1");
@@ -91,7 +91,7 @@ public class ICalendarTest extends TestCase {
     @SmallTest
     public void testParseQuotedParam() throws Exception {
         ICalendar.Component component
-                = new ICalendar.Component("STUB", null /* parent */);
+                = new ICalendar.Component("DUMMY", null /* parent */);
         ICalendar.parseComponent(
                 component,
                 "DTSTART;TZID=\"GMT+03:00\";TEST=test1;TEST=\"test2\":20101221T090000");
@@ -108,7 +108,7 @@ public class ICalendarTest extends TestCase {
     @SmallTest
     public void testParseBadQuotedParam() throws Exception {
         ICalendar.Component component
-                = new ICalendar.Component("STUB", null /* parent */);
+                = new ICalendar.Component("DUMMY", null /* parent */);
 
         ICalendar.parseComponent(
                 component,
@@ -139,13 +139,13 @@ public class ICalendarTest extends TestCase {
                 "PROP2:VALUE3\n" +
                 "END:CHILD\n";
 
-        String completeText = "BEGIN:STUB\n" +
+        String completeText = "BEGIN:DUMMY\n" +
                 childText +
-                "END:STUB\n";
+                "END:DUMMY\n";
 
-        ICalendar.Component component = new ICalendar.Component("STUB", null);
+        ICalendar.Component component = new ICalendar.Component("DUMMY", null);
         component = ICalendar.parseComponent(component, childText);
-        assertEquals("STUB", component.getName());
+        assertEquals("DUMMY", component.getName());
         assertEquals(1, component.getComponents().size());
         assertEquals(completeText, component.toString());
     }
@@ -218,8 +218,8 @@ public class ICalendarTest extends TestCase {
 
     @SmallTest
     public void testParseEventDoesNotStartWithBegin() throws Exception {
-        String text = "NOTBEGIN:STUB\n" +
-                "END:STUB\n";
+        String text = "NOTBEGIN:DUMMY\n" +
+                "END:DUMMY\n";
 
         try {
             ICalendar.parseEvent(text);
@@ -231,8 +231,8 @@ public class ICalendarTest extends TestCase {
 
     @SmallTest
     public void testParseCalendarDoesNotStartWithBegin() throws Exception {
-        String text = "NOTBEGIN:STUB\n" +
-                "END:STUB\n";
+        String text = "NOTBEGIN:DUMMY\n" +
+                "END:DUMMY\n";
 
         try {
             ICalendar.parseCalendar(text);
@@ -244,13 +244,13 @@ public class ICalendarTest extends TestCase {
 
     @SmallTest
     public void testParseComponentDoesNotStartWithBegin() throws Exception {
-        String text = "NOTBEGIN:STUB\n" +
-                "END:STUB\n";
+        String text = "NOTBEGIN:DUMMY\n" +
+                "END:DUMMY\n";
 
         ICalendar.Component component = ICalendar.parseComponent(text);
         assertNull(component);
     }
-
+    
     @SmallTest
     public void testParseUnexpectedEndComponent() throws Exception {
         String text = "BEGIN:PARENT\n" +
@@ -262,7 +262,7 @@ public class ICalendarTest extends TestCase {
 
     @SmallTest
     public void testParseNoEndComponent() throws Exception {
-        String text = "BEGIN:STUB\n" +
+        String text = "BEGIN:DUMMY\n" +
                 "END:\n";
 
         ICalendar.Component component = ICalendar.parseComponent(text);

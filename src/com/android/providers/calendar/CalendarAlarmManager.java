@@ -16,7 +16,6 @@
 
 package com.android.providers.calendar;
 
-import com.android.calendarcommon2.Time;
 import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
 import com.android.providers.calendar.CalendarDatabaseHelper.Views;
 import com.google.common.annotations.VisibleForTesting;
@@ -39,6 +38,7 @@ import android.provider.CalendarContract.Events;
 import android.provider.CalendarContract.Instances;
 import android.provider.CalendarContract.Reminders;
 import android.text.format.DateUtils;
+import android.text.format.Time;
 import android.util.Log;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -170,13 +170,13 @@ public class CalendarAlarmManager {
             }
             Intent intent = getCheckNextAlarmIntent(mContext, removeAlarms);
             PendingIntent pending = PendingIntent.getBroadcast(mContext, 0 /* ignored */, intent,
-                    PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
+                    PendingIntent.FLAG_NO_CREATE);
             if (pending != null) {
                 // Cancel any previous Alarm check requests
                 cancel(pending);
             }
             pending = PendingIntent.getBroadcast(mContext, 0 /* ignored */, intent,
-                    PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                    PendingIntent.FLAG_CANCEL_CURRENT);
 
             // Trigger the check in 5s from now, so that we can have batch processing.
             long triggerAtTime = SystemClock.elapsedRealtime() + ALARM_CHECK_DELAY_MILLIS;
@@ -249,7 +249,7 @@ public class CalendarAlarmManager {
      * @param cp2 TODO
      */
     private void scheduleNextAlarmLocked(SQLiteDatabase db, CalendarProvider2 cp2) {
-        cp2.mConfidenceChecker.updateLastCheckTime();
+        cp2.mSanityChecker.updateLastCheckTime();
 
         Time time = new Time();
 
@@ -261,7 +261,7 @@ public class CalendarAlarmManager {
 
         if (Log.isLoggable(CalendarProvider2.TAG, Log.DEBUG)) {
             time.set(start);
-            String startTimeStr = time.format();
+            String startTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
             Log.d(CalendarProvider2.TAG, "runScheduleNextAlarm() start search: " + startTimeStr);
         }
 
@@ -306,9 +306,9 @@ public class CalendarAlarmManager {
         // string query parameter to an int in myAlarmtime>=?, so the comparison
         // will fail. This could be simplified if bug 2464440 is resolved.
 
-        time.set(System.currentTimeMillis());
-        time.normalize();
-        long localOffset = time.getGmtOffset() * 1000;
+        time.setToNow();
+        time.normalize(false);
+        long localOffset = time.gmtoff * 1000;
 
         String allDayOffset = " -(" + localOffset + ") ";
         String subQueryPrefix = "SELECT " + Instances.BEGIN;
@@ -373,7 +373,7 @@ public class CalendarAlarmManager {
 
             if (Log.isLoggable(CalendarProvider2.TAG, Log.DEBUG)) {
                 time.set(nextAlarmTime);
-                String alarmTimeStr = time.format();
+                String alarmTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
                 Log.d(CalendarProvider2.TAG,
                         "cursor results: " + cursor.getCount() + " nextAlarmTime: " + alarmTimeStr);
             }
@@ -394,9 +394,9 @@ public class CalendarAlarmManager {
 
                 if (Log.isLoggable(CalendarProvider2.TAG, Log.DEBUG)) {
                     time.set(alarmTime);
-                    String schedTime = time.format();
+                    String schedTime = time.format(" %a, %b %d, %Y %I:%M%P");
                     time.set(startTime);
-                    String startTimeStr = time.format();
+                    String startTimeStr = time.format(" %a, %b %d, %Y %I:%M%P");
 
                     Log.d(CalendarProvider2.TAG,
                             "  looking at id: " + eventId + " " + startTime + startTimeStr

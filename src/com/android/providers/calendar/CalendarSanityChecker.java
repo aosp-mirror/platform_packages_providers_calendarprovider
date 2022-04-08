@@ -33,10 +33,10 @@ import com.android.internal.annotations.VisibleForTesting;
  * We call {@link #checkLastCheckTime} at the provider public entry points to make sure
  * {@link CalendarAlarmManager#scheduleNextAlarmLocked} has been called recently enough.
  *
- * atest tests/src/com/android/providers/calendar/CalendarConfidenceCheckerTest.java
+ * atest tests/src/com/android/providers/calendar/CalendarSanityCheckerTest.java
  */
-public class CalendarConfidenceChecker {
-    private static final String TAG = "CalendarConfidenceChecker";
+public class CalendarSanityChecker {
+    private static final String TAG = "CalendarSanityChecker";
 
     private static final boolean DEBUG = false;
 
@@ -68,7 +68,7 @@ public class CalendarConfidenceChecker {
     @VisibleForTesting
     final SharedPreferences mPrefs;
 
-    public CalendarConfidenceChecker(Context context) {
+    public CalendarSanityChecker(Context context) {
         mContext = context;
         mPrefs = mContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
     }

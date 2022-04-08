@@ -427,6 +427,7 @@ public class CalendarDatabaseHelperTest {
     }
 
     @Test
+    @Ignore("b/140236227")
     public void testUpgradeToCurrentVersion() {
         // Create event tables
         bootstrapDbVersion50(mBadDb);
@@ -463,6 +464,7 @@ public class CalendarDatabaseHelperTest {
     private static final String[] PROJECTION = {"tbl_name", "sql"};
 
     @Test
+    @Ignore("b/140236227")
     public void testSchemasEqualForAllTables() {
 
         CalendarDatabaseHelper cDbHelper = new CalendarDatabaseHelper(new MockContext());

@@ -49,9 +49,9 @@ import android.test.suitebuilder.annotation.Smoke;
 import android.test.suitebuilder.annotation.Suppress;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
+import android.text.format.Time;
 import android.util.Log;
 
-import com.android.calendarcommon2.Time;
 import com.android.providers.calendar.enterprise.CrossProfileCalendarHelper;
 
 import java.io.File;
@@ -132,7 +132,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
     private static long parseTimeStringToMillis(String timeStr, String timeZone) {
         Time time = new Time(timeZone);
         time.parse3339(timeStr);
-        return time.toMillis();
+        return time.toMillis(false /* use isDst */);
     }
 
     private static String WORK_DEFAULT_TIMEZONE = TIME_ZONE_AMERICA_LOS_ANGELES;
@@ -343,9 +343,9 @@ public class CalendarProvider2Test extends AndroidTestCase {
         public DumpInstances(String startDate, String endDate) {
             Time time = new Time(DEFAULT_TIMEZONE);
             time.parse3339(startDate);
-            begin = time.toMillis();
+            begin = time.toMillis(false /* use isDst */);
             time.parse3339(endDate);
-            end = time.toMillis();
+            end = time.toMillis(false /* use isDst */);
         }
 
         public void execute() {
@@ -367,9 +367,9 @@ public class CalendarProvider2Test extends AndroidTestCase {
         public QueryNumInstances(String startDate, String endDate, int expected) {
             Time time = new Time(DEFAULT_TIMEZONE);
             time.parse3339(startDate);
-            begin = time.toMillis();
+            begin = time.toMillis(false /* use isDst */);
             time.parse3339(endDate);
-            end = time.toMillis();
+            end = time.toMillis(false /* use isDst */);
             this.expected = expected;
         }
 
@@ -395,9 +395,9 @@ public class CalendarProvider2Test extends AndroidTestCase {
         public VerifyAllInstances(String startDate, String endDate, String[] dates) {
             Time time = new Time(DEFAULT_TIMEZONE);
             time.parse3339(startDate);
-            begin = time.toMillis();
+            begin = time.toMillis(false /* use isDst */);
             time.parse3339(endDate);
-            end = time.toMillis();
+            end = time.toMillis(false /* use isDst */);
 
             if (dates == null) {
                 return;
@@ -409,7 +409,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             int index = 0;
             for (String instance : dates) {
                 time.parse3339(instance);
-                this.instances[index++] = time.toMillis();
+                this.instances[index++] = time.toMillis(false /* use isDst */);
             }
         }
 
@@ -490,14 +490,14 @@ public class CalendarProvider2Test extends AndroidTestCase {
         public VerifyInstance(String startDate, String endDate, String date) {
             Time time = new Time(DEFAULT_TIMEZONE);
             time.parse3339(startDate);
-            begin = time.toMillis();
+            begin = time.toMillis(false /* use isDst */);
             time.parse3339(endDate);
-            end = time.toMillis();
+            end = time.toMillis(false /* use isDst */);
 
             // Convert the instance date string to UTC milliseconds
             time.parse3339(date);
-            allDay = time.isAllDay();
-            instance = time.toMillis();
+            allDay = time.allDay;
+            instance = time.toMillis(false /* use isDst */);
         }
 
         public void execute() {
@@ -566,15 +566,15 @@ public class CalendarProvider2Test extends AndroidTestCase {
             mTitle = title;
             Time time = new Time();
             if (allDay) {
-                time.setTimezone(Time.TIMEZONE_UTC);
+                time.timezone = Time.TIMEZONE_UTC;
             } else if (timezone != null) {
-                time.setTimezone(timezone);
+                time.timezone = timezone;
             }
-            mTimezone = time.getTimezone();
+            mTimezone = time.timezone;
             time.parse3339(startDate);
-            mDtstart = time.toMillis();
+            mDtstart = time.toMillis(false /* use isDst */);
             time.parse3339(endDate);
-            mDtend = time.toMillis();
+            mDtend = time.toMillis(false /* use isDst */);
             mDuration = null;
             mRrule = null;
             mAllDay = allDay;
@@ -601,16 +601,16 @@ public class CalendarProvider2Test extends AndroidTestCase {
             mDescription = description;
             Time time = new Time();
             if (allDay) {
-                time.setTimezone(Time.TIMEZONE_UTC);
+                time.timezone = Time.TIMEZONE_UTC;
             } else if (timezone != null) {
-                time.setTimezone(timezone);
+                time.timezone = timezone;
             }
-            mTimezone = time.getTimezone();
+            mTimezone = time.timezone;
             time.parse3339(startDate);
-            mDtstart = time.toMillis();
+            mDtstart = time.toMillis(false /* use isDst */);
             if (endDate != null) {
                 time.parse3339(endDate);
-                mDtend = time.toMillis();
+                mDtend = time.toMillis(false /* use isDst */);
             }
             if (allDay) {
                 long days = 1;
@@ -642,7 +642,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             mOriginalTitle = originalTitle;
             Time time = new Time(timezone);
             time.parse3339(originalInstance);
-            mOriginalInstance = time.toMillis();
+            mOriginalInstance = time.toMillis(false /* use isDst */);
             mCustomAppPackage = customPackageName;
             mCustomAppUri = customPackageUri;
             mUid2445 = uid2445;
@@ -661,9 +661,9 @@ public class CalendarProvider2Test extends AndroidTestCase {
             mEvent = findEvent(eventName);
             Time time = new Time(mEvent.mTimezone);
             time.parse3339(startDate);
-            mBegin = time.toMillis();
+            mBegin = time.toMillis(false /* use isDst */);
             time.parse3339(endDate);
-            mEnd = time.toMillis();
+            mEnd = time.toMillis(false /* use isDst */);
             mExpectedOccurrences = expected;
         }
     }
@@ -1953,7 +1953,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
         Time time = new Time(DEFAULT_TIMEZONE);
         time.parse3339(START);
-        long startMs = time.toMillis();
+        long startMs = time.toMillis(true /* ignoreDst */);
         // Query starting from way in the past to one hour into the event.
         // Query is more than 2 months so the range won't get extended by the provider.
         Cursor cursor = null;
@@ -2763,7 +2763,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
 
         Time time = new Time(DEFAULT_TIMEZONE);
         time.parse3339(START);
-        long startMs = time.toMillis();
+        long startMs = time.toMillis(true /* ignoreDst */);
         // Query starting from way in the past to one hour into the event.
         // Query is more than 2 months so the range won't get extended by the provider.
         Cursor cursor = queryInstances(mResolver, PROJECTION,
@@ -3466,7 +3466,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         // Assume cross profile uri access is allowed by policy and settings.
         MockCrossProfileCalendarHelper.setPackageAllowedToAccessCalendar(true);
 
-        // Test all allowed list of columns are returned when projection is empty.
+        // Test all whitelisted columns are returned when projection is empty.
         String selection = "(" + Events.TITLE + " = ? )";
         String[] selectionArgs = new String[]{
                 WORK_EVENT_TITLE
@@ -3478,7 +3478,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertNotNull(cursor);
         assertEquals(1, cursor.getCount());
         cursor.moveToFirst();
-        for (String column : CrossProfileCalendarHelper.EVENTS_TABLE_ALLOWED_LIST) {
+        for (String column : CrossProfileCalendarHelper.EVENTS_TABLE_WHITELIST) {
             final int index = cursor.getColumnIndex(column);
             assertTrue(index != -1);
         }
@@ -3576,7 +3576,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         // Assume cross profile uri access is allowed by policy and settings.
         MockCrossProfileCalendarHelper.setPackageAllowedToAccessCalendar(true);
 
-        // Test all allowed list of columns are returned when projection is empty.
+        // Test all whitelisted columns are returned when projection is empty.
         final Cursor cursor = mResolver.query(
                 Calendars.ENTERPRISE_CONTENT_URI,
                 new String[] {}, null, null, null);
@@ -3584,7 +3584,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertNotNull(cursor);
         assertEquals(1, cursor.getCount());
         cursor.moveToFirst();
-        for (String column : CrossProfileCalendarHelper.CALENDARS_TABLE_ALLOWED_LIST) {
+        for (String column : CrossProfileCalendarHelper.CALENDARS_TABLE_WHITELIST) {
             final int index = cursor.getColumnIndex(column);
             assertTrue(index != -1);
         }
@@ -3597,8 +3597,8 @@ public class CalendarProvider2Test extends AndroidTestCase {
         cleanupEnterpriseTestForCalendars(1);
     }
 
-    public void testEnterpriseCalendarsNonAllowedListProjection() {
-        // Test SecurityException is thrown there is non-allowed list column in the projection.
+    public void testEnterpriseCalendarsNonWhitelistedProjection() {
+        // Test SecurityException is thrown there is non-whitelisted column in the projection.
         try {
             String[] projection = new String[] {
                     Calendars._ID,
@@ -3609,7 +3609,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
             mResolver.query(
                     Calendars.ENTERPRISE_CONTENT_URI,
                     projection, null, null, null);
-            fail("IllegalArgumentException is not thrown when querying non-allowed list of columns");
+            fail("IllegalArgumentException is not thrown when querying non-whitelisted columns");
         } catch (IllegalArgumentException e) {
         }
     }
@@ -3651,3 +3651,4 @@ public class CalendarProvider2Test extends AndroidTestCase {
         return Long.parseLong(uri.getLastPathSegment());
     }
 }
+

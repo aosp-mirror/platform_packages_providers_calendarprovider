@@ -14,28 +14,8 @@
 // limitations under the License.
 //
 
-package {
-    default_applicable_licenses: [
-        "packages_providers_CalendarProvider_license",
-    ],
-}
-
-// Added automatically by a large-scale-change
-// See: http://go/android-license-faq
-license {
-    name: "packages_providers_CalendarProvider_license",
-    visibility: [":__subpackages__"],
-    license_kinds: [
-        "SPDX-license-identifier-Apache-2.0",
-    ],
-    license_text: [
-        "NOTICE",
-    ],
-}
-
 android_app {
     name: "CalendarProvider",
-    defaults: ["platform_app_defaults"],
     static_libs: [
         "guava",
         "android-common",
@@ -45,7 +25,6 @@ android_app {
         "src/**/*.java",
         "src/com/android/providers/calendar/EventLogTags.logtags",
     ],
-    libs: ["app-compat-annotations"],
     platform_apis: true,
     privileged: true,
 
@@ -57,9 +36,4 @@ android_app {
     jacoco: {
         include_filter: ["com.android.providers.calendar.*"],
     },
-}
-
-platform_compat_config {
-    name: "calendar-provider-compat-config",
-    src: ":CalendarProvider",
 }

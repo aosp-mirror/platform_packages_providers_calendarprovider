@@ -21,7 +21,6 @@ import com.android.calendarcommon2.Duration;
 import com.android.calendarcommon2.EventRecurrence;
 import com.android.calendarcommon2.RecurrenceProcessor;
 import com.android.calendarcommon2.RecurrenceSet;
-import com.android.calendarcommon2.Time;
 import com.android.providers.calendar.CalendarDatabaseHelper.Tables;
 
 import android.content.ContentValues;
@@ -34,6 +33,7 @@ import android.provider.CalendarContract.Calendars;
 import android.provider.CalendarContract.Events;
 import android.provider.CalendarContract.Instances;
 import android.text.TextUtils;
+import android.text.format.Time;
 import android.util.Log;
 import android.util.TimeFormatException;
 
@@ -288,9 +288,9 @@ public class CalendarInstancesHelper {
                     }
 
                     // need to parse the event into a local calendar.
-                    eventTime.setTimezone(eventTimezone);
+                    eventTime.timezone = eventTimezone;
                     eventTime.set(dtstartMillis);
-                    eventTime.setAllDay(allDay);
+                    eventTime.allDay = allDay;
 
                     if (durationStr == null) {
                         // should not happen.
@@ -332,9 +332,9 @@ public class CalendarInstancesHelper {
                     // Initialize the "eventTime" timezone outside the loop.
                     // This is used in computeTimezoneDependentFields().
                     if (allDay) {
-                        eventTime.setTimezone(Time.TIMEZONE_UTC);
+                        eventTime.timezone = Time.TIMEZONE_UTC;
                     } else {
-                        eventTime.setTimezone(localTimezone);
+                        eventTime.timezone = localTimezone;
                     }
 
                     long durationMillis = duration.getMillis();
@@ -404,9 +404,9 @@ public class CalendarInstancesHelper {
                     initialValues.put(Events.DELETED, deleted);
 
                     if (allDay) {
-                        eventTime.setTimezone(Time.TIMEZONE_UTC);
+                        eventTime.timezone = Time.TIMEZONE_UTC;
                     } else {
-                        eventTime.setTimezone(localTimezone);
+                        eventTime.timezone = localTimezone;
                     }
                     CalendarInstancesHelper.computeTimezoneDependentFields(dtstartMillis,
                             dtendMillis, eventTime, initialValues);
@@ -703,9 +703,9 @@ public class CalendarInstancesHelper {
             // Update the timezone-dependent fields.
             Time local = new Time();
             if (allDay) {
-                local.setTimezone(Time.TIMEZONE_UTC);
+                local.timezone = Time.TIMEZONE_UTC;
             } else {
-                local.setTimezone(fields.timezone);
+                local.timezone = fields.timezone;
             }
 
             CalendarInstancesHelper.computeTimezoneDependentFields(dtstartMillis, dtendMillis,
@@ -889,12 +889,12 @@ public class CalendarInstancesHelper {
     static void computeTimezoneDependentFields(long begin, long end,
             Time local, ContentValues values) {
         local.set(begin);
-        int startDay = Time.getJulianDay(begin, local.getGmtOffset());
-        int startMinute = local.getHour() * 60 + local.getMinute();
+        int startDay = Time.getJulianDay(begin, local.gmtoff);
+        int startMinute = local.hour * 60 + local.minute;
 
         local.set(end);
-        int endDay = Time.getJulianDay(end, local.getGmtOffset());
-        int endMinute = local.getHour() * 60 + local.getMinute();
+        int endDay = Time.getJulianDay(end, local.gmtoff);
+        int endMinute = local.hour * 60 + local.minute;
 
         // Special case for midnight, which has endMinute == 0.  Change
         // that to +24 hours on the previous day to make everything simpler.

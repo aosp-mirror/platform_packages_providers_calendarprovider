@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--  Copyright (C) 2009 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+ -->
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="calendar_storage" msgid="8317143729823142952">"କ୍ୟାଲେଣ୍ଡର ଷ୍ଟୋରେଜ"</string>
+    <string name="calendar_default_name" msgid="5010385424907560782">"ଡିଫଲ୍ଟ"</string>
+    <string name="calendar_info" msgid="3080204956905796668">"କ୍ୟାଲେଣ୍ଡର ସୂଚନା"</string>
+    <string name="calendar_info_error" msgid="8686794108585408379">"ତ୍ରୁଟି"</string>
+    <string name="calendar_info_no_calendars" msgid="6166939001615667041">"କୌଣସି କ୍ୟାଲେଣ୍ଡର ନାହିଁ"</string>
+    <string name="calendar_info_events" msgid="6513451584822286165">"ଇଭେଣ୍ଟ: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
+    <string name="calendar_info_events_dirty" msgid="3953603148780098018">"ଇଭେଣ୍ଟ: <xliff:g id="EVENTS_0">%1$d</xliff:g>, ସେଭ ହୋଇନଥିବା: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
+    <string name="provider_label" msgid="1910026788169486138">"କ୍ୟାଲେଣ୍ଡର"</string>
+    <string name="debug_tool_delete_button" msgid="2843837310185088850">"ଏବେ ଡିଲିଟ କରନ୍ତୁ"</string>
+    <string name="debug_tool_start_button" msgid="2827965939935983665">"ଆରମ୍ଭ କରନ୍ତୁ"</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"ଆପଣ 1) SD କାର୍ଡ/USB ଷ୍ଟୋରେଜରେ ଆପଣଙ୍କ କ୍ୟାଲେଣ୍ଡର ଡାଟାବେସର ଏକ କପି ତିଆରି କରିବାକୁ ଯାଉଛନ୍ତି, ଯାହା ଯେ କୌଣସି ଆପ ଦ୍ୱାରା ପଢ଼ାଯାଇପାରିବ ଏବଂ 2) ଏହାକୁ ଇମେଲ କରିବାକୁ ଯାଉଛନ୍ତି। ଡିଭାଇସରୁ ସଫଳତାର ସହ ଆପଣ ଏହାକୁ କପି କରିବା କିମ୍ବା ଇମେଲ ପ୍ରାପ୍ତ କରାଯିବା ମାତ୍ରେ କପିକୁ ଡିଲିଟ କରିବା ପାଇଁ ମନେରଖନ୍ତୁ।"</string>
+    <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"ଆପଣଙ୍କ ଫାଇଲ ପଠାଇବାକୁ ଏକ ପ୍ରୋଗ୍ରାମ ବାଛନ୍ତୁ"</string>
+    <string name="debug_tool_email_subject" msgid="1450453531950410260">"କ୍ୟାଲେଣ୍ଡର Db ଆଟାଚ କରାଯାଇଛି"</string>
+    <string name="debug_tool_email_body" msgid="1271714905048793618">"ମୋର ସମସ୍ତ ଆପଏଣ୍ଟମେଣ୍ଟ ଏବଂ ବ୍ୟକ୍ତିଗତ ସୂଚନା ସହ ମୋ କ୍ୟାଲେଣ୍ଡର ଡାଟାବେସ ଆଟାଚ କରାଯାଇଛି। ଯତ୍ନର ସହ ପରିଚାଳନା କରନ୍ତୁ।"</string>
+</resources>

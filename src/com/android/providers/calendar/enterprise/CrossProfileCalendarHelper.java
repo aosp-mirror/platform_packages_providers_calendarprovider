@@ -164,7 +164,7 @@ public class CrossProfileCalendarHelper {
                 || CalendarContract.Instances.CONTENT_SEARCH_BY_DAY_URI.equals(localUri)) {
             validColumnsSet = INSTANCES_TABLE_ALLOWED_LIST;
         } else {
-            throw new IllegalArgumentException(String.format("Cross profile version of %d is not "
+            throw new IllegalArgumentException(String.format("Cross profile version of %s is not "
                     + "supported", localUri.toSafeString()));
         }
 

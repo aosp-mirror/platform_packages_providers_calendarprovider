@@ -24,10 +24,10 @@
     <string name="calendar_info_events" msgid="6513451584822286165">"Evenimente: <xliff:g id="EVENTS">%1$d</xliff:g>"</string>
     <string name="calendar_info_events_dirty" msgid="3953603148780098018">"Evenimente: <xliff:g id="EVENTS_0">%1$d</xliff:g>. Nesalvate: <xliff:g id="DIRTY_EVENTS">%2$d</xliff:g>"</string>
     <string name="provider_label" msgid="1910026788169486138">"Calendar"</string>
-    <string name="debug_tool_delete_button" msgid="2843837310185088850">"Șterge acum"</string>
-    <string name="debug_tool_start_button" msgid="2827965939935983665">"Începe"</string>
-    <string name="debug_tool_message" msgid="2315979068524074618">"Ești pe cale 1) să faci o copie a bazei de date a calendarului tău pe cardul SD / în stocarea USB, care poate fi citită de orice aplicație și 2) să o trimiți prin e-mail. Nu uita să ștergi copia după ce ai copiat-o de pe respectivul dispozitiv sau după primirea e-mailului."</string>
-    <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"Alege un program pentru a trimite fișierul"</string>
+    <string name="debug_tool_delete_button" msgid="2843837310185088850">"Ștergeți acum"</string>
+    <string name="debug_tool_start_button" msgid="2827965939935983665">"Începeți"</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"Sunteți pe cale 1) să faceți o copie a bazei de date a calendarului dvs. pe cardul SD / în stocarea USB, care poate fi citită de orice aplicație și 2) să o trimiteți prin e-mail. Nu uitați să ștergeți copia după ce ați copiat-o de pe respectivul dispozitiv sau după primirea e-mailului."</string>
+    <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"Alegeți un program pentru a trimite fișierul"</string>
     <string name="debug_tool_email_subject" msgid="1450453531950410260">"Baza de date a calendarului a fost atașată"</string>
-    <string name="debug_tool_email_body" msgid="1271714905048793618">"Găsește atașată baza de date a calendarului, cu toate întâlnirile și informațiile mele cu caracter personal. Gestioneaz-o cu atenție."</string>
+    <string name="debug_tool_email_body" msgid="1271714905048793618">"Găsiți atașată baza de date a calendarului, cu toate întâlnirile și informațiile mele cu caracter personal. Gestionați-o cu atenție."</string>
 </resources>

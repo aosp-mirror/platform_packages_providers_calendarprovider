@@ -34,8 +34,9 @@ public class CalendarProviderBroadcastReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         String action = intent.getAction();
-        if (!CalendarAlarmManager.ACTION_CHECK_NEXT_ALARM.equals(action)
-                && !CalendarContract.ACTION_EVENT_REMINDER.equals(action)) {
+        if (action == null ||
+                (!CalendarAlarmManager.ACTION_CHECK_NEXT_ALARM.equals(action)
+                    && !CalendarContract.ACTION_EVENT_REMINDER.equals(action))) {
             Log.e(TAG, "Received invalid intent: " + intent);
             setResultCode(Activity.RESULT_CANCELED);
             return;

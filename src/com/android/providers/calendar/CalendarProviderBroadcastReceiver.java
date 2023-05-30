@@ -46,15 +46,21 @@ public class CalendarProviderBroadcastReceiver extends BroadcastReceiver {
         }
 
         JobWorkItem jwi = new JobWorkItem(intent);
-        JobInfo alarmJob = new JobInfo.Builder(CalendarProviderJobService.JOB_ID,
+        JobInfo.Builder alarmJobBuilder = new JobInfo.Builder(CalendarProviderJobService.JOB_ID,
                 new ComponentName(context, CalendarProviderJobService.class))
-                .setExpedited(true)
-                .build();
+                .setExpedited(true);
         JobScheduler jobScheduler = context.getSystemService(JobScheduler.class);
-        if (jobScheduler.enqueue(alarmJob, jwi) == JobScheduler.RESULT_SUCCESS) {
+        if (jobScheduler.enqueue(alarmJobBuilder.build(), jwi) == JobScheduler.RESULT_SUCCESS) {
             setResultCode(Activity.RESULT_OK);
         } else {
             Slog.wtf(TAG, "Failed to schedule expedited job");
+            // Unable to schedule an expedited job. Fall back to a regular job.
+            alarmJobBuilder.setExpedited(false);
+            if (jobScheduler.enqueue(alarmJobBuilder.build(), jwi) == JobScheduler.RESULT_SUCCESS) {
+                setResultCode(Activity.RESULT_OK);
+            } else {
+                Slog.wtf(TAG, "Failed to schedule regular job");
+            }
         }
     }
 }

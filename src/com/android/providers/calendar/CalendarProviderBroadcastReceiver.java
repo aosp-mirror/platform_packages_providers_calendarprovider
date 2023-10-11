@@ -34,8 +34,9 @@ public class CalendarProviderBroadcastReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         String action = intent.getAction();
-        if (!CalendarAlarmManager.ACTION_CHECK_NEXT_ALARM.equals(action)
-                && !CalendarContract.ACTION_EVENT_REMINDER.equals(action)) {
+        if (action == null ||
+                (!CalendarAlarmManager.ACTION_CHECK_NEXT_ALARM.equals(action)
+                    && !CalendarContract.ACTION_EVENT_REMINDER.equals(action))) {
             Log.e(TAG, "Received invalid intent: " + intent);
             setResultCode(Activity.RESULT_CANCELED);
             return;
@@ -45,15 +46,21 @@ public class CalendarProviderBroadcastReceiver extends BroadcastReceiver {
         }
 
         JobWorkItem jwi = new JobWorkItem(intent);
-        JobInfo alarmJob = new JobInfo.Builder(CalendarProviderJobService.JOB_ID,
+        JobInfo.Builder alarmJobBuilder = new JobInfo.Builder(CalendarProviderJobService.JOB_ID,
                 new ComponentName(context, CalendarProviderJobService.class))
-                .setExpedited(true)
-                .build();
+                .setExpedited(true);
         JobScheduler jobScheduler = context.getSystemService(JobScheduler.class);
-        if (jobScheduler.enqueue(alarmJob, jwi) == JobScheduler.RESULT_SUCCESS) {
+        if (jobScheduler.enqueue(alarmJobBuilder.build(), jwi) == JobScheduler.RESULT_SUCCESS) {
             setResultCode(Activity.RESULT_OK);
         } else {
             Slog.wtf(TAG, "Failed to schedule expedited job");
+            // Unable to schedule an expedited job. Fall back to a regular job.
+            alarmJobBuilder.setExpedited(false);
+            if (jobScheduler.enqueue(alarmJobBuilder.build(), jwi) == JobScheduler.RESULT_SUCCESS) {
+                setResultCode(Activity.RESULT_OK);
+            } else {
+                Slog.wtf(TAG, "Failed to schedule regular job");
+            }
         }
     }
 }

@@ -26,7 +26,7 @@
     <string name="provider_label" msgid="1910026788169486138">"日曆"</string>
     <string name="debug_tool_delete_button" msgid="2843837310185088850">"立即刪除"</string>
     <string name="debug_tool_start_button" msgid="2827965939935983665">"開始"</string>
-    <string name="debug_tool_message" msgid="2315979068524074618">"你即將 1) 在 SD 卡或 USB 儲存空間中儲存任何應用程式均可讀取的日曆資料庫副本，並且 2) 以電郵傳送日曆資料庫。請緊記，待成功從裝置複製日曆資料庫或收到電郵後，請隨即刪除日曆資料庫。"</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"您即將 1) 在 SD 卡或 USB 儲存空間中儲存任何應用程式均可讀取的日曆資料庫副本，並且 2) 以電郵傳送日曆資料庫。請緊記，待成功從裝置複製日曆資料庫或收到電郵後，請隨即刪除日曆資料庫。"</string>
     <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"選擇要用來傳送檔案的程式"</string>
     <string name="debug_tool_email_subject" msgid="1450453531950410260">"內含「日曆」資料庫附件"</string>
     <string name="debug_tool_email_body" msgid="1271714905048793618">"附上我的「日曆」資料庫，其中包含我所有的預約和個人資料，請謹慎處理。"</string>

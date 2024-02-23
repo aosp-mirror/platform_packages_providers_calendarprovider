@@ -323,6 +323,15 @@ import java.util.TimeZone;
     }
 
     @Override
+    public void onConfigure(SQLiteDatabase db) {
+        try {
+            db.enableWriteAheadLogging();
+        } catch (IllegalStateException e) {
+            Log.e(TAG, "Failed to enable write-ahead logging.", e);
+        }
+    }
+
+    @Override
     public void onOpen(SQLiteDatabase db) {
         mSyncState.onDatabaseOpened(db);
 

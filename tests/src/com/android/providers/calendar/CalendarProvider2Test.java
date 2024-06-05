@@ -44,12 +44,12 @@ import android.test.IsolatedContext;
 import android.test.RenamingDelegatingContext;
 import android.test.mock.MockContentResolver;
 import android.test.mock.MockContext;
-import android.test.suitebuilder.annotation.SmallTest;
-import android.test.suitebuilder.annotation.Smoke;
-import android.test.suitebuilder.annotation.Suppress;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.Log;
+
+import androidx.test.filters.SmallTest;
+import androidx.test.filters.Suppress;
 
 import com.android.calendarcommon2.Time;
 import com.android.providers.calendar.enterprise.CrossProfileCalendarHelper;
@@ -1756,7 +1756,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         }
     }
 
-    @SmallTest @Smoke
+    @SmallTest
     public void testEscapeSearchToken() {
         String token = "test";
         String expected = "test";
@@ -1787,7 +1787,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertEquals(expected, mProvider.escapeSearchToken(token));
     }
 
-    @SmallTest @Smoke
+    @SmallTest
     public void testTokenizeSearchQuery() {
         String query = "";
         String[] expectedTokens = new String[] {};
@@ -1834,7 +1834,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertArrayEquals(expectedTokens, mProvider.tokenizeSearchQuery(query));
     }
 
-    @SmallTest @Smoke
+    @SmallTest
     public void testConstructSearchWhere() {
         String[] tokens = new String[] {"red"};
         String expected = "(title LIKE ? ESCAPE \"#\" OR "
@@ -1875,7 +1875,7 @@ public class CalendarProvider2Test extends AndroidTestCase {
         assertEquals(expected, mProvider.constructSearchWhere(tokens));
     }
 
-    @SmallTest @Smoke
+    @SmallTest
     public void testConstructSearchArgs() {
         String[] tokens = new String[] {"red"};
         String[] expected = new String[] {"%red%", "%red%",

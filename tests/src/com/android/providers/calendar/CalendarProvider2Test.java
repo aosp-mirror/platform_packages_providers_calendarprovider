@@ -44,12 +44,13 @@ import android.test.IsolatedContext;
 import android.test.RenamingDelegatingContext;
 import android.test.mock.MockContentResolver;
 import android.test.mock.MockContext;
-import android.test.suitebuilder.annotation.SmallTest;
 import android.test.suitebuilder.annotation.Smoke;
-import android.test.suitebuilder.annotation.Suppress;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.Log;
+
+import androidx.test.filters.SmallTest;
+import androidx.test.filters.Suppress;
 
 import com.android.calendarcommon2.Time;
 import com.android.providers.calendar.enterprise.CrossProfileCalendarHelper;

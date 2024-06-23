@@ -1,9 +1,10 @@
 // Copyright 2007 The Android Open Source Project
 package com.android.providers.calendar;
 
+import androidx.test.filters.SmallTest;
+
 import com.android.calendarcommon2.ICalendar;
 
-import android.test.suitebuilder.annotation.SmallTest;
 import junit.framework.TestCase;
 
 import java.util.List;

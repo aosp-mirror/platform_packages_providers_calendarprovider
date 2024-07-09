@@ -26,7 +26,7 @@
     <string name="provider_label" msgid="1910026788169486138">"Agenda"</string>
     <string name="debug_tool_delete_button" msgid="2843837310185088850">"Supprimer maintenant"</string>
     <string name="debug_tool_start_button" msgid="2827965939935983665">"Début"</string>
-    <string name="debug_tool_message" msgid="2315979068524074618">"Vous êtes sur le point de 1) copier la base de données de votre agenda sur la carte SD ou la mémoire de stockage USB, la rendant ainsi lisible par n\'importe quelle application, et de 2) l\'envoyer par courriel. N\'oubliez pas de la supprimer une fois son transfert à partir de l\'appareil terminé ou dès réception du courriel."</string>
+    <string name="debug_tool_message" msgid="2315979068524074618">"Vous êtes sur le point de 1) copier la base de données de votre agenda sur la carte SD ou la mémoire de stockage USB, la rendant ainsi lisible par n\'importe quelle appli, et de 2) l\'envoyer par courriel. N\'oubliez pas de la supprimer une fois son transfert à partir de l\'appareil terminé ou dès réception du courriel."</string>
     <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"Choisissez un programme pour envoyer vos fichiers"</string>
     <string name="debug_tool_email_subject" msgid="1450453531950410260">"Base de données de l\'agenda ci-jointe"</string>
     <string name="debug_tool_email_body" msgid="1271714905048793618">"Vous trouverez ci-joint la base de données de mon agenda contenant tous mes rendez-vous et mes renseignements personnels. Utilisez-le avec précaution."</string>

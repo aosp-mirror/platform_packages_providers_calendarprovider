@@ -16,7 +16,7 @@
 
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-    <string name="calendar_storage" msgid="8317143729823142952">"Calendar storage"</string>
+    <string name="calendar_storage" msgid="8317143729823142952">"Calendar Storage"</string>
     <string name="calendar_default_name" msgid="5010385424907560782">"Default"</string>
     <string name="calendar_info" msgid="3080204956905796668">"Calendar info"</string>
     <string name="calendar_info_error" msgid="8686794108585408379">"Error"</string>
@@ -29,5 +29,5 @@
     <string name="debug_tool_message" msgid="2315979068524074618">"You are about to 1) make a copy of your calendar database to the SD card/USB storage, which is readable by any app, and 2) email it. Remember to delete the copy as soon as you have successfully copied it off the device or the email is received."</string>
     <string name="debug_tool_email_sender_picker" msgid="2527150861906694072">"Choose a program to send your file"</string>
     <string name="debug_tool_email_subject" msgid="1450453531950410260">"Calendar Db attached"</string>
-    <string name="debug_tool_email_body" msgid="1271714905048793618">"Attached is my calendar database with all my appointments and personal information. Handle with care."</string>
+    <string name="debug_tool_email_body" msgid="1271714905048793618">"Attached is my Calendar database with all my appointments and personal information. Handle with care."</string>
 </resources>

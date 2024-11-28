@@ -86,9 +86,9 @@ public class CalendarConfidenceChecker {
     @VisibleForTesting
     protected long getUserUnlockTime() {
         final UserManager um = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
-        final long startTime = um.getUserStartRealtime();
         final long unlockTime = um.getUserUnlockRealtime();
         if (DEBUG) {
+            final long startTime = um.getUserStartRealtime();
             Log.d(TAG, String.format("User start/unlock time=%d/%d", startTime, unlockTime));
         }
         return unlockTime;

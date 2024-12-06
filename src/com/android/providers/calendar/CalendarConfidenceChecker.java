@@ -86,9 +86,9 @@ public class CalendarConfidenceChecker {
     @VisibleForTesting
     protected long getUserUnlockTime() {
         final UserManager um = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
-        final long startTime = um.getUserStartRealtime();
         final long unlockTime = um.getUserUnlockRealtime();
         if (DEBUG) {
+            final long startTime = um.getUserStartRealtime();
             Log.d(TAG, String.format("User start/unlock time=%d/%d", startTime, unlockTime));
         }
         return unlockTime;
@@ -127,16 +127,16 @@ public class CalendarConfidenceChecker {
             final long nowBootCount = getBootCount();
             final long nowRealtime = getRealtimeMillis();
 
-            final long unlockTime = getUserUnlockTime();
 
             if (DEBUG) {
                 Log.d(TAG, String.format("isStateValid: %d/%d %d/%d unlocked=%d lastWtf=%d",
-                        lastBootCount, nowBootCount, lastCheckTime, nowRealtime, unlockTime,
-                        lastWtfTime));
+                        lastBootCount, nowBootCount, lastCheckTime, nowRealtime,
+                        getUserUnlockTime(), lastWtfTime));
             }
 
             if (lastBootCount != nowBootCount) {
                 // This branch means updateLastCheckTime() hasn't been called since boot.
+                final long unlockTime = getUserUnlockTime();
 
                 debug("checkLastCheckTime: Last check time not set.");
 

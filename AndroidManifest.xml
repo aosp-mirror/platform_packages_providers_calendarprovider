@@ -64,7 +64,6 @@
         </receiver>
 
         <activity android:name="CalendarDebug"
-            android:theme="@style/OptOutEdgeToEdgeEnforcement"
             android:label="@string/calendar_info"
             android:exported="true">
             <intent-filter>

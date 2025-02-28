@@ -1,0 +1,12 @@
+package: "com.android.providers.calendar"
+container: "system"
+
+flag {
+    name: "defer_post_initialize_work"
+    namespace: "backstage_power"
+    description: "Defer the post initialization work after BOOT_COMPLETED is handled"
+    bug: "388910023"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}

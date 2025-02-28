@@ -479,6 +479,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private int mParentUserId;
 
+    // Indicates that the post-init work is in progress and additional work in the BOOT_COMPLETED
+    // broadcast shouldn't be executed to avoid contention.
+    private volatile boolean mPostInitializeWorkRunning = false;
+    // Indicates that the removal of scheduled alarms (as part of the BOOT_COMPLETED work) is
+    // pending because the post-init work was running concurrently.
+    private volatile boolean mPendingScheduledAlarmsRemoval = false;
+
     /**
      * Listens for timezone changes and disk-no-longer-full events
      */
@@ -595,6 +602,7 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
     private class PostInitializeThread extends Thread {
         @Override
         public void run() {
+            mPostInitializeWorkRunning = true;
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
 
             verifyAccounts();
@@ -606,6 +614,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
                 // closed by the time this is executed
 
                 // Nothing actionable here anyways.
+            }
+            mPostInitializeWorkRunning = false;
+            if (Flags.deferPostInitializeWork()) {
+                if (mPendingScheduledAlarmsRemoval) {
+                    mPendingScheduledAlarmsRemoval = false;
+                    CalendarReceiver.removeScheduledAlarms(mContentResolver);
+                }
             }
         }
     }
@@ -2315,6 +2330,13 @@ public class CalendarProvider2 extends SQLiteContentProvider implements OnAccoun
 
     @Override
     public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
+        if (Flags.deferPostInitializeWork()
+                && uri.equals(CalendarAlarmManager.SCHEDULE_ALARM_REMOVE_URI)) {
+            if (mPostInitializeWorkRunning) {
+                mPendingScheduledAlarmsRemoval = true;
+                return 0;
+            }
+        }
         if (!applyingBatch()) {
             mCallingUid.set(Binder.getCallingUid());
         }

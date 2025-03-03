@@ -26,6 +26,7 @@ android_app {
         "guava",
         "android-common",
         "calendar-common",
+        "calendarprovider_flags_java_lib",
     ],
     srcs: [
         "src/**/*.java",
@@ -48,4 +49,16 @@ android_app {
 platform_compat_config {
     name: "calendar-provider-compat-config",
     src: ":CalendarProvider",
+}
+
+java_aconfig_library {
+    name: "calendarprovider_flags_java_lib",
+    aconfig_declarations: "calendarprovider_flags",
+}
+
+aconfig_declarations {
+    name: "calendarprovider_flags",
+    container: "system",
+    package: "com.android.providers.calendar",
+    srcs: ["**/calendarprovider_flags.aconfig"],
 }
